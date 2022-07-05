@@ -10,6 +10,7 @@
 
 #include <deal.II/grid/grid_generator.h>
 
+#include <deal.II/lac/diagonal_matrix.h>
 #include <deal.II/lac/dynamic_sparsity_pattern.h>
 #include <deal.II/lac/solver_cg.h>
 #include <deal.II/lac/sparse_matrix_tools.h>
@@ -175,8 +176,8 @@ test(const unsigned int fe_degree            = 1,
   dof_handler.distribute_dofs(FE_Q<dim>(fe_degree));
 
   pcout << "System statistics:" << std::endl;
-  pcout << " -n cells: " << tria.n_global_active_cells() << std::endl;
-  pcout << " -n dofs:  " << dof_handler.n_dofs() << std::endl;
+  pcout << " - n cells: " << tria.n_global_active_cells() << std::endl;
+  pcout << " - n dofs:  " << dof_handler.n_dofs() << std::endl;
   pcout << std::endl;
 
   QGauss<dim> quadrature(fe_degree + 1);
@@ -217,6 +218,31 @@ test(const unsigned int fe_degree            = 1,
   VectorTools::create_right_hand_side(
     dof_handler, quadrature, RightHandSide<dim>(), rhs, constraints);
 
+  pcout << "Running with different preconditioners:" << std::endl;
+
+  // inverse diagonal matrix
+  {
+    DiagonalMatrix<VectorType> precondition;
+
+    auto &vec = precondition.get_vector();
+    vec.reinit(partitioner);
+
+    for (const auto entry : laplace_matrix)
+      if (entry.row() == entry.column())
+        vec[entry.row()] = 1.0 / entry.value();
+
+    ReductionControl reduction_control;
+
+    SolverCG<VectorType> solver_cg(reduction_control);
+
+    solution = 0;
+    solver_cg.solve(laplace_matrix, solution, rhs, precondition);
+
+    pcout << " - inverse diagonal matrix:         "
+          << reduction_control.last_step() << std::endl;
+  }
+
+  // AMG
   {
     TrilinosWrappers::PreconditionAMG precondition;
     precondition.initialize(laplace_matrix);
@@ -228,9 +254,11 @@ test(const unsigned int fe_degree            = 1,
     solution = 0;
     solver_cg.solve(laplace_matrix, solution, rhs, precondition);
 
-    pcout << reduction_control.last_step() << std::endl;
+    pcout << " - AMG:                             "
+          << reduction_control.last_step() << std::endl;
   }
 
+  // ASM on partition level with AMG
   {
     DomainPreconditioner<TrilinosWrappers::PreconditionAMG,
                          TrilinosWrappers::SparseMatrix,
@@ -249,9 +277,11 @@ test(const unsigned int fe_degree            = 1,
     solution = 0;
     solver_cg.solve(laplace_matrix, solution, rhs, precondition);
 
-    pcout << reduction_control.last_step() << std::endl;
+    pcout << " - ASM on partition level with AMG: "
+          << reduction_control.last_step() << std::endl;
   }
 
+  // ASM on cell level
   {
     InverseCellBlockPreconditioner<double, dim> precondition(dof_handler);
 
@@ -264,7 +294,8 @@ test(const unsigned int fe_degree            = 1,
     solution = 0;
     solver_cg.solve(laplace_matrix, solution, rhs, precondition);
 
-    pcout << reduction_control.last_step() << std::endl;
+    pcout << " - ASM on cell level:               "
+          << reduction_control.last_step() << std::endl;
   }
 }
 
