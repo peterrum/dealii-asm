@@ -97,10 +97,69 @@ private:
   mutable Vector<typename SparseMatrixType::value_type> local_src, local_dst;
 };
 
+template <typename Number, int dim, int spacedim = dim>
+class InverseCellBlockPreconditioner
+{
+public:
+  InverseCellBlockPreconditioner(const DoFHandler<dim, spacedim> &dof_handler)
+    : dof_handler(dof_handler)
+  {}
+
+  template <typename GlobalSparseMatrixType, typename GlobalSparsityPattern>
+  void
+  initialize(const GlobalSparseMatrixType &global_sparse_matrix,
+             const GlobalSparsityPattern & global_sparsity_pattern)
+  {
+    SparseMatrixTools::restrict_to_cells(global_sparse_matrix,
+                                         global_sparsity_pattern,
+                                         dof_handler,
+                                         blocks);
+
+    for (auto &block : blocks)
+      if (block.m() > 0 && block.n() > 0)
+        block.gauss_jordan();
+  }
+
+  template <typename VectorType>
+  void
+  vmult(VectorType &dst, const VectorType &src) const
+  {
+    dst = 0.0;
+    src.update_ghost_values();
+
+    Vector<double> vector_src;
+    Vector<double> vector_dst;
+
+    for (const auto &cell : dof_handler.active_cell_iterators())
+      {
+        if (cell->is_locally_owned() == false)
+          continue;
+
+        const unsigned int dofs_per_cell = cell->get_fe().n_dofs_per_cell();
+
+        vector_src.reinit(dofs_per_cell);
+        vector_dst.reinit(dofs_per_cell);
+
+        cell->get_dof_values(src, vector_src);
+
+        blocks[cell->active_cell_index()].vmult(vector_dst, vector_src);
+
+        cell->distribute_local_to_global(vector_dst, dst);
+      }
+
+    src.zero_out_ghost_values();
+    dst.compress(VectorOperation::add);
+  }
+
+private:
+  const DoFHandler<dim, spacedim> &dof_handler;
+  std::vector<FullMatrix<Number>>  blocks;
+};
+
 template <int dim>
 void
 test(const unsigned int fe_degree            = 1,
-     const unsigned int n_global_refinements = 3)
+     const unsigned int n_global_refinements = 6)
 {
   using VectorType = LinearAlgebra::distributed::Vector<double>;
 
@@ -114,6 +173,11 @@ test(const unsigned int fe_degree            = 1,
 
   DoFHandler<dim> dof_handler(tria);
   dof_handler.distribute_dofs(FE_Q<dim>(fe_degree));
+
+  pcout << "System statistics:" << std::endl;
+  pcout << " -n cells: " << tria.n_global_active_cells() << std::endl;
+  pcout << " -n dofs:  " << dof_handler.n_dofs() << std::endl;
+  pcout << std::endl;
 
   QGauss<dim> quadrature(fe_degree + 1);
 
@@ -177,6 +241,21 @@ test(const unsigned int fe_degree            = 1,
                             sparsity_pattern,
                             partitioner->locally_owned_range(),
                             partitioner->ghost_indices());
+
+    ReductionControl reduction_control;
+
+    SolverCG<VectorType> solver_cg(reduction_control);
+
+    solution = 0;
+    solver_cg.solve(laplace_matrix, solution, rhs, precondition);
+
+    pcout << reduction_control.last_step() << std::endl;
+  }
+
+  {
+    InverseCellBlockPreconditioner<double, dim> precondition(dof_handler);
+
+    precondition.initialize(laplace_matrix, sparsity_pattern);
 
     ReductionControl reduction_control;
 
