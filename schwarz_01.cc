@@ -45,8 +45,7 @@ private:
 
 template <int dim>
 void
-test(const unsigned int fe_degree            = 1,
-     const unsigned int n_global_refinements = 6)
+test(const unsigned int fe_degree, const unsigned int n_global_refinements)
 {
   using VectorType = LinearAlgebra::distributed::Vector<double>;
 
@@ -190,5 +189,13 @@ main(int argc, char *argv[])
 {
   Utilities::MPI::MPI_InitFinalize mpi_initialization(argc, argv, 1);
 
-  test<2>();
+  const unsigned int dim       = (argc >= 2) ? std::atoi(argv[1]) : 2;
+  const unsigned int fe_degree = (argc >= 3) ? std::atoi(argv[2]) : 1;
+  const unsigned int n_global_refinements =
+    (argc >= 4) ? std::atoi(argv[3]) : 6;
+
+  if (dim == 2)
+    test<2>(fe_degree, n_global_refinements);
+  else
+    AssertThrow(false, ExcNotImplemented());
 }
