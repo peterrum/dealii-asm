@@ -144,27 +144,33 @@ test(const unsigned int fe_degree, const unsigned int n_global_refinements)
   }
 
   // ASM on partition level with AMG
-  {
-    DomainPreconditioner<TrilinosWrappers::PreconditionAMG,
-                         TrilinosWrappers::SparseMatrix,
-                         TrilinosWrappers::SparsityPattern>
-      precondition;
+  for (unsigned int i = 0; i < 2; ++i)
+    {
+      DomainPreconditioner<TrilinosWrappers::PreconditionAMG,
+                           TrilinosWrappers::SparseMatrix,
+                           TrilinosWrappers::SparsityPattern>
+        precondition;
 
-    precondition.initialize(laplace_matrix,
-                            sparsity_pattern,
-                            partitioner->locally_owned_range(),
-                            partitioner->ghost_indices());
+      if (i == 0)
+        precondition.initialize(laplace_matrix,
+                                sparsity_pattern,
+                                partitioner->locally_owned_range(),
+                                partitioner->ghost_indices());
+      else
+        precondition.initialize(laplace_matrix,
+                                sparsity_pattern,
+                                partitioner->locally_owned_range());
 
-    ReductionControl reduction_control;
+      ReductionControl reduction_control;
 
-    SolverCG<VectorType> solver_cg(reduction_control);
+      SolverCG<VectorType> solver_cg(reduction_control);
 
-    solution = 0;
-    solver_cg.solve(laplace_matrix, solution, rhs, precondition);
+      solution = 0;
+      solver_cg.solve(laplace_matrix, solution, rhs, precondition);
 
-    pcout << " - ASM on partition level with AMG: "
-          << reduction_control.last_step() << std::endl;
-  }
+      pcout << " - ASM on partition level with AMG: "
+            << reduction_control.last_step() << std::endl;
+    }
 
   // ASM on cell level
   {

@@ -13,7 +13,7 @@ public:
   initialize(const GlobalSparseMatrixType &global_sparse_matrix,
              const GlobalSparsityPattern & global_sparsity_pattern,
              const IndexSet &              local_index_set,
-             const IndexSet &              active_index_set)
+             const IndexSet &              active_index_set = {})
   {
     SparseMatrixTools::restrict_to_serial_sparse_matrix(global_sparse_matrix,
                                                         global_sparsity_pattern,
