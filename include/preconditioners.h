@@ -29,30 +29,49 @@ public:
 
     local_src.reinit(union_index_set.n_elements());
     local_dst.reinit(union_index_set.n_elements());
+
+    const auto comm = global_sparse_matrix.get_mpi_communicator();
+
+    if (active_index_set.size() == 0)
+      this->partitioner =
+        std::make_shared<Utilities::MPI::Partitioner>(local_index_set, comm);
+    else
+      this->partitioner =
+        std::make_shared<Utilities::MPI::Partitioner>(local_index_set,
+                                                      active_index_set,
+                                                      comm);
   }
 
   template <typename VectorType>
   void
   vmult(VectorType &dst, const VectorType &src) const
   {
-    src.update_ghost_values();
+    VectorType dst_, src_;
+    dst_.reinit(partitioner);
+    src_.reinit(partitioner);
+
+    src_.copy_locally_owned_data_from(src); // TODO: inplace
+    src_.update_ghost_values();
 
     for (unsigned int i = 0; i < local_src.size(); ++i)
-      local_src[i] = src.local_element(i);
+      local_src[i] = src_.local_element(i);
 
     preconditioner.vmult(local_dst, local_src);
 
     for (unsigned int i = 0; i < local_dst.size(); ++i)
-      dst.local_element(i) = local_dst[i];
+      dst_.local_element(i) = local_dst[i];
 
-    src.zero_out_ghost_values();
-    dst.compress(VectorOperation::add);
+    src_.zero_out_ghost_values();
+    dst_.compress(VectorOperation::add);
+    dst.copy_locally_owned_data_from(dst_); // TODO: inplace
   }
 
 private:
   SparsityPattern    sparsity_pattern;
   SparseMatrixType   sparse_matrix;
   PreconditionerType preconditioner;
+
+  std::shared_ptr<Utilities::MPI::Partitioner> partitioner;
 
   mutable Vector<typename SparseMatrixType::value_type> local_src, local_dst;
 };
