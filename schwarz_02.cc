@@ -213,7 +213,6 @@ test(const unsigned int fe_degree,
                            TrilinosWrappers::SparsityPattern>
         precondition;
 
-
       std::vector<types::global_dof_index> ghost_indices;
       std::vector<types::global_dof_index> indices_temp;
 

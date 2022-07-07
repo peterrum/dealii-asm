@@ -13,6 +13,7 @@
 #include <deal.II/lac/diagonal_matrix.h>
 #include <deal.II/lac/dynamic_sparsity_pattern.h>
 #include <deal.II/lac/solver_cg.h>
+#include <deal.II/lac/solver_gmres.h>
 #include <deal.II/lac/sparse_matrix_tools.h>
 #include <deal.II/lac/trilinos_precondition.h>
 #include <deal.II/lac/trilinos_sparse_matrix.h>
@@ -105,45 +106,65 @@ test(const unsigned int fe_degree, const unsigned int n_global_refinements)
 
   pcout << "Running with different preconditioners:" << std::endl;
 
-  // ASM on partition level with AMG
-  {
-    DomainPreconditioner<TrilinosWrappers::PreconditionAMG,
-                         TrilinosWrappers::SparseMatrix,
-                         TrilinosWrappers::SparsityPattern>
-      precondition;
-
-    precondition.initialize(laplace_matrix,
-                            sparsity_pattern,
-                            partitioner->locally_owned_range(),
-                            partitioner->ghost_indices());
-
+  const auto run = [&](const auto &precondition, const auto type) {
     ReductionControl reduction_control;
 
-    SolverCG<VectorType> solver_cg(reduction_control);
+    if ((type == WeightingType::none) || (type == WeightingType::symm))
+      {
+        SolverCG<VectorType> solver_cg(reduction_control);
+        solution = 0;
+        solver_cg.solve(laplace_matrix, solution, rhs, precondition);
 
-    solution = 0;
-    solver_cg.solve(laplace_matrix, solution, rhs, precondition);
+        pcout << " - ASM on partition level with AMG: "
+              << reduction_control.last_step() << std::endl;
+      }
 
-    pcout << " - ASM on partition level with AMG: "
-          << reduction_control.last_step() << std::endl;
-  }
+    if (true)
+      {
+        SolverGMRES<VectorType> solver_gmres(reduction_control);
+        solution = 0;
+        solver_gmres.solve(laplace_matrix, solution, rhs, precondition);
+
+        pcout << " - ASM on partition level with AMG: "
+              << reduction_control.last_step() << std::endl;
+      }
+  };
+
+  // ASM on partition level with AMG
+  if (true)
+    for (const auto type : {WeightingType::none,
+                            WeightingType::left,
+                            WeightingType::right,
+                            WeightingType::symm})
+      {
+        DomainPreconditioner<TrilinosWrappers::PreconditionAMG,
+                             TrilinosWrappers::SparseMatrix,
+                             TrilinosWrappers::SparsityPattern>
+          precondition(type);
+
+        precondition.initialize(laplace_matrix,
+                                sparsity_pattern,
+                                partitioner->locally_owned_range(),
+                                partitioner->ghost_indices());
+
+        run(precondition, type);
+      }
+
+  pcout << std::endl;
 
   // ASM on cell level
-  {
-    InverseCellBlockPreconditioner<double, dim> precondition(dof_handler);
+  if (true)
+    for (const auto type : {WeightingType::none,
+                            WeightingType::left,
+                            WeightingType::right,
+                            WeightingType::symm})
+      {
+        InverseCellBlockPreconditioner<double, dim> precondition(dof_handler);
 
-    precondition.initialize(laplace_matrix, sparsity_pattern);
+        precondition.initialize(laplace_matrix, sparsity_pattern);
 
-    ReductionControl reduction_control;
-
-    SolverCG<VectorType> solver_cg(reduction_control);
-
-    solution = 0;
-    solver_cg.solve(laplace_matrix, solution, rhs, precondition);
-
-    pcout << " - ASM on cell level:               "
-          << reduction_control.last_step() << std::endl;
-  }
+        run(precondition, type);
+      }
 }
 
 int

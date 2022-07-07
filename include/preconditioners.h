@@ -63,13 +63,15 @@ public:
     if (weighting_type != WeightingType::none)
       {
         multiplicity.reinit(partitioner);
-        multiplicity = 1.0;
+        for (unsigned int i = 0; i < local_src.size(); ++i)
+          multiplicity.local_element(i) = 1.0;
         multiplicity.compress(VectorOperation::add);
-        multiplicity.update_ghost_values();
 
         for (auto &i : multiplicity)
-          i =
-            (weighting_type == WeightingType::symm) ? std::sqrt(1 / i) : 1 / i;
+          i = (weighting_type == WeightingType::symm) ? std::sqrt(1.0 / i) :
+                                                        (1.0 / i);
+
+        multiplicity.update_ghost_values();
       }
 
     src_.copy_locally_owned_data_from(src); // TODO: inplace
@@ -77,7 +79,8 @@ public:
 
     if (weighting_type == WeightingType::symm ||
         weighting_type == WeightingType::right)
-      src_.scale(multiplicity);
+      for (unsigned int i = 0; i < local_src.size(); ++i)
+        src_.local_element(i) *= multiplicity.local_element(i);
 
     for (unsigned int i = 0; i < local_src.size(); ++i)
       local_src[i] = src_.local_element(i);
@@ -91,7 +94,8 @@ public:
 
     if (weighting_type == WeightingType::symm ||
         weighting_type == WeightingType::left)
-      dst_.scale(multiplicity);
+      for (unsigned int i = 0; i < local_dst.size(); ++i)
+        dst_.local_element(i) *= multiplicity.local_element(i);
 
     dst_.compress(VectorOperation::add);
     dst.copy_locally_owned_data_from(dst_); // TODO: inplace
