@@ -1,12 +1,22 @@
 #pragma once
 
+enum class WeightingType
+{
+  none,
+  left,
+  right,
+  symm
+};
+
 template <typename PreconditionerType,
           typename SparseMatrixType,
           typename SparsityPattern>
 class DomainPreconditioner
 {
 public:
-  DomainPreconditioner() = default;
+  DomainPreconditioner(const WeightingType weighting_type = WeightingType::none)
+    : weighting_type(weighting_type)
+  {}
 
   template <typename GlobalSparseMatrixType, typename GlobalSparsityPattern>
   void
@@ -46,12 +56,28 @@ public:
   void
   vmult(VectorType &dst, const VectorType &src) const
   {
-    VectorType dst_, src_;
+    VectorType dst_, src_, multiplicity;
     dst_.reinit(partitioner);
     src_.reinit(partitioner);
 
+    if (weighting_type != WeightingType::none)
+      {
+        multiplicity.reinit(partitioner);
+        multiplicity = 1.0;
+        multiplicity.compress(VectorOperation::add);
+        multiplicity.update_ghost_values();
+
+        for (auto &i : multiplicity)
+          i =
+            (weighting_type == WeightingType::symm) ? std::sqrt(1 / i) : 1 / i;
+      }
+
     src_.copy_locally_owned_data_from(src); // TODO: inplace
     src_.update_ghost_values();
+
+    if (weighting_type == WeightingType::symm ||
+        weighting_type == WeightingType::right)
+      src_.scale(multiplicity);
 
     for (unsigned int i = 0; i < local_src.size(); ++i)
       local_src[i] = src_.local_element(i);
@@ -62,6 +88,11 @@ public:
       dst_.local_element(i) = local_dst[i];
 
     src_.zero_out_ghost_values();
+
+    if (weighting_type == WeightingType::symm ||
+        weighting_type == WeightingType::left)
+      dst_.scale(multiplicity);
+
     dst_.compress(VectorOperation::add);
     dst.copy_locally_owned_data_from(dst_); // TODO: inplace
   }
@@ -74,6 +105,8 @@ private:
   std::shared_ptr<Utilities::MPI::Partitioner> partitioner;
 
   mutable Vector<typename SparseMatrixType::value_type> local_src, local_dst;
+
+  const WeightingType weighting_type;
 };
 
 template <typename Number, int dim, int spacedim = dim>

@@ -112,7 +112,6 @@ test(const unsigned int fe_degree, const unsigned int n_global_refinements)
                          TrilinosWrappers::SparsityPattern>
       precondition;
 
-
     precondition.initialize(laplace_matrix,
                             sparsity_pattern,
                             partitioner->locally_owned_range(),
