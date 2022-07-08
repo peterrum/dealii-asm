@@ -117,8 +117,11 @@ template <typename Number, int dim, int spacedim = dim>
 class InverseCellBlockPreconditioner
 {
 public:
-  InverseCellBlockPreconditioner(const DoFHandler<dim, spacedim> &dof_handler)
+  InverseCellBlockPreconditioner(
+    const DoFHandler<dim, spacedim> &dof_handler,
+    const WeightingType              weighting_type = WeightingType::none)
     : dof_handler(dof_handler)
+    , weighting_type(weighting_type)
   {}
 
   template <typename GlobalSparseMatrixType, typename GlobalSparsityPattern>
@@ -143,8 +146,35 @@ public:
     dst = 0.0;
     src.update_ghost_values();
 
-    Vector<double> vector_src;
-    Vector<double> vector_dst;
+    Vector<double> vector_src, vector_dst, vector_weights;
+
+    VectorType weights;
+
+    if (weighting_type != WeightingType::none)
+      {
+        weights.reinit(src);
+
+        for (const auto &cell : dof_handler.active_cell_iterators())
+          {
+            if (cell->is_locally_owned() == false)
+              continue;
+
+            const unsigned int dofs_per_cell = cell->get_fe().n_dofs_per_cell();
+            vector_weights.reinit(dofs_per_cell);
+
+            for (unsigned int i = 0; i < dofs_per_cell; ++i)
+              vector_weights[i] = 1.0;
+
+            cell->distribute_local_to_global(vector_weights, weights);
+          }
+
+        weights.compress(VectorOperation::add);
+        for (auto &i : weights)
+          i = (weighting_type == WeightingType::symm) ? std::sqrt(1.0 / i) :
+                                                        (1.0 / i);
+        weights.update_ghost_values();
+      }
+
 
     for (const auto &cell : dof_handler.active_cell_iterators())
       {
@@ -155,10 +185,24 @@ public:
 
         vector_src.reinit(dofs_per_cell);
         vector_dst.reinit(dofs_per_cell);
+        if (weighting_type != WeightingType::none)
+          vector_weights.reinit(dofs_per_cell);
 
         cell->get_dof_values(src, vector_src);
+        if (weighting_type != WeightingType::none)
+          cell->get_dof_values(weights, vector_weights);
+
+        if (weighting_type == WeightingType::symm ||
+            weighting_type == WeightingType::right)
+          for (unsigned int i = 0; i < dofs_per_cell; ++i)
+            vector_src[i] *= vector_weights[i];
 
         blocks[cell->active_cell_index()].vmult(vector_dst, vector_src);
+
+        if (weighting_type == WeightingType::symm ||
+            weighting_type == WeightingType::left)
+          for (unsigned int i = 0; i < dofs_per_cell; ++i)
+            vector_dst[i] *= vector_weights[i];
 
         cell->distribute_local_to_global(vector_dst, dst);
       }
@@ -170,4 +214,6 @@ public:
 private:
   const DoFHandler<dim, spacedim> &dof_handler;
   std::vector<FullMatrix<Number>>  blocks;
+
+  const WeightingType weighting_type;
 };

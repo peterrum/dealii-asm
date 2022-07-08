@@ -15,6 +15,7 @@
 #include <deal.II/lac/diagonal_matrix.h>
 #include <deal.II/lac/dynamic_sparsity_pattern.h>
 #include <deal.II/lac/solver_cg.h>
+#include <deal.II/lac/solver_gmres.h>
 #include <deal.II/lac/sparse_matrix_tools.h>
 #include <deal.II/lac/trilinos_precondition.h>
 #include <deal.II/lac/trilinos_sparse_matrix.h>
@@ -206,50 +207,98 @@ test(const unsigned int fe_degree,
     dof_handler, quadrature, RightHandSide<dim>(), rhs, constraints);
 
 
-  if (true)
+  std::vector<types::global_dof_index> ghost_indices;
+  std::vector<types::global_dof_index> indices_temp;
+
+  for (const auto &cell : dof_handler.active_cell_iterators())
+    if (cell->is_locally_owned() == false &&
+        locally_owned_or_halo_cells[cell->active_cell_index()])
+      {
+        indices_temp.resize(cell->get_fe().n_dofs_per_cell());
+        cell->get_dof_indices(indices_temp);
+
+        ghost_indices.insert(ghost_indices.end(),
+                             indices_temp.begin(),
+                             indices_temp.end());
+      }
+
+  std::sort(ghost_indices.begin(), ghost_indices.end());
+  ghost_indices.erase(std::unique(ghost_indices.begin(), ghost_indices.end()),
+                      ghost_indices.end());
+
+  IndexSet ghost_indices_is(dof_handler.n_dofs());
+  ghost_indices_is.add_indices(ghost_indices.begin(), ghost_indices.end());
+
+  const auto run = [&](const auto &precondition, const auto type) {
+    const bool monitor_history = false;
+
+    if ((type == WeightingType::none) || (type == WeightingType::symm))
+      {
+        ReductionControl reduction_control(1000, 1e-10, 1e-2, true);
+
+        if (monitor_history)
+          reduction_control.enable_history_data();
+
+        SolverCG<VectorType> solver_cg(reduction_control);
+        solution = 0;
+        solver_cg.solve(laplace_matrix, solution, rhs, precondition);
+
+        pcout << " - ASM on partition level with AMG: "
+              << reduction_control.last_step() << std::endl;
+
+        if (monitor_history)
+          {
+            const auto &history = reduction_control.get_history_data();
+
+            for (const auto h : history)
+              pcout << h << std::endl;
+          }
+      }
+
+    if (true)
+      {
+        ReductionControl reduction_control(1000, 1e-10, 1e-2);
+
+        if (monitor_history)
+          reduction_control.enable_history_data();
+
+        SolverGMRES<VectorType>::AdditionalData additional_data;
+        // additional_data.right_preconditioning =true;
+
+        SolverGMRES<VectorType> solver_gmres(reduction_control,
+                                             additional_data);
+        solution = 0;
+        solver_gmres.solve(laplace_matrix, solution, rhs, precondition);
+
+        pcout << " - ASM on partition level with AMG: "
+              << reduction_control.last_step() << std::endl;
+
+        if (monitor_history)
+          {
+            const auto &history = reduction_control.get_history_data();
+
+            for (const auto h : history)
+              pcout << h << std::endl;
+          }
+      }
+  };
+
+  for (const auto type : {WeightingType::none,
+                          WeightingType::left,
+                          WeightingType::right,
+                          WeightingType::symm})
     {
       DomainPreconditioner<TrilinosWrappers::PreconditionAMG,
                            TrilinosWrappers::SparseMatrix,
                            TrilinosWrappers::SparsityPattern>
-        precondition;
-
-      std::vector<types::global_dof_index> ghost_indices;
-      std::vector<types::global_dof_index> indices_temp;
-
-      for (const auto &cell : dof_handler.active_cell_iterators())
-        if (cell->is_locally_owned() == false &&
-            locally_owned_or_halo_cells[cell->active_cell_index()])
-          {
-            indices_temp.resize(cell->get_fe().n_dofs_per_cell());
-            cell->get_dof_indices(indices_temp);
-
-            ghost_indices.insert(ghost_indices.end(),
-                                 indices_temp.begin(),
-                                 indices_temp.end());
-          }
-
-      std::sort(ghost_indices.begin(), ghost_indices.end());
-      ghost_indices.erase(std::unique(ghost_indices.begin(),
-                                      ghost_indices.end()),
-                          ghost_indices.end());
-
-      IndexSet ghost_indices_is(dof_handler.n_dofs());
-      ghost_indices_is.add_indices(ghost_indices.begin(), ghost_indices.end());
+        precondition(type);
 
       precondition.initialize(laplace_matrix,
                               sparsity_pattern,
                               partitioner->locally_owned_range(),
                               ghost_indices_is);
 
-      ReductionControl reduction_control;
-
-      SolverCG<VectorType> solver_cg(reduction_control);
-
-      solution = 0;
-      solver_cg.solve(laplace_matrix, solution, rhs, precondition);
-
-      pcout << " - ASM on partition level with AMG: "
-            << reduction_control.last_step() << std::endl;
+      run(precondition, type);
     }
 }
 

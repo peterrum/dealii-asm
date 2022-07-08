@@ -107,26 +107,106 @@ test(const unsigned int fe_degree, const unsigned int n_global_refinements)
   pcout << "Running with different preconditioners:" << std::endl;
 
   const auto run = [&](const auto &precondition, const auto type) {
-    ReductionControl reduction_control;
+    const bool monitor_history = false;
 
     if ((type == WeightingType::none) || (type == WeightingType::symm))
       {
+        ReductionControl reduction_control(1000, 1e-10, 1e-2, true);
+
+        if (monitor_history)
+          reduction_control.enable_history_data();
+
         SolverCG<VectorType> solver_cg(reduction_control);
         solution = 0;
         solver_cg.solve(laplace_matrix, solution, rhs, precondition);
 
         pcout << " - ASM on partition level with AMG: "
               << reduction_control.last_step() << std::endl;
+
+        if (monitor_history)
+          {
+            const auto &history = reduction_control.get_history_data();
+
+            for (const auto h : history)
+              pcout << h << std::endl;
+          }
+      }
+
+    if ((type == WeightingType::none) || (type == WeightingType::symm))
+      {
+        ReductionControl reduction_control(1000, 1e-10, 1e-2, true);
+
+        if (monitor_history)
+          reduction_control.enable_history_data();
+
+        SolverFlexibleCG<VectorType> solver_cg(reduction_control);
+        solution = 0;
+        solver_cg.solve(laplace_matrix, solution, rhs, precondition);
+
+        pcout << " - ASM on partition level with AMG: "
+              << reduction_control.last_step() << std::endl;
+
+        if (monitor_history)
+          {
+            const auto &history = reduction_control.get_history_data();
+
+            for (const auto h : history)
+              pcout << h << std::endl;
+          }
       }
 
     if (true)
       {
-        SolverGMRES<VectorType> solver_gmres(reduction_control);
+        ReductionControl reduction_control(1000, 1e-10, 1e-2);
+
+        if (monitor_history)
+          reduction_control.enable_history_data();
+
+        SolverGMRES<VectorType>::AdditionalData additional_data;
+        additional_data.right_preconditioning = true;
+
+        SolverGMRES<VectorType> solver_gmres(reduction_control,
+                                             additional_data);
         solution = 0;
         solver_gmres.solve(laplace_matrix, solution, rhs, precondition);
 
         pcout << " - ASM on partition level with AMG: "
               << reduction_control.last_step() << std::endl;
+
+        if (monitor_history)
+          {
+            const auto &history = reduction_control.get_history_data();
+
+            for (const auto h : history)
+              pcout << h << std::endl;
+          }
+      }
+
+    if (true)
+      {
+        ReductionControl reduction_control(1000, 1e-10, 1e-2);
+
+        if (monitor_history)
+          reduction_control.enable_history_data();
+
+        SolverFGMRES<VectorType>::AdditionalData additional_data;
+        // additional_data.right_preconditioning =true;
+
+        SolverFGMRES<VectorType> solver_gmres(reduction_control,
+                                              additional_data);
+        solution = 0;
+        solver_gmres.solve(laplace_matrix, solution, rhs, precondition);
+
+        pcout << " - ASM on partition level with AMG: "
+              << reduction_control.last_step() << std::endl;
+
+        if (monitor_history)
+          {
+            const auto &history = reduction_control.get_history_data();
+
+            for (const auto h : history)
+              pcout << h << std::endl;
+          }
       }
   };
 
@@ -159,7 +239,8 @@ test(const unsigned int fe_degree, const unsigned int n_global_refinements)
                             WeightingType::right,
                             WeightingType::symm})
       {
-        InverseCellBlockPreconditioner<double, dim> precondition(dof_handler);
+        InverseCellBlockPreconditioner<double, dim> precondition(dof_handler,
+                                                                 type);
 
         precondition.initialize(laplace_matrix, sparsity_pattern);
 
