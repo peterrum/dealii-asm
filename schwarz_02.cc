@@ -16,6 +16,7 @@
 #include <deal.II/lac/dynamic_sparsity_pattern.h>
 #include <deal.II/lac/solver_cg.h>
 #include <deal.II/lac/solver_gmres.h>
+#include <deal.II/lac/solver_richardson.h>
 #include <deal.II/lac/sparse_matrix_tools.h>
 #include <deal.II/lac/trilinos_precondition.h>
 #include <deal.II/lac/trilinos_sparse_matrix.h>
@@ -255,6 +256,50 @@ test(const unsigned int fe_degree,
           }
       }
 
+    if (type == WeightingType::right)
+      {
+        ReductionControl reduction_control(10000, 1e-10, 1e-2, true);
+
+        if (monitor_history)
+          reduction_control.enable_history_data();
+
+        SolverRichardson<VectorType> solver_cg(reduction_control);
+
+        static unsigned int counter = 0;
+
+        solver_cg.connect([&](const auto, const auto, const auto &solution) {
+          DataOut<dim> data_out;
+          data_out.add_data_vector(dof_handler, solution, "solution");
+          data_out.build_patches();
+          data_out.write_vtu_in_parallel("debug." + std::to_string(counter) +
+                                           ".vtu",
+                                         comm);
+
+          counter++;
+
+          return SolverControl::State::success;
+        });
+
+        solution = 0;
+        try
+          {
+            solver_cg.solve(laplace_matrix, solution, rhs, precondition);
+          }
+        catch (...)
+          {}
+
+        pcout << " - ASM on partition level with AMG: "
+              << reduction_control.last_step() << std::endl;
+
+        if (monitor_history)
+          {
+            const auto &history = reduction_control.get_history_data();
+
+            for (const auto h : history)
+              pcout << h << std::endl;
+          }
+      }
+
     if (true)
       {
         ReductionControl reduction_control(1000, 1e-10, 1e-2);
@@ -263,7 +308,7 @@ test(const unsigned int fe_degree,
           reduction_control.enable_history_data();
 
         SolverGMRES<VectorType>::AdditionalData additional_data;
-        // additional_data.right_preconditioning =true;
+        additional_data.right_preconditioning = true;
 
         SolverGMRES<VectorType> solver_gmres(reduction_control,
                                              additional_data);
@@ -313,7 +358,9 @@ main(int argc, char *argv[])
     (argc >= 4) ? std::atoi(argv[3]) : 6;
   const unsigned int n_halo_layers = (argc >= 5) ? std::atoi(argv[4]) : 1;
 
-  if (dim == 2)
+  if (dim == 1)
+    test<1>(fe_degree, n_global_refinements, n_halo_layers);
+  else if (dim == 2)
     test<2>(fe_degree, n_global_refinements, n_halo_layers);
   else
     AssertThrow(false, ExcNotImplemented());
