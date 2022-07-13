@@ -34,7 +34,8 @@ test(unsigned int fe_degree, unsigned int n_global_refinements)
         const auto cells =
           GridTools::extract_all_surrounding_cells_cartesian<dim>(cell);
 
-        for (unsigned int n_overlap = 0; n_overlap <= 3; ++n_overlap)
+        for (unsigned int n_overlap = 0; n_overlap <= (fe_degree + 1);
+             ++n_overlap)
           {
             const auto dof_indices =
               DoFTools::get_dof_indices_cell_with_overlap(dof_handler,
