@@ -3,6 +3,7 @@
 #include <deal.II/fe/fe_nothing.h>
 #include <deal.II/fe/fe_values.h>
 #include <deal.II/fe/mapping_q.h>
+#include <deal.II/fe/mapping_q_cache.h>
 
 #include <deal.II/grid/grid_generator.h>
 
@@ -218,6 +219,8 @@ template <int dim>
 void
 test(unsigned int, unsigned int n_global_refinements)
 {
+  const unsigned int mapping_degree = 3;
+
   Triangulation<dim> tria;
   if (true)
     GridGenerator::hyper_cube(tria);
@@ -225,15 +228,21 @@ test(unsigned int, unsigned int n_global_refinements)
     GridGenerator::hyper_ball_balanced(tria);
   tria.refine_global(n_global_refinements);
 
-  MappingQ<dim> mapping(3);
+  MappingQ<dim> mapping(mapping_degree);
 
-  const auto runner = [&](const auto &fu, const std::string &label) {
+  const auto runner = [&](const auto &       mapping,
+                          const auto &       fu,
+                          const auto &       fu_update_mapping,
+                          const std::string &label) {
     DataOut<dim>          data_out;
     DataOutBase::VtkFlags flags;
     flags.write_higher_order_cells = true;
     data_out.set_flags(flags);
     data_out.attach_triangulation(tria);
-    data_out.build_patches(mapping, 3, DataOut<dim>::curved_inner_cells);
+    fu_update_mapping(tria);
+    data_out.build_patches(mapping,
+                           mapping_degree,
+                           DataOut<dim>::curved_inner_cells);
     std::ofstream ostream(label + ".vtu");
     data_out.write_vtu(ostream);
 
@@ -253,25 +262,50 @@ test(unsigned int, unsigned int n_global_refinements)
           flags.write_higher_order_cells = true;
           data_out.set_flags(flags);
           data_out.attach_triangulation(sub_tria);
-          data_out.build_patches(mapping, 3, DataOut<dim>::curved_inner_cells);
+          fu_update_mapping(sub_tria);
+          data_out.build_patches(mapping,
+                                 mapping_degree,
+                                 DataOut<dim>::curved_inner_cells);
           std::ofstream ostream(label + std::to_string(counter++) + ".vtu");
           data_out.write_vtu(ostream);
         }
   };
 
   runner(
+    mapping,
     [&](const auto &cell) {
       return GridTools::extract_all_surrounding_cells<dim>(cell);
+    },
+    [](const auto &) {
+      // nothing to do
     },
     "all_surrounding_cells");
 
   if (GridTools::is_mesh_structured(tria))
     {
+      MappingQCache<dim> mapping_q_cache(mapping_degree);
+
       for (unsigned int level = 0; level <= dim; ++level)
         runner(
+          mapping_q_cache,
           [&](const auto &cell) {
             return GridTools::extract_all_surrounding_cells_cartesian<dim>(
               cell, level);
+          },
+          [&](const auto &tria) {
+            mapping_q_cache.initialize(
+              mapping,
+              tria,
+              [](const auto &, const auto &point) {
+                Point<dim> result;
+
+                for (unsigned int d = 0; d < dim; ++d)
+                  result[d] = std::sin(2 * numbers::PI * point[(d + 1) % dim]) *
+                              std::sin(numbers::PI * point[d]) * 0.1;
+
+                return result;
+              },
+              true);
           },
           "cartesian_surrounding_cells_" + std::to_string(level) + "_");
     }
