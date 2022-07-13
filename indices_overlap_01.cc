@@ -85,7 +85,50 @@ namespace dealii
         }
       else
         {
-          Assert(false, ExcNotImplemented());
+          std::array<std::vector<types::global_dof_index>,
+                     Utilities::pow(3, dim)>
+            all_dofs;
+
+          for (unsigned int i = 0; i < cells.size(); ++i)
+            if (cells[i].state() == IteratorState::valid)
+              all_dofs[i] = get_lexicographic_dof_indices(cells[i]);
+
+          std::vector<types::global_dof_index> dof_indices(
+            Utilities::pow(n_dofs_with_overlap_1D, dim),
+            numbers::invalid_unsigned_int);
+
+          AssertDimension(dim, 2);
+
+          const auto translate =
+            [&](const auto i) -> std::pair<unsigned int, unsigned int> {
+            if (i < n_overlap - 1)
+              return {0, fe_degree + 1 - n_overlap + i};
+            else if (i < fe_degree + n_overlap)
+              return {1, i - (n_overlap - 1)};
+            else
+              return {2, i - (n_overlap + fe_degree - 1)};
+          };
+
+          for (unsigned int j = 0, c = 0; j < n_dofs_with_overlap_1D; ++j)
+            for (unsigned int i = 0; i < n_dofs_with_overlap_1D; ++i, ++c)
+              {
+                const auto [i0, i1] = translate(i);
+                const auto [j0, j1] = translate(j);
+
+                const auto ii = i0 + 3 * j0;
+                const auto jj = i1 + n_dofs_1D * j1;
+
+                if (cells[ii].state() == IteratorState::valid)
+                  dof_indices[c] = all_dofs[ii][jj];
+              }
+
+          std::vector<types::global_dof_index> dof_indices_cleaned;
+
+          for (const auto i : dof_indices)
+            if (i != numbers::invalid_unsigned_int)
+              dof_indices_cleaned.push_back(i);
+
+          return dof_indices_cleaned;
         }
     }
   } // namespace DoFTools
@@ -111,7 +154,7 @@ test(unsigned int fe_degree, unsigned int n_global_refinements)
         const auto cells =
           GridTools::extract_all_surrounding_cells_cartesian<dim>(cell);
 
-        for (unsigned int n_overlap = 0; n_overlap <= 1; ++n_overlap)
+        for (unsigned int n_overlap = 0; n_overlap <= 3; ++n_overlap)
           {
             const auto dof_indices =
               DoFTools::get_dof_indices_cell_with_overlap(dof_handler,
