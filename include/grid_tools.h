@@ -160,7 +160,7 @@ namespace dealii
                Utilities::pow(3, dim)>
     extract_all_surrounding_cells_cartesian(
       const typename Triangulation<dim>::cell_iterator &cell,
-      const unsigned int                                level,
+      const unsigned int                                level  = dim,
       const bool                                        strict = false)
     {
       (void)strict; // TODO
