@@ -21,6 +21,29 @@ namespace dealii
                      "This function is not working for such kind of meshes!");
 
     template <int dim>
+    bool
+    is_mesh_structured(const Triangulation<dim> &tria)
+    {
+      bool is_structured = true;
+
+      for (const auto &cell : tria.active_cell_iterators())
+        if (cell->is_locally_owned())
+          for (const auto f : cell->face_indices())
+            if (cell->at_boundary(f) == false)
+              {
+                const auto cell_neighbor = cell->neighbor(f);
+
+                const unsigned int fo = f ^ 1;
+
+                is_structured &= ((cell_neighbor->at_boundary(fo) == false) &&
+                                  (cell_neighbor->neighbor(fo) == cell));
+              }
+
+      return Utilities::MPI::min(static_cast<double>(is_structured),
+                                 tria.get_communicator()) == 1.0;
+    }
+
+    template <int dim>
     std::vector<typename Triangulation<dim>::cell_iterator>
     extract_all_surrounding_cells(
       const typename Triangulation<dim>::cell_iterator &cell)
@@ -46,6 +69,7 @@ namespace dealii
 
       return cells;
     }
+
     template <int dim>
     std::array<typename Triangulation<dim>::cell_iterator,
                Utilities::pow(3, dim)>
@@ -241,13 +265,21 @@ test(unsigned int, unsigned int n_global_refinements)
     },
     "all_surrounding_cells");
 
-  for (unsigned int level = 0; level <= dim; ++level)
-    runner(
-      [&](const auto &cell) {
-        return GridTools::extract_all_surrounding_cells_cartesian<dim>(cell,
-                                                                       level);
-      },
-      "cartesian_surrounding_cells_" + std::to_string(level) + "_");
+  if (GridTools::is_mesh_structured(tria))
+    {
+      for (unsigned int level = 0; level <= dim; ++level)
+        runner(
+          [&](const auto &cell) {
+            return GridTools::extract_all_surrounding_cells_cartesian<dim>(
+              cell, level);
+          },
+          "cartesian_surrounding_cells_" + std::to_string(level) + "_");
+    }
+  else
+    {
+      std::cout << "Not running GridTools::extract_all_surrounding_cells()!"
+                << std::endl;
+    }
 }
 
 int
