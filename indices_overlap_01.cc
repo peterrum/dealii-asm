@@ -32,7 +32,9 @@ namespace dealii
 
       AssertDimension(fe.n_components(), 1);
 
-      const unsigned int fe_degree = fe.tensor_degree();
+      const unsigned int fe_degree              = fe.tensor_degree();
+      const unsigned int n_dofs_1D              = fe_degree + 1;
+      const unsigned int n_dofs_with_overlap_1D = fe_degree - 1 + 2 * n_overlap;
 
       const auto lexicographic_to_hierarchic_numbering =
         Utilities::invert_permutation(
@@ -67,7 +69,19 @@ namespace dealii
           if (n_overlap == 1)
             return dof_indices;
 
-          Assert(false, ExcNotImplemented());
+          AssertDimension(dim, 2);
+
+          std::vector<types::global_dof_index> inner_dof_indices;
+
+          for (unsigned int j = 0, c = 0; j < n_dofs_1D; ++j)
+            for (unsigned int i = 0; i < n_dofs_1D; ++i, ++c)
+              if (i != 0 && i != fe_degree && j != 0 && j != fe_degree)
+                inner_dof_indices.emplace_back(dof_indices[c]);
+
+          AssertDimension(inner_dof_indices.size(),
+                          Utilities::pow(n_dofs_with_overlap_1D, dim));
+
+          return inner_dof_indices;
         }
       else
         {
@@ -97,11 +111,17 @@ test(unsigned int fe_degree, unsigned int n_global_refinements)
         const auto cells =
           GridTools::extract_all_surrounding_cells_cartesian<dim>(cell);
 
-        const auto dof_indices =
-          DoFTools::get_dof_indices_cell_with_overlap(dof_handler, cells, 1);
+        for (unsigned int n_overlap = 0; n_overlap <= 1; ++n_overlap)
+          {
+            const auto dof_indices =
+              DoFTools::get_dof_indices_cell_with_overlap(dof_handler,
+                                                          cells,
+                                                          n_overlap);
 
-        for (const auto index : dof_indices)
-          std::cout << index << " ";
+            for (const auto index : dof_indices)
+              std::cout << index << " ";
+            std::cout << std::endl;
+          }
         std::cout << std::endl;
       }
 }
