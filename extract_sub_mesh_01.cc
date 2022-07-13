@@ -16,6 +16,10 @@ namespace dealii
 {
   namespace GridTools
   {
+    DeclExceptionMsg(ExcMeshIsNotStructured,
+                     "You are using an ustructured mesh. "
+                     "This function is not working for such kind of meshes!");
+
     template <int dim>
     std::vector<typename Triangulation<dim>::cell_iterator>
     extract_all_surrounding_cells(
@@ -47,7 +51,8 @@ namespace dealii
                Utilities::pow(3, dim)>
     extract_all_surrounding_cells_cartesian(
       const typename Triangulation<dim>::cell_iterator &cell,
-      const unsigned int                                level)
+      const unsigned int                                level,
+      const bool                                        strict = false)
     {
       const auto &tria = cell->get_triangulation();
 
@@ -58,7 +63,25 @@ namespace dealii
 
       cells[cells.size() / 2] = cell;
 
-      (void)level;
+      if (level >= 1)
+        {
+          constexpr std::array<unsigned int, 4> table = {{3, 5, 1, 7}};
+
+          for (const auto f : cell->face_indices())
+            if (cell->at_boundary(f) == false)
+              {
+                const auto cell_neighbor = cell->neighbor(f);
+
+                const unsigned int fo = f ^ 1;
+
+                AssertThrow((strict == false) ||
+                              ((cell_neighbor->at_boundary(fo) == false) &&
+                               (cell_neighbor->neighbor(fo) == cell)),
+                            ExcMeshIsNotStructured());
+
+                cells[table[f]] = cell_neighbor;
+              }
+        }
 
       return cells;
     }
