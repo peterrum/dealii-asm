@@ -108,7 +108,17 @@ namespace dealii
           return index[0] + 3 * index[1] + 9 * index[2];
       };
 
-      cells[translate({})] = cell;
+      const auto set_entry = [&](const std::vector<unsigned int> &faces,
+                                 const auto &                     value) {
+        const unsigned int index = translate(faces);
+
+        Assert(cells[index] == tria.end() || cells[index] == value,
+               ExcInternalError());
+
+        cells[index] = value;
+      };
+
+      set_entry({}, cell);
 
       if (level >= 1)
         {
@@ -117,7 +127,7 @@ namespace dealii
               {
                 const auto cell_neighbor = cell->neighbor(f0);
 
-                cells[translate({f0})] = cell_neighbor;
+                set_entry({f0}, cell_neighbor);
               }
         }
 
