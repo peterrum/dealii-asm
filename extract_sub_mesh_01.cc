@@ -42,6 +42,26 @@ namespace dealii
 
       return cells;
     }
+    template <int dim>
+    std::array<typename Triangulation<dim>::cell_iterator,
+               Utilities::pow(3, dim)>
+    extract_all_surrounding_cells_cartesian(
+      const typename Triangulation<dim>::cell_iterator &cell,
+      const unsigned int                                level)
+    {
+      const auto &tria = cell->get_triangulation();
+
+      std::array<typename Triangulation<dim>::cell_iterator,
+                 Utilities::pow(3, dim)>
+        cells;
+      cells.fill(tria.end());
+
+      cells[cells.size() / 2] = cell;
+
+      (void)level;
+
+      return cells;
+    }
   } // namespace GridTools
 } // namespace dealii
 
@@ -49,18 +69,24 @@ namespace dealii
 {
   namespace GridGenerator
   {
-    template <int dim>
+    template <int dim, typename Container>
     void
-    create_mesh_from_cells(
-      const std::vector<typename Triangulation<dim>::cell_iterator> &cells,
-      Triangulation<dim> &                                           sub_tria)
+    create_mesh_from_cells(const Container &cells, Triangulation<dim> &sub_tria)
     {
       sub_tria.clear();
 
       if (cells.size() == 0)
-        return; // nothing to do
+        return; // no cell
 
-      const auto &tria = cells.front()->get_triangulation();
+      const auto first_cell_ptr =
+        std::find_if(cells.begin(), cells.end(), [](const auto &cell) {
+          return cell.state() == IteratorState::valid;
+        });
+
+      if (first_cell_ptr == cells.end())
+        return; // no cell valid
+
+      const auto &tria = (*first_cell_ptr)->get_triangulation();
 
       // copy manifolds
       for (const auto i : tria.get_manifold_ids())
@@ -71,8 +97,9 @@ namespace dealii
       std::vector<unsigned int> new_vertex_indices(tria.n_vertices(), 0);
 
       for (const auto &cell : cells)
-        for (const unsigned int v : cell->vertex_indices())
-          new_vertex_indices[cell->vertex_index(v)] = 1;
+        if (cell != tria.end())
+          for (const unsigned int v : cell->vertex_indices())
+            new_vertex_indices[cell->vertex_index(v)] = 1;
 
       for (unsigned int i = 0, c = 0; i < new_vertex_indices.size(); ++i)
         if (new_vertex_indices[i] == 0)
@@ -90,18 +117,19 @@ namespace dealii
       std::vector<CellData<dim>> sub_cells;
 
       for (const auto &cell : cells)
-        {
-          // cell
-          CellData<dim> new_cell(cell->n_vertices());
+        if (cell != tria.end())
+          {
+            // cell
+            CellData<dim> new_cell(cell->n_vertices());
 
-          for (const auto v : cell->vertex_indices())
-            new_cell.vertices[v] = new_vertex_indices[cell->vertex_index(v)];
+            for (const auto v : cell->vertex_indices())
+              new_cell.vertices[v] = new_vertex_indices[cell->vertex_index(v)];
 
-          new_cell.material_id = cell->material_id();
-          new_cell.manifold_id = cell->manifold_id();
+            new_cell.material_id = cell->material_id();
+            new_cell.manifold_id = cell->manifold_id();
 
-          sub_cells.emplace_back(new_cell);
-        }
+            sub_cells.emplace_back(new_cell);
+          }
 
       // create mesh
       sub_tria.create_triangulation(sub_points, sub_cells, {});
@@ -109,31 +137,32 @@ namespace dealii
       auto sub_cell = sub_tria.begin();
 
       for (const auto &cell : cells)
-        {
-          // faces
-          for (const auto f : cell->face_indices())
-            {
-              const auto face = cell->face(f);
-
-              if (face->manifold_id() != numbers::flat_manifold_id)
-                sub_cell->face(f)->set_manifold_id(face->manifold_id());
-
-              if (face->boundary_id() != numbers::internal_face_boundary_id)
-                sub_cell->face(f)->set_boundary_id(face->boundary_id());
-            }
-
-          // lines
-          if (dim == 3)
-            for (const auto l : cell->line_indices())
+        if (cell != tria.end())
+          {
+            // faces
+            for (const auto f : cell->face_indices())
               {
-                const auto line = cell->line(l);
+                const auto face = cell->face(f);
 
-                if (line->manifold_id() != numbers::flat_manifold_id)
-                  sub_cell->line(l)->set_manifold_id(line->manifold_id());
+                if (face->manifold_id() != numbers::flat_manifold_id)
+                  sub_cell->face(f)->set_manifold_id(face->manifold_id());
+
+                if (face->boundary_id() != numbers::internal_face_boundary_id)
+                  sub_cell->face(f)->set_boundary_id(face->boundary_id());
               }
 
-          sub_cell++;
-        }
+            // lines
+            if (dim == 3)
+              for (const auto l : cell->line_indices())
+                {
+                  const auto line = cell->line(l);
+
+                  if (line->manifold_id() != numbers::flat_manifold_id)
+                    sub_cell->line(l)->set_manifold_id(line->manifold_id());
+                }
+
+            sub_cell++;
+          }
     }
   } // namespace GridGenerator
 } // namespace dealii
@@ -188,6 +217,14 @@ test(unsigned int, unsigned int n_global_refinements)
       return GridTools::extract_all_surrounding_cells<dim>(cell);
     },
     "all_surrounding_cells");
+
+  for (unsigned int level = 0; level <= dim; ++level)
+    runner(
+      [&](const auto &cell) {
+        return GridTools::extract_all_surrounding_cells_cartesian<dim>(cell,
+                                                                       level);
+      },
+      "cartesian_surrounding_cells_" + std::to_string(level) + "_");
 }
 
 int
