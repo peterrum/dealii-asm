@@ -128,20 +128,21 @@ namespace dealii
                 const auto cell_neighbor = cell->neighbor(f0);
 
                 set_entry({f0}, cell_neighbor);
-              }
-        }
 
-      if (level >= 2)
-        {
-          for (const auto f0 : cell->face_indices())
-            if (cell->at_boundary(f0) == false)
-              {
-                const auto cell_neighbor = cell->neighbor(f0);
+                if (level >= 2)
+                  for (const auto f1 : cell_neighbor->face_indices())
+                    if ((f0 / 2 != f1 / 2) &&
+                        (cell_neighbor->at_boundary(f1) == false))
+                      {
+                        const auto cell_neighbor_neigbor =
+                          cell_neighbor->neighbor(f1);
+                        set_entry({f0, f1}, cell_neighbor_neigbor);
 
-                for (const auto f1 : cell_neighbor->face_indices())
-                  if ((f0 / 2 != f1 / 2) &&
-                      (cell_neighbor->at_boundary(f1) == false))
-                    cells[translate({f0, f1})] = cell_neighbor->neighbor(f1);
+                        if (level >= 3)
+                          {
+                            AssertThrow(false, ExcNotImplemented());
+                          }
+                      }
               }
         }
 
