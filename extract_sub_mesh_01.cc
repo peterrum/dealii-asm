@@ -88,8 +88,6 @@ namespace dealii
         cells;
       cells.fill(tria.end());
 
-      cells[cells.size() / 2] = cell;
-
       const auto translate = [](const std::vector<unsigned int> &faces) {
         std::array<unsigned int, 3> index;
         index.fill(1);
@@ -110,11 +108,17 @@ namespace dealii
           return index[0] + 3 * index[1] + 9 * index[2];
       };
 
+      cells[translate({})] = cell;
+
       if (level >= 1)
         {
-          for (const auto f : cell->face_indices())
-            if (cell->at_boundary(f) == false)
-              cells[translate({f})] = cell->neighbor(f);
+          for (const auto f0 : cell->face_indices())
+            if (cell->at_boundary(f0) == false)
+              {
+                const auto cell_neighbor = cell->neighbor(f0);
+
+                cells[translate({f0})] = cell_neighbor;
+              }
         }
 
       if (level >= 2)
