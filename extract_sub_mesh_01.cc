@@ -151,36 +151,43 @@ test(unsigned int, unsigned int n_global_refinements)
 
   MappingQ<dim> mapping(3);
 
-  DataOut<dim>          data_out;
-  DataOutBase::VtkFlags flags;
-  flags.write_higher_order_cells = true;
-  data_out.set_flags(flags);
-  data_out.attach_triangulation(tria);
-  data_out.build_patches(mapping, 3, DataOut<dim>::curved_inner_cells);
-  std::ofstream ostream("all_surrounding_cells.vtu");
-  data_out.write_vtu(ostream);
+  const auto runner = [&](const auto &fu, const std::string &label) {
+    DataOut<dim>          data_out;
+    DataOutBase::VtkFlags flags;
+    flags.write_higher_order_cells = true;
+    data_out.set_flags(flags);
+    data_out.attach_triangulation(tria);
+    data_out.build_patches(mapping, 3, DataOut<dim>::curved_inner_cells);
+    std::ofstream ostream(label + ".vtu");
+    data_out.write_vtu(ostream);
 
-  unsigned int counter = 0;
+    unsigned int counter = 0;
 
-  for (const auto &cell : tria.active_cell_iterators())
-    if (cell->is_locally_owned())
-      {
-        const auto all_surrounding_cells =
-          GridTools::extract_all_surrounding_cells<dim>(cell);
+    for (const auto &cell : tria.active_cell_iterators())
+      if (cell->is_locally_owned())
+        {
+          const auto all_surrounding_cells = fu(cell);
 
-        Triangulation<dim> sub_tria;
-        GridGenerator::create_mesh_from_cells(all_surrounding_cells, sub_tria);
+          Triangulation<dim> sub_tria;
+          GridGenerator::create_mesh_from_cells(all_surrounding_cells,
+                                                sub_tria);
 
-        DataOut<dim>          data_out;
-        DataOutBase::VtkFlags flags;
-        flags.write_higher_order_cells = true;
-        data_out.set_flags(flags);
-        data_out.attach_triangulation(sub_tria);
-        data_out.build_patches(mapping, 3, DataOut<dim>::curved_inner_cells);
-        std::ofstream ostream("all_surrounding_cells" +
-                              std::to_string(counter++) + ".vtu");
-        data_out.write_vtu(ostream);
-      }
+          DataOut<dim>          data_out;
+          DataOutBase::VtkFlags flags;
+          flags.write_higher_order_cells = true;
+          data_out.set_flags(flags);
+          data_out.attach_triangulation(sub_tria);
+          data_out.build_patches(mapping, 3, DataOut<dim>::curved_inner_cells);
+          std::ofstream ostream(label + std::to_string(counter++) + ".vtu");
+          data_out.write_vtu(ostream);
+        }
+  };
+
+  runner(
+    [&](const auto &cell) {
+      return GridTools::extract_all_surrounding_cells<dim>(cell);
+    },
+    "all_surrounding_cells");
 }
 
 int
