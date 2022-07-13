@@ -79,6 +79,8 @@ namespace dealii
       const unsigned int                                level,
       const bool                                        strict = false)
     {
+      (void)strict; // TODO
+
       const auto &tria = cell->get_triangulation();
 
       std::array<typename Triangulation<dim>::cell_iterator,
@@ -88,23 +90,44 @@ namespace dealii
 
       cells[cells.size() / 2] = cell;
 
+      const auto translate = [](const std::vector<unsigned int> &faces) {
+        std::array<unsigned int, 3> index;
+        index.fill(1);
+
+        for (const auto face : faces)
+          {
+            const unsigned int direction = face / 2;
+            const unsigned int side      = face % 2;
+
+            index[direction] = (side == 1) ? 2 : 0;
+          }
+
+        if (dim == 1)
+          return index[0];
+        else if (dim == 2)
+          return index[0] + 3 * index[1];
+        else if (dim == 3)
+          return index[0] + 3 * index[1] + 9 * index[2];
+      };
+
       if (level >= 1)
         {
-          constexpr std::array<unsigned int, 4> table = {{3, 5, 1, 7}};
-
           for (const auto f : cell->face_indices())
             if (cell->at_boundary(f) == false)
+              cells[translate({f})] = cell->neighbor(f);
+        }
+
+      if (level >= 2)
+        {
+          for (const auto f0 : cell->face_indices())
+            if (cell->at_boundary(f0) == false)
               {
-                const auto cell_neighbor = cell->neighbor(f);
+                const auto cell_neighbor = cell->neighbor(f0);
 
-                const unsigned int fo = f ^ 1;
-
-                AssertThrow((strict == false) ||
-                              ((cell_neighbor->at_boundary(fo) == false) &&
-                               (cell_neighbor->neighbor(fo) == cell)),
-                            ExcMeshIsNotStructured());
-
-                cells[table[f]] = cell_neighbor;
+                for (const auto f1 : cell_neighbor->face_indices())
+                  if ((f0 / 2 != f1 / 2) &&
+                      (cell_neighbor->at_boundary(f1) == false))
+                    cells[translate({f0, f1})] = cell_neighbor->neighbor(f1);
               }
         }
 
