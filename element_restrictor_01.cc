@@ -1,7 +1,12 @@
+#include <deal.II/base/conditional_ostream.h>
 
 #include <deal.II/distributed/tria.h>
 
 #include <deal.II/dofs/dof_handler.h>
+
+#include <deal.II/fe/fe_q.h>
+
+#include <deal.II/grid/grid_generator.h>
 
 #include <deal.II/lac/la_parallel_vector.h>
 #include <deal.II/lac/vector.h>
@@ -100,7 +105,8 @@ namespace Restrictors
           weight_vector.compress(dealii::VectorOperation::add);
 
           for (auto &i : weight_vector)
-            i = 1.0 / i;
+            i = 1.0 /
+                ((weighting_type == WeightingType::symm) ? std::sqrt(i) : i);
 
           weight_vector.update_ghost_values();
 
@@ -124,6 +130,8 @@ namespace Restrictors
     {
       const auto index = cell->active_cell_index();
 
+      local_vector.reinit(indices[index].size());
+
       for (unsigned int i = 0; i < local_vector.size(); ++i)
         {
           const Number weight = (weighting_type == WeightingType::pre ||
@@ -144,6 +152,8 @@ namespace Restrictors
     {
       const auto index = cell->active_cell_index();
 
+      AssertDimension(local_vector.size(), indices[index].size());
+
       for (unsigned int i = 0; i < local_vector.size(); ++i)
         {
           const Number weight = (weighting_type == WeightingType::post ||
@@ -159,6 +169,12 @@ namespace Restrictors
     get_partitioner()
     {
       return this->partitioner;
+    }
+
+    const std::vector<std::vector<dealii::types::global_dof_index>> &
+    get_indices() const
+    {
+      return indices;
     }
 
   private:
@@ -180,16 +196,29 @@ main(int argc, char *argv[])
 {
   Utilities::MPI::MPI_InitFinalize mpi_initialization(argc, argv, 1);
 
-  const unsigned int dim = 2;
+  const unsigned int dim                  = 2;
+  const unsigned int n_global_refinements = 3;
+  const unsigned int fe_degree            = 3;
 
   using Number     = double;
   using VectorType = LinearAlgebra::distributed::Vector<Number>;
 
+  ConditionalOStream pcout(std::cout,
+                           Utilities::MPI::this_mpi_process(MPI_COMM_WORLD) ==
+                             0);
+
   parallel::distributed::Triangulation<dim> tria(MPI_COMM_WORLD);
-  DoFHandler<dim>                           dof_handler(tria);
+  GridGenerator::hyper_cube(tria);
+  tria.refine_global(n_global_refinements);
+
+  FE_Q<dim>       fe_q(fe_degree);
+  DoFHandler<dim> dof_handler(tria);
+  dof_handler.distribute_dofs(fe_q);
 
   typename Restrictors::ElementCenteredRestrictor<VectorType>::AdditionalData
     restrictor_additional_data;
+  restrictor_additional_data.n_overlap      = 2;
+  restrictor_additional_data.weighting_type = Restrictors::WeightingType::symm;
 
   Restrictors::ElementCenteredRestrictor<VectorType> restrictor;
   restrictor.reinit(dof_handler, restrictor_additional_data);
@@ -217,4 +246,6 @@ main(int argc, char *argv[])
   };
 
   vmult(dst, src);
+
+  pcout << dst.size() << " " << dst.l1_norm() << std::endl;
 }
