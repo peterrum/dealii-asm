@@ -72,7 +72,7 @@ solve(const MatrixType &                               A,
   const auto max_iterations = params.get<unsigned int>("max iterations", 100);
   const auto abs_tolerance  = params.get<double>("abs tolerance", 1e-10);
   const auto rel_tolerance  = params.get<double>("rel tolerance", 1e-2);
-  const auto type           = params.get<std::string>("type", "CG");
+  const auto type           = params.get<std::string>("type", "");
 
   auto reduction_control = std::make_shared<ReductionControl>(max_iterations,
                                                               abs_tolerance,
@@ -97,6 +97,42 @@ solve(const MatrixType &                               A,
 
   return reduction_control;
 }
+
+
+
+template <int dim, typename VectorType>
+std::shared_ptr<const PreconditionerBase<VectorType>>
+create_system_preconditioner(
+  DoFHandler<dim> &                        dof_handler,
+  const TrilinosWrappers::SparseMatrix &   laplace_matrix,
+  const TrilinosWrappers::SparsityPattern &sparsity_pattern,
+  const boost::property_tree::ptree        params)
+{
+  const auto type = params.get<std::string>("type", "");
+
+  if (type == "AdditiveSchwarzPreconditioner")
+    {
+      using RestictorType = Restrictors::ElementCenteredRestrictor<VectorType>;
+
+      typename RestictorType::AdditionalData restrictor_ad;
+
+      restrictor_ad.n_overlap      = 2;
+      restrictor_ad.weighting_type = Restrictors::WeightingType::symm;
+
+      const auto restrictor =
+        std::make_shared<const RestictorType>(dof_handler, restrictor_ad);
+
+      return std::make_shared<
+        const AdditiveSchwarzPreconditioner<VectorType, RestictorType>>(
+        restrictor, laplace_matrix, sparsity_pattern);
+    }
+
+  AssertThrow(false, ExcNotImplemented());
+
+  return {};
+}
+
+
 
 template <int dim>
 void
@@ -170,24 +206,17 @@ test(const boost::property_tree::ptree params)
   std::shared_ptr<ReductionControl> reduction_control;
 
   // ASM on cell level
-  {
-    using RestictorType = Restrictors::ElementCenteredRestrictor<VectorType>;
+  if (true)
+    {
+      const auto preconditioner = create_system_preconditioner<dim, VectorType>(
+        dof_handler,
+        laplace_matrix,
+        sparsity_pattern,
+        preconditioner_parameters);
 
-    typename RestictorType::AdditionalData restrictor_ad;
-
-    restrictor_ad.n_overlap      = 2;
-    restrictor_ad.weighting_type = Restrictors::WeightingType::symm;
-
-    const auto restrictor =
-      std::make_shared<const RestictorType>(dof_handler, restrictor_ad);
-
-    const auto preconditioner = std::make_shared<
-      const AdditiveSchwarzPreconditioner<VectorType, RestictorType>>(
-      restrictor, laplace_matrix, sparsity_pattern);
-
-    reduction_control =
-      solve(laplace_matrix, solution, rhs, preconditioner, solver_parameters);
-  }
+      reduction_control =
+        solve(laplace_matrix, solution, rhs, preconditioner, solver_parameters);
+    }
 
   pcout << " - ASM on cell level:               "
         << reduction_control->last_step() << std::endl;

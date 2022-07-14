@@ -219,6 +219,18 @@ private:
 };
 
 
+template <typename VectorType>
+class
+PreconditionerBase
+{
+  public:
+    using vector_type = VectorType;
+
+    virtual void
+    vmult(VectorType & dst, const VectorType & src) const = 0;
+};
+
+
 
 /**
  * An additive Schwarz preconditioner. It is fully defined by a 
@@ -228,7 +240,7 @@ private:
  */
 template <typename VectorType, typename RestrictorType>
 class
-AdditiveSchwarzPreconditioner
+AdditiveSchwarzPreconditioner : public PreconditionerBase<VectorType>
 {
   public:
     using Number = typename VectorType::value_type;
@@ -271,7 +283,7 @@ AdditiveSchwarzPreconditioner
    * global vector.
    */
   void
-  vmult(VectorType & dst, const VectorType & src) const
+  vmult(VectorType & dst, const VectorType & src) const override
   {
     dealii::Vector<Number> src_, dst_;
 

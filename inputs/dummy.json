@@ -2,5 +2,6 @@
     "dim" : 2,
     "degree" : 2,
     "n refinements" : 5,
-    "solver" : {"type" : "GMRES"}
+    "solver" : {"type" : "CG"},
+    "preconditioner" : {"type" : "AdditiveSchwarzPreconditioner"}
 }
