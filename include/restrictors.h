@@ -1,5 +1,8 @@
 #pragma once
 
+#include "dof_tools.h"
+#include "grid_tools.h"
+
 namespace Restrictors
 {
   enum class WeightingType
@@ -27,6 +30,16 @@ namespace Restrictors
       unsigned int  n_overlap;
       WeightingType weighting_type;
     };
+
+    ElementCenteredRestrictor() = default;
+
+    template <int dim>
+    ElementCenteredRestrictor(
+      const dealii::DoFHandler<dim> &dof_handler,
+      const AdditionalData &         additional_data = AdditionalData())
+    {
+      this->reinit(dof_handler, additional_data);
+    }
 
     template <int dim>
     void

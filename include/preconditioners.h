@@ -217,3 +217,91 @@ private:
 
   const WeightingType weighting_type;
 };
+
+
+
+/**
+ * An additive Schwarz preconditioner. It is fully defined by a 
+ * sparse system matrix and a restrictor. The restrictor is used
+ * to extract (overlapping) blocks from the matrix and potentially
+ * to weights the contributations.
+ */
+template <typename VectorType, typename RestrictorType>
+class
+AdditiveSchwarzPreconditioner
+{
+  public:
+    using Number = typename VectorType::value_type;
+
+    AdditiveSchwarzPreconditioner() = default;
+
+    template <typename GlobalSparseMatrixType, typename GlobalSparsityPattern>
+    AdditiveSchwarzPreconditioner(const std::shared_ptr<const RestrictorType> & restrictor,
+               const GlobalSparseMatrixType &global_sparse_matrix,
+               const GlobalSparsityPattern & global_sparsity_pattern)
+    {   
+      this->initialize(restrictor, global_sparse_matrix, global_sparsity_pattern);
+    }
+
+    /**
+     * Initialize class with a sparse matrix and a restrictor.
+     */
+    template <typename GlobalSparseMatrixType, typename GlobalSparsityPattern>
+    void
+    initialize(const std::shared_ptr<const RestrictorType> & restrictor,
+               const GlobalSparseMatrixType &global_sparse_matrix,
+               const GlobalSparsityPattern & global_sparsity_pattern)
+    {
+      this->restrictor = restrictor;
+
+      dealii::SparseMatrixTools::restrict_to_full_matrices(global_sparse_matrix,
+                                           global_sparsity_pattern,
+                                         restrictor->get_indices(),
+                                         blocks);
+
+    for (auto &block : blocks)
+      if (block.m() > 0 && block.n() > 0)
+        block.gauss_jordan();
+    }
+
+  /**
+   * Perform matrix-vector product by looping over all blocks,
+   * restricting the source vector, apply the inverted
+   * block matrix, and distributing the result back into the
+   * global vector.
+   */
+  void
+  vmult(VectorType & dst, const VectorType & src) const
+  {
+    dealii::Vector<Number> src_, dst_;
+
+    dst = 0.0;
+    src.update_ghost_values();
+
+    for(unsigned int c = 0; c < blocks.size(); ++c)
+      {
+        const auto block = blocks[c];
+
+        if (block.m() == 0 || block.n() == 0)
+          continue;
+
+        AssertDimension(block.m(), block.n());
+
+        src_.reinit(block.m());
+        dst_.reinit(block.m());
+
+        restrictor->read_dof_values(c, src, src_);
+
+        block.vmult(dst_, src_);
+
+        restrictor->distribute_dof_values(c, dst_, dst);
+      }
+
+    dst.compress(dealii::VectorOperation::add);
+    src.zero_out_ghost_values();
+  }
+
+  private:
+    std::shared_ptr<const RestrictorType> restrictor;
+    std::vector<FullMatrix<Number>>  blocks;
+};
