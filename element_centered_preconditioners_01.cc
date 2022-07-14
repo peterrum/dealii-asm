@@ -44,6 +44,23 @@ public:
 private:
 };
 
+template <typename MatrixType, typename PreconditionerType, typename VectorType>
+std::shared_ptr<ReductionControl>
+solve(const MatrixType &                               A,
+      VectorType &                                     x,
+      const VectorType &                               b,
+      const std::shared_ptr<const PreconditionerType> &preconditioner)
+{
+  auto reduction_control = std::make_shared<ReductionControl>();
+
+  x = 0;
+
+  SolverCG<VectorType> solver_cg(*reduction_control);
+  solver_cg.solve(A, x, b, *preconditioner);
+
+  return reduction_control;
+}
+
 template <int dim>
 void
 test(const unsigned int fe_degree, const unsigned int n_global_refinements)
@@ -105,6 +122,8 @@ test(const unsigned int fe_degree, const unsigned int n_global_refinements)
 
   pcout << "Running with different preconditioners:" << std::endl;
 
+  std::shared_ptr<ReductionControl> reduction_control;
+
   // ASM on cell level
   {
     using RestictorType = Restrictors::ElementCenteredRestrictor<VectorType>;
@@ -115,22 +134,17 @@ test(const unsigned int fe_degree, const unsigned int n_global_refinements)
     restrictor_ad.weighting_type = Restrictors::WeightingType::symm;
 
     const auto restrictor =
-      std::make_shared<RestictorType>(dof_handler, restrictor_ad);
+      std::make_shared<const RestictorType>(dof_handler, restrictor_ad);
 
     const auto preconditioner = std::make_shared<
-      AdditiveSchwarzPreconditioner<VectorType, RestictorType>>(
+      const AdditiveSchwarzPreconditioner<VectorType, RestictorType>>(
       restrictor, laplace_matrix, sparsity_pattern);
 
-    ReductionControl reduction_control;
-
-    solution = 0;
-
-    SolverCG<VectorType> solver_cg(reduction_control);
-    solver_cg.solve(laplace_matrix, solution, rhs, *preconditioner);
-
-    pcout << " - ASM on cell level:               "
-          << reduction_control.last_step() << std::endl;
+    reduction_control = solve(laplace_matrix, solution, rhs, preconditioner);
   }
+
+  pcout << " - ASM on cell level:               "
+        << reduction_control->last_step() << std::endl;
 }
 
 int
