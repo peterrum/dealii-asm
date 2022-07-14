@@ -65,8 +65,9 @@ main(int argc, char *argv[])
     for (const auto &cell : dof_handler.active_cell_iterators())
       if (cell->is_locally_owned())
         {
-          restrictor.template read_dof_values<dim>(cell, src, local_dofs);
-          restrictor.template distribute_dof_values<dim>(cell, local_dofs, dst);
+          const unsigned int index = cell->active_cell_index();
+          restrictor.read_dof_values(index, src, local_dofs);
+          restrictor.distribute_dof_values(index, local_dofs, dst);
         }
 
     src.zero_out_ghost_values();

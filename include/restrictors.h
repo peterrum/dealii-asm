@@ -107,14 +107,11 @@ namespace Restrictors
         }
     }
 
-    template <int dim>
     void
-    read_dof_values(const typename dealii::DoFHandler<dim>::cell_iterator &cell,
+    read_dof_values(const unsigned int      index,
                     const VectorType &      global_vector,
                     dealii::Vector<Number> &local_vector) const
     {
-      const auto index = cell->active_cell_index();
-
       local_vector.reinit(indices[index].size());
 
       for (unsigned int i = 0; i < local_vector.size(); ++i)
@@ -128,15 +125,11 @@ namespace Restrictors
         }
     }
 
-    template <int dim>
     void
-    distribute_dof_values(
-      const typename dealii::DoFHandler<dim>::cell_iterator &cell,
-      const dealii::Vector<Number> &                         local_vector,
-      VectorType &global_vector) const
+    distribute_dof_values(const unsigned int            index,
+                          const dealii::Vector<Number> &local_vector,
+                          VectorType &                  global_vector) const
     {
-      const auto index = cell->active_cell_index();
-
       AssertDimension(local_vector.size(), indices[index].size());
 
       for (unsigned int i = 0; i < local_vector.size(); ++i)
