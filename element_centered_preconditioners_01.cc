@@ -7,6 +7,7 @@
 #include <deal.II/dofs/dof_tools.h>
 
 #include <deal.II/fe/fe_q.h>
+#include <deal.II/fe/fe_q_iso_q1.h>
 
 #include <deal.II/grid/grid_generator.h>
 
@@ -122,7 +123,10 @@ create_system_preconditioner(const OperatorType &              op,
 
       std::shared_ptr<OperatorType> op_approx;
 
-      if (true)
+      std::string matrix_approximation =
+        params.get<std::string>("matrix approximation", "none");
+
+      if (matrix_approximation == "none")
         {
           op_approx = std::make_shared<OperatorType>(op.get_mapping(),
                                                      op.get_triangulation(),
@@ -130,6 +134,44 @@ create_system_preconditioner(const OperatorType &              op,
                                                      op.get_quadrature());
 
           op_ptr = op_approx.get();
+        }
+      else if (matrix_approximation == "lobatto")
+        {
+          const unsigned int fe_degree = op.get_fe().tensor_degree();
+          const unsigned int dim       = OperatorType::dimension;
+
+          const auto subdivision_point =
+            QGaussLobatto<1>(fe_degree + 1).get_points();
+          const FE_Q_iso_Q1<dim> fe_q1_n(subdivision_point);
+          const QIterated<dim>   quad_q1_n(QGauss<1>(2), subdivision_point);
+
+          op_approx = std::make_shared<OperatorType>(op.get_mapping(),
+                                                     op.get_triangulation(),
+                                                     fe_q1_n,
+                                                     quad_q1_n);
+
+          op_ptr = op_approx.get();
+        }
+      else if (matrix_approximation == "equidistant")
+        {
+          const unsigned int fe_degree = op.get_fe().tensor_degree();
+          const unsigned int dim       = OperatorType::dimension;
+
+          const FE_Q_iso_Q1<dim> fe_q1_h(fe_degree);
+          const QIterated<dim>   quad_q1_h(QGauss<1>(2), fe_degree + 1);
+
+          op_approx = std::make_shared<OperatorType>(op.get_mapping(),
+                                                     op.get_triangulation(),
+                                                     fe_q1_h,
+                                                     quad_q1_h);
+
+          op_ptr = op_approx.get();
+        }
+      else
+        {
+          AssertThrow(false,
+                      ExcMessage("Matrix approximation <" +
+                                 matrix_approximation + "> is not known!"))
         }
 
       const auto restrictor =

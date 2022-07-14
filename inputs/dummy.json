@@ -3,5 +3,5 @@
     "degree" : 2,
     "n refinements" : 5,
     "solver" : {"type" : "CG"},
-    "preconditioner" : {"type" : "AdditiveSchwarzPreconditioner", "n overlap" : 3}
+    "preconditioner" : {"type" : "AdditiveSchwarzPreconditioner", "n overlap" : 3, "matrix approximation" : "equidistant"}
 }
