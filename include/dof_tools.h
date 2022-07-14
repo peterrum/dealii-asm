@@ -1,5 +1,6 @@
 #pragma once
 
+#include <deal.II/fe/fe_tools.h>
 
 
 namespace dealii

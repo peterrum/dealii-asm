@@ -1,5 +1,8 @@
 #pragma once
 
+#include <deal.II/fe/fe_nothing.h>
+#include <deal.II/fe/fe_values.h>
+
 namespace dealii
 {
   namespace GridTools
