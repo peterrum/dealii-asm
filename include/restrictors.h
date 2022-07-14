@@ -48,6 +48,10 @@ namespace Restrictors
     {
       this->weighting_type = additional_data.weighting_type;
 
+      AssertDimension(dof_handler.get_fe_collection().size(), 1);
+      AssertIndexRange(additional_data.n_overlap,
+                       dof_handler.get_fe().tensor_degree() + 2);
+
       // 1) compute indices
       {
         this->indices.resize(dof_handler.get_triangulation().n_active_cells());

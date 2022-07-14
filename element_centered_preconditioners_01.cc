@@ -116,7 +116,7 @@ create_system_preconditioner(
 
       typename RestictorType::AdditionalData restrictor_ad;
 
-      restrictor_ad.n_overlap      = 2;
+      restrictor_ad.n_overlap      = params.get<unsigned int>("n overlap", 1);
       restrictor_ad.weighting_type = Restrictors::WeightingType::symm;
 
       const auto restrictor =
@@ -127,9 +127,9 @@ create_system_preconditioner(
         restrictor, laplace_matrix, sparsity_pattern);
     }
 
-  AssertThrow(false, ExcNotImplemented());
+  AssertThrow(false, ExcMessage("Preconditioner <" + type + "> is not known!"))
 
-  return {};
+    return {};
 }
 
 
