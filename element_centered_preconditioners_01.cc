@@ -21,6 +21,9 @@
 #include <deal.II/numerics/matrix_creator.h>
 #include <deal.II/numerics/vector_tools.h>
 
+#include <boost/property_tree/json_parser.hpp>
+#include <boost/property_tree/ptree.hpp>
+
 using namespace dealii;
 
 #include "include/preconditioners.h"
@@ -63,8 +66,12 @@ solve(const MatrixType &                               A,
 
 template <int dim>
 void
-test(const unsigned int fe_degree, const unsigned int n_global_refinements)
+test(const boost::property_tree::ptree params)
 {
+  const unsigned int fe_degree = params.get<unsigned int>("degree", 1);
+  const unsigned int n_global_refinements =
+    params.get<unsigned int>("n refinements", 6);
+
   using VectorType = LinearAlgebra::distributed::Vector<double>;
 
   ConditionalOStream pcout(std::cout,
@@ -152,13 +159,21 @@ main(int argc, char *argv[])
 {
   Utilities::MPI::MPI_InitFinalize mpi_initialization(argc, argv, 1);
 
-  const unsigned int dim       = (argc >= 2) ? std::atoi(argv[1]) : 2;
-  const unsigned int fe_degree = (argc >= 3) ? std::atoi(argv[2]) : 1;
-  const unsigned int n_global_refinements =
-    (argc >= 4) ? std::atoi(argv[3]) : 6;
+#ifdef DEBUG
+  if (Utilities::MPI::this_mpi_process(MPI_COMM_WORLD) == 0)
+    std::cout << "DEBUG!" << std::endl;
+#endif
+
+  AssertThrow(argc == 2, ExcMessage("You need to provide a JSON file!"));
+
+  // get parameters
+  boost::property_tree::ptree params;
+  boost::property_tree::read_json(argv[1], params);
+
+  const unsigned int dim = params.get<unsigned int>("dim", 2);
 
   if (dim == 2)
-    test<2>(fe_degree, n_global_refinements);
+    test<2>(params);
   else
     AssertThrow(false, ExcNotImplemented());
 }
