@@ -140,15 +140,46 @@ public:
   static const int dimension = dim;
   using value_type           = Number;
   using vector_type          = LinearAlgebra::distributed::Vector<double>;
-  using VectorType           = vector_type;
 
-  LaplaceOperator(const DoFHandler<dim> &                  dof_handler,
-                  const TrilinosWrappers::SparseMatrix &   sparse_matrix,
-                  const TrilinosWrappers::SparsityPattern &sparsity_pattern)
-    : dof_handler(dof_handler)
-    , sparse_matrix(sparse_matrix)
-    , sparsity_pattern(sparsity_pattern)
-  {}
+  using VectorType = vector_type;
+
+  LaplaceOperator(const Mapping<dim> &      mapping,
+                  const Triangulation<dim> &tria,
+                  const FiniteElement<dim> &fe,
+                  const Quadrature<dim> &   quadrature)
+    : dof_handler(tria)
+    , quadrature(quadrature)
+  {
+    dof_handler.distribute_dofs(fe);
+
+    // pcout << "System statistics:" << std::endl;
+    // pcout << " - n cells: " << tria.n_global_active_cells() << std::endl;
+    // pcout << " - n dofs:  " << dof_handler.n_dofs() << std::endl;
+    // pcout << std::endl;
+
+    DoFTools::make_zero_boundary_constraints(dof_handler, constraints);
+    constraints.close();
+
+    // create system matrix
+    sparsity_pattern.reinit(dof_handler.locally_owned_dofs(),
+                            dof_handler.get_communicator());
+    DoFTools::make_sparsity_pattern(dof_handler,
+                                    sparsity_pattern,
+                                    constraints,
+                                    false);
+    sparsity_pattern.compress();
+
+    sparse_matrix.reinit(sparsity_pattern);
+
+    MatrixCreator::
+      create_laplace_matrix<dim, dim, TrilinosWrappers::SparseMatrix>(
+        mapping, dof_handler, quadrature, sparse_matrix, nullptr, constraints);
+
+    partitioner = std::make_shared<Utilities::MPI::Partitioner>(
+      dof_handler.locally_owned_dofs(),
+      DoFTools::extract_locally_active_dofs(dof_handler),
+      dof_handler.get_communicator());
+  }
 
   void
   vmult(VectorType &dst, const VectorType &src) const
@@ -174,10 +205,32 @@ public:
     return sparsity_pattern;
   }
 
+  void
+  initialize_dof_vector(VectorType &vec) const
+  {
+    vec.reinit(partitioner);
+  }
+
+  const AffineConstraints<Number> &
+  get_constraints() const
+  {
+    return constraints;
+  }
+
+  const Quadrature<dim> &
+  get_quadrature() const
+  {
+    return quadrature;
+  }
+
 private:
-  const DoFHandler<dim> &                  dof_handler;
-  const TrilinosWrappers::SparseMatrix &   sparse_matrix;
-  const TrilinosWrappers::SparsityPattern &sparsity_pattern;
+  DoFHandler<dim>                   dof_handler;
+  TrilinosWrappers::SparseMatrix    sparse_matrix;
+  TrilinosWrappers::SparsityPattern sparsity_pattern;
+  AffineConstraints<Number>         constraints;
+  Quadrature<dim>                   quadrature;
+
+  std::shared_ptr<const Utilities::MPI::Partitioner> partitioner;
 };
 
 
@@ -208,56 +261,23 @@ test(const boost::property_tree::ptree params)
   QGauss<dim>    quadrature(fe_degree + 1);
   MappingQ1<dim> mapping;
 
-  DoFHandler<dim> dof_handler(tria);
-  dof_handler.distribute_dofs(fe);
-
-  pcout << "System statistics:" << std::endl;
-  pcout << " - n cells: " << tria.n_global_active_cells() << std::endl;
-  pcout << " - n dofs:  " << dof_handler.n_dofs() << std::endl;
-  pcout << std::endl;
-
-  AffineConstraints<double> constraints;
-  DoFTools::make_zero_boundary_constraints(dof_handler, constraints);
-  constraints.close();
-
-  // create system matrix
-  TrilinosWrappers::SparsityPattern sparsity_pattern;
-  sparsity_pattern.reinit(dof_handler.locally_owned_dofs(),
-                          dof_handler.get_communicator());
-  DoFTools::make_sparsity_pattern(dof_handler,
-                                  sparsity_pattern,
-                                  constraints,
-                                  false);
-  sparsity_pattern.compress();
-
-  TrilinosWrappers::SparseMatrix laplace_matrix;
-  laplace_matrix.reinit(sparsity_pattern);
-
-  MatrixCreator::
-    create_laplace_matrix<dim, dim, TrilinosWrappers::SparseMatrix>(
-      mapping, dof_handler, quadrature, laplace_matrix, nullptr, constraints);
+  LaplaceOperator<dim, Number> op(mapping, tria, fe, quadrature);
 
   // create vectors
   VectorType solution, rhs;
 
-  const auto partitioner = std::make_shared<Utilities::MPI::Partitioner>(
-    dof_handler.locally_owned_dofs(),
-    DoFTools::extract_locally_active_dofs(dof_handler),
-    dof_handler.get_communicator());
+  op.initialize_dof_vector(solution);
+  op.initialize_dof_vector(rhs);
 
-  solution.reinit(partitioner);
-  rhs.reinit(partitioner);
-
-  VectorTools::create_right_hand_side(
-    dof_handler, quadrature, RightHandSide<dim>(), rhs, constraints);
+  VectorTools::create_right_hand_side(op.get_dof_handler(),
+                                      op.get_quadrature(),
+                                      RightHandSide<dim>(),
+                                      rhs,
+                                      op.get_constraints());
 
   pcout << "Running with different preconditioners:" << std::endl;
 
   std::shared_ptr<ReductionControl> reduction_control;
-
-  LaplaceOperator<dim, Number> op(dof_handler,
-                                  laplace_matrix,
-                                  sparsity_pattern);
 
   // ASM on cell level
   if (true)
