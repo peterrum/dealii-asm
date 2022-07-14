@@ -13,6 +13,7 @@
 #include <deal.II/lac/diagonal_matrix.h>
 #include <deal.II/lac/dynamic_sparsity_pattern.h>
 #include <deal.II/lac/solver_cg.h>
+#include <deal.II/lac/solver_gmres.h>
 #include <deal.II/lac/sparse_matrix_tools.h>
 #include <deal.II/lac/trilinos_precondition.h>
 #include <deal.II/lac/trilinos_sparse_matrix.h>
@@ -47,19 +48,52 @@ public:
 private:
 };
 
+boost::property_tree::ptree
+try_get_child(const boost::property_tree::ptree params, std::string label)
+{
+  try
+    {
+      return params.get_child(label);
+    }
+  catch (const boost::wrapexcept<boost::property_tree::ptree_bad_path> &)
+    {
+      return {};
+    }
+}
+
 template <typename MatrixType, typename PreconditionerType, typename VectorType>
 std::shared_ptr<ReductionControl>
 solve(const MatrixType &                               A,
       VectorType &                                     x,
       const VectorType &                               b,
-      const std::shared_ptr<const PreconditionerType> &preconditioner)
+      const std::shared_ptr<const PreconditionerType> &preconditioner,
+      const boost::property_tree::ptree                params)
 {
-  auto reduction_control = std::make_shared<ReductionControl>();
+  const auto max_iterations = params.get<unsigned int>("max iterations", 100);
+  const auto abs_tolerance  = params.get<double>("abs tolerance", 1e-10);
+  const auto rel_tolerance  = params.get<double>("rel tolerance", 1e-2);
+  const auto type           = params.get<std::string>("type", "CG");
+
+  auto reduction_control = std::make_shared<ReductionControl>(max_iterations,
+                                                              abs_tolerance,
+                                                              rel_tolerance);
 
   x = 0;
 
-  SolverCG<VectorType> solver_cg(*reduction_control);
-  solver_cg.solve(A, x, b, *preconditioner);
+  if (type == "CG")
+    {
+      SolverCG<VectorType> solver(*reduction_control);
+      solver.solve(A, x, b, *preconditioner);
+    }
+  else if (type == "GMRES")
+    {
+      SolverGMRES<VectorType> solver(*reduction_control);
+      solver.solve(A, x, b, *preconditioner);
+    }
+  else
+    {
+      AssertThrow(false, ExcMessage("Solver <" + type + "> is not known!"))
+    }
 
   return reduction_control;
 }
@@ -71,6 +105,10 @@ test(const boost::property_tree::ptree params)
   const unsigned int fe_degree = params.get<unsigned int>("degree", 1);
   const unsigned int n_global_refinements =
     params.get<unsigned int>("n refinements", 6);
+
+  const auto solver_parameters = try_get_child(params, "solver");
+  const auto preconditioner_parameters =
+    try_get_child(params, "preconditioner");
 
   using VectorType = LinearAlgebra::distributed::Vector<double>;
 
@@ -147,7 +185,8 @@ test(const boost::property_tree::ptree params)
       const AdditiveSchwarzPreconditioner<VectorType, RestictorType>>(
       restrictor, laplace_matrix, sparsity_pattern);
 
-    reduction_control = solve(laplace_matrix, solution, rhs, preconditioner);
+    reduction_control =
+      solve(laplace_matrix, solution, rhs, preconditioner, solver_parameters);
   }
 
   pcout << " - ASM on cell level:               "
