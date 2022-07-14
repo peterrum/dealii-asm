@@ -140,6 +140,7 @@ public:
   static const int dimension = dim;
   using value_type           = Number;
   using vector_type          = LinearAlgebra::distributed::Vector<double>;
+  using VectorType           = vector_type;
 
   LaplaceOperator(const DoFHandler<dim> &                  dof_handler,
                   const TrilinosWrappers::SparseMatrix &   sparse_matrix,
@@ -148,6 +149,12 @@ public:
     , sparse_matrix(sparse_matrix)
     , sparsity_pattern(sparsity_pattern)
   {}
+
+  void
+  vmult(VectorType &dst, const VectorType &src) const
+  {
+    sparse_matrix.vmult(dst, src);
+  }
 
   const DoFHandler<dim> &
   get_dof_handler() const
@@ -197,15 +204,17 @@ test(const boost::property_tree::ptree params)
   GridGenerator::hyper_cube(tria);
   tria.refine_global(n_global_refinements);
 
+  FE_Q<dim>      fe(fe_degree);
+  QGauss<dim>    quadrature(fe_degree + 1);
+  MappingQ1<dim> mapping;
+
   DoFHandler<dim> dof_handler(tria);
-  dof_handler.distribute_dofs(FE_Q<dim>(fe_degree));
+  dof_handler.distribute_dofs(fe);
 
   pcout << "System statistics:" << std::endl;
   pcout << " - n cells: " << tria.n_global_active_cells() << std::endl;
   pcout << " - n dofs:  " << dof_handler.n_dofs() << std::endl;
   pcout << std::endl;
-
-  QGauss<dim> quadrature(fe_degree + 1);
 
   AffineConstraints<double> constraints;
   DoFTools::make_zero_boundary_constraints(dof_handler, constraints);
@@ -226,7 +235,7 @@ test(const boost::property_tree::ptree params)
 
   MatrixCreator::
     create_laplace_matrix<dim, dim, TrilinosWrappers::SparseMatrix>(
-      dof_handler, quadrature, laplace_matrix, nullptr, constraints);
+      mapping, dof_handler, quadrature, laplace_matrix, nullptr, constraints);
 
   // create vectors
   VectorType solution, rhs;
@@ -257,7 +266,7 @@ test(const boost::property_tree::ptree params)
         create_system_preconditioner(op, preconditioner_parameters);
 
       reduction_control =
-        solve(laplace_matrix, solution, rhs, preconditioner, solver_parameters);
+        solve(op, solution, rhs, preconditioner, solver_parameters);
     }
 
   pcout << " - ASM on cell level:               "
