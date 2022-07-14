@@ -118,13 +118,29 @@ create_system_preconditioner(const OperatorType &              op,
       restrictor_ad.n_overlap      = params.get<unsigned int>("n overlap", 1);
       restrictor_ad.weighting_type = Restrictors::WeightingType::symm;
 
+      const OperatorType *op_ptr = &op;
+
+      std::shared_ptr<OperatorType> op_approx;
+
+      if (true)
+        {
+          op_approx = std::make_shared<OperatorType>(op.get_mapping(),
+                                                     op.get_triangulation(),
+                                                     op.get_fe(),
+                                                     op.get_quadrature());
+
+          op_ptr = op_approx.get();
+        }
+
       const auto restrictor =
-        std::make_shared<const RestictorType>(op.get_dof_handler(),
+        std::make_shared<const RestictorType>(op_ptr->get_dof_handler(),
                                               restrictor_ad);
 
       return std::make_shared<
         const AdditiveSchwarzPreconditioner<VectorType, RestictorType>>(
-        restrictor, op.get_sparse_matrix(), op.get_sparsity_pattern());
+        restrictor,
+        op_ptr->get_sparse_matrix(),
+        op_ptr->get_sparsity_pattern());
     }
 
   AssertThrow(false, ExcMessage("Preconditioner <" + type + "> is not known!"));
@@ -147,7 +163,8 @@ public:
                   const Triangulation<dim> &tria,
                   const FiniteElement<dim> &fe,
                   const Quadrature<dim> &   quadrature)
-    : dof_handler(tria)
+    : mapping(mapping)
+    , dof_handler(tria)
     , quadrature(quadrature)
   {
     dof_handler.distribute_dofs(fe);
@@ -187,6 +204,24 @@ public:
     sparse_matrix.vmult(dst, src);
   }
 
+  const Mapping<dim> &
+  get_mapping() const
+  {
+    return mapping;
+  }
+
+  const FiniteElement<dim> &
+  get_fe() const
+  {
+    return dof_handler.get_fe();
+  }
+
+  const Triangulation<dim> &
+  get_triangulation() const
+  {
+    return dof_handler.get_triangulation();
+  }
+
   const DoFHandler<dim> &
   get_dof_handler() const
   {
@@ -224,6 +259,7 @@ public:
   }
 
 private:
+  const Mapping<dim> &              mapping;
   DoFHandler<dim>                   dof_handler;
   TrilinosWrappers::SparseMatrix    sparse_matrix;
   TrilinosWrappers::SparsityPattern sparsity_pattern;
@@ -275,8 +311,6 @@ test(const boost::property_tree::ptree params)
                                       rhs,
                                       op.get_constraints());
 
-  pcout << "Running with different preconditioners:" << std::endl;
-
   std::shared_ptr<ReductionControl> reduction_control;
 
   // ASM on cell level
@@ -289,6 +323,7 @@ test(const boost::property_tree::ptree params)
         solve(op, solution, rhs, preconditioner, solver_parameters);
     }
 
+  pcout << "Running with different preconditioners:" << std::endl;
   pcout << " - ASM on cell level:               "
         << reduction_control->last_step() << std::endl;
 }
