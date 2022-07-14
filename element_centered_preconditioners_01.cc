@@ -100,14 +100,13 @@ solve(const MatrixType &                               A,
 
 
 
-template <int dim, typename VectorType>
-std::shared_ptr<const PreconditionerBase<VectorType>>
-create_system_preconditioner(
-  DoFHandler<dim> &                        dof_handler,
-  const TrilinosWrappers::SparseMatrix &   laplace_matrix,
-  const TrilinosWrappers::SparsityPattern &sparsity_pattern,
-  const boost::property_tree::ptree        params)
+template <typename OperatorType>
+std::shared_ptr<const PreconditionerBase<typename OperatorType::vector_type>>
+create_system_preconditioner(const OperatorType &              op,
+                             const boost::property_tree::ptree params)
 {
+  using VectorType = typename OperatorType::vector_type;
+
   const auto type = params.get<std::string>("type", "");
 
   if (type == "AdditiveSchwarzPreconditioner")
@@ -120,18 +119,59 @@ create_system_preconditioner(
       restrictor_ad.weighting_type = Restrictors::WeightingType::symm;
 
       const auto restrictor =
-        std::make_shared<const RestictorType>(dof_handler, restrictor_ad);
+        std::make_shared<const RestictorType>(op.get_dof_handler(),
+                                              restrictor_ad);
 
       return std::make_shared<
         const AdditiveSchwarzPreconditioner<VectorType, RestictorType>>(
-        restrictor, laplace_matrix, sparsity_pattern);
+        restrictor, op.get_sparse_matrix(), op.get_sparsity_pattern());
     }
 
-  AssertThrow(false, ExcMessage("Preconditioner <" + type + "> is not known!"))
+  AssertThrow(false, ExcMessage("Preconditioner <" + type + "> is not known!"));
 
-    return {};
+  return {};
 }
 
+
+template <int dim, typename Number>
+class LaplaceOperator
+{
+public:
+  static const int dimension = dim;
+  using value_type           = Number;
+  using vector_type          = LinearAlgebra::distributed::Vector<double>;
+
+  LaplaceOperator(const DoFHandler<dim> &                  dof_handler,
+                  const TrilinosWrappers::SparseMatrix &   sparse_matrix,
+                  const TrilinosWrappers::SparsityPattern &sparsity_pattern)
+    : dof_handler(dof_handler)
+    , sparse_matrix(sparse_matrix)
+    , sparsity_pattern(sparsity_pattern)
+  {}
+
+  const DoFHandler<dim> &
+  get_dof_handler() const
+  {
+    return dof_handler;
+  }
+
+  const TrilinosWrappers::SparseMatrix &
+  get_sparse_matrix() const
+  {
+    return sparse_matrix;
+  }
+
+  const TrilinosWrappers::SparsityPattern &
+  get_sparsity_pattern() const
+  {
+    return sparsity_pattern;
+  }
+
+private:
+  const DoFHandler<dim> &                  dof_handler;
+  const TrilinosWrappers::SparseMatrix &   sparse_matrix;
+  const TrilinosWrappers::SparsityPattern &sparsity_pattern;
+};
 
 
 template <int dim>
@@ -146,7 +186,8 @@ test(const boost::property_tree::ptree params)
   const auto preconditioner_parameters =
     try_get_child(params, "preconditioner");
 
-  using VectorType = LinearAlgebra::distributed::Vector<double>;
+  using Number     = double;
+  using VectorType = LinearAlgebra::distributed::Vector<Number>;
 
   ConditionalOStream pcout(std::cout,
                            Utilities::MPI::this_mpi_process(MPI_COMM_WORLD) ==
@@ -205,14 +246,15 @@ test(const boost::property_tree::ptree params)
 
   std::shared_ptr<ReductionControl> reduction_control;
 
+  LaplaceOperator<dim, Number> op(dof_handler,
+                                  laplace_matrix,
+                                  sparsity_pattern);
+
   // ASM on cell level
   if (true)
     {
-      const auto preconditioner = create_system_preconditioner<dim, VectorType>(
-        dof_handler,
-        laplace_matrix,
-        sparsity_pattern,
-        preconditioner_parameters);
+      const auto preconditioner =
+        create_system_preconditioner(op, preconditioner_parameters);
 
       reduction_control =
         solve(laplace_matrix, solution, rhs, preconditioner, solver_parameters);
