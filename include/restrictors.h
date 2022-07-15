@@ -179,6 +179,18 @@ namespace Restrictors
       return n_overlap;
     }
 
+    unsigned int
+    n_blocks() const
+    {
+      return indices.size();
+    }
+
+    unsigned int
+    n_entries(const unsigned int c) const
+    {
+      return indices[c].size();
+    }
+
   private:
     std::shared_ptr<dealii::Utilities::MPI::Partitioner> partitioner;
 

@@ -223,6 +223,26 @@ private:
 };
 
 
+
+template <typename VectorType>
+class MatrixView
+{
+public:
+  using vector_type = VectorType;
+
+  virtual void
+  vmult(VectorType &dst, const VectorType &src) const = 0;
+
+  virtual void
+  invert()
+  {
+    // nothing to do
+  }
+
+private:
+};
+
+
 template <typename VectorType>
 class PreconditionerBase
 {
@@ -257,21 +277,19 @@ public:
     dst = 0.0;
     src.update_ghost_values();
 
-    for (unsigned int c = 0; c < blocks.size(); ++c)
+    for (unsigned int c = 0; c < restrictor->n_blocks(); ++c)
       {
-        const auto block = blocks[c];
+        const unsigned int n_entries = restrictor->n_entries(c);
 
-        if (block.m() == 0 || block.n() == 0)
+        if (n_entries == 0)
           continue;
 
-        AssertDimension(block.m(), block.n());
-
-        src_.reinit(block.m());
-        dst_.reinit(block.m());
+        src_.reinit(n_entries);
+        dst_.reinit(n_entries);
 
         restrictor->read_dof_values(c, src, src_);
 
-        block.vmult(dst_, src_);
+        blocks[c].vmult(dst_, src_);
 
         restrictor->distribute_dof_values(c, dst_, dst);
       }
