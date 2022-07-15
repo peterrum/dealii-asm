@@ -289,7 +289,7 @@ public:
 
         restrictor->read_dof_values(c, src, src_);
 
-        blocks[c].vmult(dst_, src_);
+        vmult(c, dst_, src_); // TODO
 
         restrictor->distribute_dof_values(c, dst_, dst);
       }
@@ -299,6 +299,14 @@ public:
   }
 
 protected:
+  void
+  vmult(const unsigned int    c,
+        Vector<Number> &      dst,
+        const Vector<Number> &src) const
+  {
+    blocks[c].vmult(dst, src);
+  }
+
   /**
    * Initialize class with a sparse matrix and a restrictor.
    */
