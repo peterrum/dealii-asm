@@ -224,22 +224,78 @@ private:
 
 
 
-template <typename VectorType>
+template <typename Number>
 class MatrixView
 {
 public:
-  using vector_type = VectorType;
-
   virtual void
-  vmult(VectorType &dst, const VectorType &src) const = 0;
+  vmult(const unsigned int    c,
+        Vector<Number> &      dst,
+        const Vector<Number> &src) const = 0;
 
   virtual void
   invert()
   {
-    // nothing to do
+    AssertThrow(false, ExcNotImplemented());
   }
 
 private:
+};
+
+
+
+template <typename Number>
+class RestrictedMatrixView : public MatrixView<Number>
+{
+public:
+  RestrictedMatrixView() = default;
+
+  template <typename RestrictorType,
+            typename GlobalSparseMatrixType,
+            typename GlobalSparsityPattern>
+  RestrictedMatrixView(const std::shared_ptr<const RestrictorType> &restrictor,
+                       const GlobalSparseMatrixType &global_sparse_matrix,
+                       const GlobalSparsityPattern & global_sparsity_pattern)
+  {
+    this->initialize(restrictor, global_sparse_matrix, global_sparsity_pattern);
+  }
+
+  /**
+   * Initialize class with a sparse matrix and a restrictor.
+   */
+  template <typename RestrictorType,
+            typename GlobalSparseMatrixType,
+            typename GlobalSparsityPattern>
+  void
+  initialize(const std::shared_ptr<const RestrictorType> &restrictor,
+             const GlobalSparseMatrixType &               global_sparse_matrix,
+             const GlobalSparsityPattern &global_sparsity_pattern)
+  {
+    dealii::SparseMatrixTools::restrict_to_full_matrices(
+      global_sparse_matrix,
+      global_sparsity_pattern,
+      restrictor->get_indices(),
+      this->blocks);
+  }
+
+  void
+  vmult(const unsigned int    c,
+        Vector<Number> &      dst,
+        const Vector<Number> &src) const final
+  {
+    blocks[c].vmult(dst, src);
+  }
+
+  virtual void
+  invert()
+  {
+    for (auto &block : this->blocks)
+      if (block.m() > 0 && block.n() > 0)
+        block.gauss_jordan();
+  }
+
+private:
+  std::vector<FullMatrix<Number>> blocks;
 };
 
 
@@ -351,16 +407,11 @@ public:
              const GlobalSparseMatrixType &               global_sparse_matrix,
              const GlobalSparsityPattern &global_sparsity_pattern)
   {
-    dealii::SparseMatrixTools::restrict_to_full_matrices(
-      global_sparse_matrix,
-      global_sparsity_pattern,
-      restrictor->get_indices(),
-      this->blocks);
+    inverse_matrix_view.initialize(restrictor,
+                                   global_sparse_matrix,
+                                   global_sparsity_pattern);
 
-    // TODO: make inversion optional
-    for (auto &block : this->blocks)
-      if (block.m() > 0 && block.n() > 0)
-        block.gauss_jordan();
+    inverse_matrix_view.invert();
 
     this->initialize_internal(restrictor);
   }
@@ -371,11 +422,11 @@ protected:
               Vector<Number> &      dst,
               const Vector<Number> &src) const final
   {
-    blocks[c].vmult(dst, src);
+    inverse_matrix_view.vmult(c, dst, src);
   }
 
 private:
-  std::vector<FullMatrix<Number>> blocks;
+  RestrictedMatrixView<Number> inverse_matrix_view;
 };
 
 
