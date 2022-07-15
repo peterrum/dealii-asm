@@ -46,6 +46,7 @@ namespace Restrictors
     reinit(const dealii::DoFHandler<dim> &dof_handler,
            const AdditionalData &         additional_data = AdditionalData())
     {
+      this->n_overlap      = additional_data.n_overlap;
       this->weighting_type = additional_data.weighting_type;
 
       AssertDimension(dof_handler.get_fe_collection().size(), 1);
@@ -172,6 +173,12 @@ namespace Restrictors
       return indices;
     }
 
+    unsigned int
+    get_n_overlap() const
+    {
+      return n_overlap;
+    }
+
   private:
     std::shared_ptr<dealii::Utilities::MPI::Partitioner> partitioner;
 
@@ -179,5 +186,6 @@ namespace Restrictors
     std::vector<std::vector<Number>>                          weights;
 
     WeightingType weighting_type;
+    unsigned int  n_overlap;
   };
 } // namespace Restrictors

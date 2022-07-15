@@ -1,5 +1,9 @@
 #pragma once
 
+#include "dof_tools.h"
+#include "grid_generator.h"
+#include "grid_tools.h"
+
 enum class WeightingType
 {
   none,
@@ -231,50 +235,13 @@ public:
 
 
 
-/**
- * An additive Schwarz preconditioner. It is fully defined by a
- * sparse system matrix and a restrictor. The restrictor is used
- * to extract (overlapping) blocks from the matrix and potentially
- * to weights the contributations.
- */
 template <typename VectorType, typename RestrictorType>
-class AdditiveSchwarzPreconditioner : public PreconditionerBase<VectorType>
+class RestrictedPreconditionerBase : public PreconditionerBase<VectorType>
 {
 public:
   using Number = typename VectorType::value_type;
 
-  AdditiveSchwarzPreconditioner() = default;
-
-  template <typename GlobalSparseMatrixType, typename GlobalSparsityPattern>
-  AdditiveSchwarzPreconditioner(
-    const std::shared_ptr<const RestrictorType> &restrictor,
-    const GlobalSparseMatrixType &               global_sparse_matrix,
-    const GlobalSparsityPattern &                global_sparsity_pattern)
-  {
-    this->initialize(restrictor, global_sparse_matrix, global_sparsity_pattern);
-  }
-
-  /**
-   * Initialize class with a sparse matrix and a restrictor.
-   */
-  template <typename GlobalSparseMatrixType, typename GlobalSparsityPattern>
-  void
-  initialize(const std::shared_ptr<const RestrictorType> &restrictor,
-             const GlobalSparseMatrixType &               global_sparse_matrix,
-             const GlobalSparsityPattern &global_sparsity_pattern)
-  {
-    this->restrictor = restrictor;
-
-    dealii::SparseMatrixTools::restrict_to_full_matrices(
-      global_sparse_matrix,
-      global_sparsity_pattern,
-      restrictor->get_indices(),
-      blocks);
-
-    for (auto &block : blocks)
-      if (block.m() > 0 && block.n() > 0)
-        block.gauss_jordan();
-  }
+  RestrictedPreconditionerBase() = default;
 
   /**
    * Perform matrix-vector product by looping over all blocks,
@@ -313,9 +280,67 @@ public:
     src.zero_out_ghost_values();
   }
 
-private:
+protected:
+  /**
+   * Initialize class with a sparse matrix and a restrictor.
+   */
+  void
+  initialize_internal(const std::shared_ptr<const RestrictorType> &restrictor)
+  {
+    this->restrictor = restrictor;
+
+    for (auto &block : blocks)
+      if (block.m() > 0 && block.n() > 0)
+        block.gauss_jordan();
+  }
+
   std::shared_ptr<const RestrictorType> restrictor;
   std::vector<FullMatrix<Number>>       blocks;
+};
+
+
+
+/**
+ * An additive Schwarz preconditioner. It is fully defined by a
+ * sparse system matrix and a restrictor. The restrictor is used
+ * to extract (overlapping) blocks from the matrix and potentially
+ * to weights the contributations.
+ */
+template <typename VectorType, typename RestrictorType>
+class AdditiveSchwarzPreconditioner
+  : public RestrictedPreconditionerBase<VectorType, RestrictorType>
+{
+public:
+  using Number = typename VectorType::value_type;
+
+  AdditiveSchwarzPreconditioner() = default;
+
+  template <typename GlobalSparseMatrixType, typename GlobalSparsityPattern>
+  AdditiveSchwarzPreconditioner(
+    const std::shared_ptr<const RestrictorType> &restrictor,
+    const GlobalSparseMatrixType &               global_sparse_matrix,
+    const GlobalSparsityPattern &                global_sparsity_pattern)
+  {
+    this->initialize(restrictor, global_sparse_matrix, global_sparsity_pattern);
+  }
+
+  /**
+   * Initialize class with a sparse matrix and a restrictor.
+   */
+  template <typename GlobalSparseMatrixType, typename GlobalSparsityPattern>
+  void
+  initialize(const std::shared_ptr<const RestrictorType> &restrictor,
+             const GlobalSparseMatrixType &               global_sparse_matrix,
+             const GlobalSparsityPattern &global_sparsity_pattern)
+  {
+    dealii::SparseMatrixTools::restrict_to_full_matrices(
+      global_sparse_matrix,
+      global_sparsity_pattern,
+      restrictor->get_indices(),
+      this->blocks);
+
+    this->initialize_internal(restrictor);
+  }
 };
 
 
@@ -324,7 +349,8 @@ private:
  * TODO.
  */
 template <typename VectorType, typename RestrictorType>
-class SubMeshPreconditioner : public PreconditionerBase<VectorType>
+class SubMeshPreconditioner
+  : public RestrictedPreconditionerBase<VectorType, RestrictorType>
 {
 public:
   using Number = typename VectorType::value_type;
@@ -340,30 +366,48 @@ public:
 
   SubMeshPreconditioner() = default;
 
+  template <typename OperatorType>
   SubMeshPreconditioner(
+    const std::shared_ptr<const OperatorType> &  op,
     const std::shared_ptr<const RestrictorType> &restrictor,
     const AdditionalData &additional_data = AdditionalData())
   {
-    this->initialize(restrictor, additional_data);
+    this->initialize(op, restrictor, additional_data);
   }
 
+  template <typename OperatorType>
   void
-  initialize(const std::shared_ptr<const RestrictorType> &restrictor,
+  initialize(const std::shared_ptr<const OperatorType> &  op,
+             const std::shared_ptr<const RestrictorType> &restrictor,
              const AdditionalData &additional_data = AdditionalData())
   {
-    AssertThrow(false, ExcNotImplemented());
+    for (const auto &cell : op->get_dof_handler().active_cell_iterators())
+      if (cell->is_locally_owned())
+        {
+          auto sub_cells =
+            dealii::GridTools::extract_all_surrounding_cells_cartesian<
+              OperatorType::dimension>(cell,
+                                       additional_data.sub_mesh_approximation);
 
-    this->restrictor = restrictor;
+          Triangulation<OperatorType::dimension> sub_tria;
+          dealii::GridGenerator::create_mesh_from_cells(sub_cells, sub_tria);
 
-    (void)additional_data;
+          OperatorType sub_op(op->get_mapping(),
+                              sub_tria,
+                              op->get_fe(),
+                              op->get_quadrature());
+
+          // TODO: make sub_cells local
+
+          const auto indices =
+            dealii::DoFTools::get_dof_indices_cell_with_overlap(
+              sub_op.get_dof_handler(),
+              sub_cells,
+              this->restrictor->get_n_overlap());
+
+          // TODO: extract submatrix
+        }
+
+    this->initialize_internal(restrictor);
   }
-
-  void
-  vmult(VectorType &, const VectorType &) const override
-  {
-    AssertThrow(false, ExcNotImplemented());
-  }
-
-private:
-  std::shared_ptr<const RestrictorType> restrictor;
 };

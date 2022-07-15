@@ -244,7 +244,8 @@ create_system_preconditioner(const OperatorType &              op,
                                               restrictor_ad);
 
       // preconditioner
-      return std::make_shared<const PreconditionerType>(restrictor,
+      return std::make_shared<const PreconditionerType>(op_approx,
+                                                        restrictor,
                                                         preconditioner_ad);
     }
 
