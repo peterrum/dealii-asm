@@ -228,6 +228,8 @@ template <typename Number>
 class MatrixView
 {
 public:
+  using value_type = Number;
+
   virtual void
   vmult(const unsigned int    c,
         Vector<Number> &      dst,
@@ -240,6 +242,69 @@ public:
   }
 
 private:
+};
+
+
+
+template <typename MatrixType0, typename MatrixType1>
+class CGMatrixView : public MatrixView<typename MatrixType0::value_type>
+{
+private:
+  using Number = typename MatrixType0::value_type;
+
+  template <typename MatrixType>
+  class MatrixWrapper
+  {
+  public:
+    MatrixWrapper(const MatrixType &matrix, const unsigned int c)
+      : matrix(matrix)
+      , c(c)
+    {}
+
+    void
+    vmult(Vector<Number> &dst, const Vector<Number> &src) const
+    {
+      matrix.vmult(c, dst, src);
+    }
+
+  private:
+    const MatrixType & matrix;
+    const unsigned int c;
+  };
+
+public:
+  CGMatrixView() = default;
+
+  CGMatrixView(const std::shared_ptr<const MatrixType0> &matrix_0,
+               const std::shared_ptr<const MatrixType1> &matrix_1)
+  {
+    this->initialize(matrix_0, matrix_1);
+  }
+
+  void
+  initialize(const std::shared_ptr<const MatrixType0> &matrix_0,
+             const std::shared_ptr<const MatrixType1> &matrix_1)
+  {
+    this->matrix_0 = matrix_0;
+    this->matrix_1 = matrix_1;
+  }
+
+  void
+  vmult(const unsigned int    c,
+        Vector<Number> &      dst,
+        const Vector<Number> &src) const final
+  {
+    MatrixWrapper<MatrixType0> matrix(*matrix_0, c);
+    MatrixWrapper<MatrixType1> precon(*matrix_1, c);
+
+    IterationNumberControl   solver_control(10 /*TODO*/);
+    SolverCG<Vector<Number>> solver_cg(solver_control);
+    solver_cg.solve(matrix, dst, src, precon);
+  }
+
+private:
+  std::shared_ptr<const MatrixType0> matrix_0;
+  std::shared_ptr<const MatrixType1> matrix_1;
 };
 
 
@@ -419,13 +484,31 @@ public:
 
 
 
-template <typename VectorType, typename RestrictorType>
-class RestrictedPreconditionerBase : public PreconditionerBase<VectorType>
+template <typename VectorType,
+          typename InverseMatrixType,
+          typename RestrictorType>
+class RestrictedPreconditioner : public PreconditionerBase<VectorType>
 {
 public:
   using Number = typename VectorType::value_type;
 
-  RestrictedPreconditionerBase() = default;
+  RestrictedPreconditioner() = default;
+
+
+  RestrictedPreconditioner(
+    const std::shared_ptr<const InverseMatrixType> &inverse_matrix,
+    const std::shared_ptr<const RestrictorType> &   restrictor)
+  {
+    initialize(inverse_matrix, restrictor);
+  }
+
+  void
+  initialize(const std::shared_ptr<const InverseMatrixType> &inverse_matrix,
+             const std::shared_ptr<const RestrictorType> &   restrictor)
+  {
+    this->inverse_matrix = inverse_matrix;
+    this->restrictor     = restrictor;
+  }
 
   /**
    * Perform matrix-vector product by looping over all blocks,
@@ -453,7 +536,7 @@ public:
 
         restrictor->read_dof_values(c, src, src_);
 
-        local_vmult(c, dst_, src_); // TODO
+        inverse_matrix->vmult(c, dst_, src_);
 
         restrictor->distribute_dof_values(c, dst_, dst);
       }
@@ -462,115 +545,7 @@ public:
     src.zero_out_ghost_values();
   }
 
-protected:
-  virtual void
-  local_vmult(const unsigned int    c,
-              Vector<Number> &      dst,
-              const Vector<Number> &src) const = 0;
-
-  /**
-   * Initialize class with a sparse matrix and a restrictor.
-   */
-  void
-  initialize_internal(const std::shared_ptr<const RestrictorType> &restrictor)
-  {
-    this->restrictor = restrictor;
-  }
-
-  std::shared_ptr<const RestrictorType> restrictor;
-};
-
-
-
-/**
- * An additive Schwarz preconditioner. It is fully defined by a
- * sparse system matrix and a restrictor. The restrictor is used
- * to extract (overlapping) blocks from the matrix and potentially
- * to weights the contributations.
- */
-template <typename VectorType, typename RestrictorType>
-class AdditiveSchwarzPreconditioner
-  : public RestrictedPreconditionerBase<VectorType, RestrictorType>
-{
-public:
-  using Number = typename VectorType::value_type;
-
-  AdditiveSchwarzPreconditioner() = default;
-
-  AdditiveSchwarzPreconditioner(
-    const std::shared_ptr<const RestrictedMatrixView<Number>>
-      &                                          inverse_matrix_view,
-    const std::shared_ptr<const RestrictorType> &restrictor)
-  {
-    this->initialize(inverse_matrix_view, restrictor);
-  }
-
-  /**
-   * Initialize class with a sparse matrix and a restrictor.
-   */
-  void
-  initialize(const std::shared_ptr<const RestrictedMatrixView<Number>>
-               &                                          inverse_matrix_view,
-             const std::shared_ptr<const RestrictorType> &restrictor)
-  {
-    this->inverse_matrix_view = inverse_matrix_view;
-
-    this->initialize_internal(restrictor);
-  }
-
-protected:
-  void
-  local_vmult(const unsigned int    c,
-              Vector<Number> &      dst,
-              const Vector<Number> &src) const final
-  {
-    inverse_matrix_view->vmult(c, dst, src);
-  }
-
 private:
-  std::shared_ptr<const RestrictedMatrixView<Number>> inverse_matrix_view;
-};
-
-
-
-/**
- * TODO.
- */
-template <typename VectorType, typename RestrictorType>
-class SubMeshPreconditioner
-  : public RestrictedPreconditionerBase<VectorType, RestrictorType>
-{
-public:
-  using Number = typename VectorType::value_type;
-
-  SubMeshPreconditioner() = default;
-
-  SubMeshPreconditioner(
-    const std::shared_ptr<const SubMeshMatrixView<Number>> &inverse_matrix_view,
-    const std::shared_ptr<const RestrictorType> &           restrictor)
-  {
-    this->initialize(inverse_matrix_view, restrictor);
-  }
-
-  void
-  initialize(
-    const std::shared_ptr<const SubMeshMatrixView<Number>> &inverse_matrix_view,
-    const std::shared_ptr<const RestrictorType> &           restrictor)
-  {
-    this->inverse_matrix_view = inverse_matrix_view;
-
-    this->initialize_internal(restrictor);
-  }
-
-protected:
-  void
-  local_vmult(const unsigned int    c,
-              Vector<Number> &      dst,
-              const Vector<Number> &src) const final
-  {
-    inverse_matrix_view->vmult(c, dst, src);
-  }
-
-private:
-  std::shared_ptr<const SubMeshMatrixView<Number>> inverse_matrix_view;
+  std::shared_ptr<const InverseMatrixType> inverse_matrix;
+  std::shared_ptr<const RestrictorType>    restrictor;
 };

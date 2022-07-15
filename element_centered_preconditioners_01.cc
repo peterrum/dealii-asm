@@ -195,7 +195,7 @@ create_system_preconditioner(const OperatorType &              op,
       using RestictorType = Restrictors::ElementCenteredRestrictor<VectorType>;
       using InverseMatrixType = RestrictedMatrixView<Number>;
       using PreconditionerType =
-        AdditiveSchwarzPreconditioner<VectorType, RestictorType>;
+        RestrictedPreconditioner<VectorType, InverseMatrixType, RestictorType>;
 
       // approximate matrix
       const auto op_approx = get_approximation(op, params);
@@ -226,7 +226,7 @@ create_system_preconditioner(const OperatorType &              op,
       using RestictorType = Restrictors::ElementCenteredRestrictor<VectorType>;
       using InverseMatrixType = SubMeshMatrixView<Number>;
       using PreconditionerType =
-        SubMeshPreconditioner<VectorType, RestictorType>;
+        RestrictedPreconditioner<VectorType, InverseMatrixType, RestictorType>;
 
       typename InverseMatrixType::AdditionalData preconditioner_ad;
 
@@ -262,6 +262,52 @@ create_system_preconditioner(const OperatorType &              op,
       // preconditioner
       return std::make_shared<const PreconditionerType>(inverse_matrix,
                                                         restrictor);
+    }
+  else if (type == "CGPreconditioner")
+    {
+      using RestictorType = Restrictors::ElementCenteredRestrictor<VectorType>;
+      using MatrixType0   = SubMeshMatrixView<Number>;
+      using MatrixType1   = SubMeshMatrixView<Number>;
+      using InverseMatrixType = CGMatrixView<MatrixType0, MatrixType1>;
+      using PreconditionerType =
+        RestrictedPreconditioner<VectorType, InverseMatrixType, RestictorType>;
+
+      typename MatrixType0::AdditionalData preconditioner_ad; // TODO
+
+      preconditioner_ad.sub_mesh_approximation =
+        params.get<unsigned int>("sub mesh approximation",
+                                 OperatorType::dimension);
+
+      // approximate matrix
+      const auto op_approx = get_approximation(op, params);
+
+      // restrictor
+      typename RestictorType::AdditionalData restrictor_ad;
+
+      restrictor_ad.n_overlap      = params.get<unsigned int>("n overlap", 1);
+      restrictor_ad.weighting_type = get_weighting_type(params);
+
+      AssertThrow((preconditioner_ad.sub_mesh_approximation ==
+                   OperatorType::dimension) ||
+                    (restrictor_ad.n_overlap == 1),
+                  ExcNotImplemented());
+
+      const auto restrictor =
+        std::make_shared<const RestictorType>(op_approx->get_dof_handler(),
+                                              restrictor_ad);
+
+      // inverse matrix
+      const auto matrix =
+        std::make_shared<MatrixType0>(op_approx, restrictor, preconditioner_ad);
+
+      const auto precon =
+        std::make_shared<MatrixType1>(op_approx, restrictor, preconditioner_ad);
+      precon->invert();
+
+      const auto cg = std::make_shared<InverseMatrixType>(matrix, precon);
+
+      // preconditioner
+      return std::make_shared<const PreconditionerType>(cg, restrictor);
     }
 
   AssertThrow(false, ExcMessage("Preconditioner <" + type + "> is not known!"));

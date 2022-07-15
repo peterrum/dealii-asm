@@ -6,7 +6,7 @@
         "type" : "CG"
     },
     "preconditioner" : {
-        "type" : "SubMeshPreconditioner", 
+        "type" : "CGPreconditioner", 
         "n overlap" : 1, 
         "weighting type" : "symm", 
         "matrix approximation" : "none",
