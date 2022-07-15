@@ -406,14 +406,14 @@ public:
           for (auto &sub_cell : sub_cells)
             if (sub_cell.state() == IteratorState::valid)
               sub_cell = sub_tria_iterator++;
+            else
+              sub_cell = sub_tria.end();
           Assert(sub_tria_iterator == sub_tria.end(), ExcInternalError());
 
           // extrac local dof indices
           const auto local_dof_indices =
             dealii::DoFTools::get_dof_indices_cell_with_overlap(
-              sub_op.get_dof_handler(),
-              sub_cells,
-              this->restrictor->get_n_overlap());
+              sub_op.get_dof_handler(), sub_cells, restrictor->get_n_overlap());
 
           const unsigned int dofs_per_cell = local_dof_indices.size();
 

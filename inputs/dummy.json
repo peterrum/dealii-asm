@@ -3,12 +3,13 @@
     "degree" : 6,
     "n refinements" : 5,
     "solver" : {
-        "type" : "GMRES"
+        "type" : "CG"
     },
     "preconditioner" : {
-        "type" : "AdditiveSchwarzPreconditioner", 
-        "n overlap" : 5, 
+        "type" : "SubMeshPreconditioner", 
+        "n overlap" : 1, 
         "weighting type" : "symm", 
-        "matrix approximation" : "none"
+        "matrix approximation" : "none",
+        "sub mesh approximation" : 1
     }
 }
