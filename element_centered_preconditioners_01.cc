@@ -215,26 +215,37 @@ create_system_preconditioner(const OperatorType &              op,
     }
   else if (type == "SubMeshPreconditioner")
     {
+      using RestictorType = Restrictors::ElementCenteredRestrictor<VectorType>;
+      using PreconditionerType =
+        SubMeshPreconditioner<VectorType, RestictorType>;
+
+      typename PreconditionerType::AdditionalData preconditioner_ad;
+
+      preconditioner_ad.sub_mesh_approximation =
+        params.get<unsigned int>("sub mesh approximation",
+                                 OperatorType::dimension);
+
       // approximate matrix
       const auto op_approx = get_approximation(op, params);
 
       // restrictor
-      using RestictorType = Restrictors::ElementCenteredRestrictor<VectorType>;
-
       typename RestictorType::AdditionalData restrictor_ad;
 
       restrictor_ad.n_overlap      = params.get<unsigned int>("n overlap", 1);
       restrictor_ad.weighting_type = get_weighting_type(params);
 
-      AssertThrow(restrictor_ad.n_overlap == 1, ExcNotImplemented());
+      AssertThrow((preconditioner_ad.sub_mesh_approximation ==
+                   OperatorType::dimension) ||
+                    (restrictor_ad.n_overlap == 1),
+                  ExcNotImplemented());
 
       const auto restrictor =
         std::make_shared<const RestictorType>(op_approx->get_dof_handler(),
                                               restrictor_ad);
 
       // preconditioner
-      return std::make_shared<
-        const SubMeshPreconditioner<VectorType, RestictorType>>(restrictor);
+      return std::make_shared<const PreconditionerType>(restrictor,
+                                                        preconditioner_ad);
     }
 
   AssertThrow(false, ExcMessage("Preconditioner <" + type + "> is not known!"));

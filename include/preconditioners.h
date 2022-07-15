@@ -329,19 +329,33 @@ class SubMeshPreconditioner : public PreconditionerBase<VectorType>
 public:
   using Number = typename VectorType::value_type;
 
+  struct AdditionalData
+  {
+    AdditionalData(const unsigned int sub_mesh_approximation = 1)
+      : sub_mesh_approximation(sub_mesh_approximation)
+    {}
+
+    unsigned int sub_mesh_approximation;
+  };
+
   SubMeshPreconditioner() = default;
 
-  SubMeshPreconditioner(const std::shared_ptr<const RestrictorType> &restrictor)
+  SubMeshPreconditioner(
+    const std::shared_ptr<const RestrictorType> &restrictor,
+    const AdditionalData &additional_data = AdditionalData())
   {
-    this->initialize(restrictor);
+    this->initialize(restrictor, additional_data);
   }
 
   void
-  initialize(const std::shared_ptr<const RestrictorType> &restrictor)
+  initialize(const std::shared_ptr<const RestrictorType> &restrictor,
+             const AdditionalData &additional_data = AdditionalData())
   {
     AssertThrow(false, ExcNotImplemented());
 
     this->restrictor = restrictor;
+
+    (void)additional_data;
   }
 
   void
