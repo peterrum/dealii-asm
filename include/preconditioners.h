@@ -289,7 +289,7 @@ public:
 
         restrictor->read_dof_values(c, src, src_);
 
-        vmult(c, dst_, src_); // TODO
+        local_vmult(c, dst_, src_); // TODO
 
         restrictor->distribute_dof_values(c, dst_, dst);
       }
@@ -299,13 +299,10 @@ public:
   }
 
 protected:
-  void
-  vmult(const unsigned int    c,
-        Vector<Number> &      dst,
-        const Vector<Number> &src) const
-  {
-    blocks[c].vmult(dst, src);
-  }
+  virtual void
+  local_vmult(const unsigned int    c,
+              Vector<Number> &      dst,
+              const Vector<Number> &src) const = 0;
 
   /**
    * Initialize class with a sparse matrix and a restrictor.
@@ -317,7 +314,6 @@ protected:
   }
 
   std::shared_ptr<const RestrictorType> restrictor;
-  std::vector<FullMatrix<Number>>       blocks;
 };
 
 
@@ -368,6 +364,18 @@ public:
 
     this->initialize_internal(restrictor);
   }
+
+protected:
+  void
+  local_vmult(const unsigned int    c,
+              Vector<Number> &      dst,
+              const Vector<Number> &src) const final
+  {
+    blocks[c].vmult(dst, src);
+  }
+
+private:
+  std::vector<FullMatrix<Number>> blocks;
 };
 
 
@@ -467,4 +475,16 @@ public:
 
     this->initialize_internal(restrictor);
   }
+
+protected:
+  void
+  local_vmult(const unsigned int    c,
+              Vector<Number> &      dst,
+              const Vector<Number> &src) const final
+  {
+    blocks[c].vmult(dst, src);
+  }
+
+private:
+  std::vector<FullMatrix<Number>> blocks;
 };
