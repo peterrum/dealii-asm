@@ -242,6 +242,9 @@ public:
   }
 
   virtual unsigned int
+  size() const = 0;
+
+  virtual unsigned int
   size(const unsigned int c) const = 0;
 
 private:
@@ -306,6 +309,13 @@ public:
   }
 
   unsigned int
+  size() const final
+  {
+    AssertDimension(matrix_0->size(), matrix_1->size());
+    return matrix_0->size();
+  }
+
+  unsigned int
   size(const unsigned int c) const final
   {
     AssertDimension(matrix_0->size(c), matrix_1->size(c));
@@ -315,6 +325,81 @@ public:
 private:
   std::shared_ptr<const MatrixType0> matrix_0;
   std::shared_ptr<const MatrixType1> matrix_1;
+};
+
+
+
+template <typename Number>
+class DiagonalMatrixView : public MatrixView<Number>
+{
+public:
+  DiagonalMatrixView() = default;
+
+  template <typename MatrixType>
+  DiagonalMatrixView(const std::shared_ptr<const MatrixType> &matrix)
+  {
+    this->initialize(matrix);
+  }
+
+  template <typename MatrixType>
+  void
+  initialize(const std::shared_ptr<const MatrixType> &matrix)
+  {
+    diagonals.resize(matrix.size());
+
+    Vector<Number> dst, src;
+
+    for (unsigned int d = 0; d < diagonals.size(); ++d)
+      {
+        const unsigned int n = matrix.size(d);
+
+        dst.reinit(n);
+        src.reinit(n);
+
+        diagonals[d].resize(n);
+
+        for (unsigned int i = 0; i < n; ++i)
+          {
+            for (unsigned int j = 0; j < n; ++j)
+              src[j] = (i == j);
+
+            matrix.vmult(d, dst, src);
+
+            diagonals[d][i] = dst[i];
+          }
+      }
+  }
+  virtual void
+  invert()
+  {
+    for (auto &diagonal : diagonals)
+      for (auto &entry : diagonal)
+        entry = Number(1.0) / entry;
+  }
+
+  void
+  vmult(const unsigned int    c,
+        Vector<Number> &      dst,
+        const Vector<Number> &src) const final
+  {
+    for (unsigned int i = 0; i < src.size(); ++i)
+      dst[i] = diagonals[c][i] * src[i];
+  }
+
+  unsigned int
+  size() const final
+  {
+    return diagonals.size();
+  }
+
+  unsigned int
+  size(const unsigned int c) const final
+  {
+    return diagonals[c].size();
+  }
+
+private:
+  std::vector<std::vector<Number>> diagonals;
 };
 
 
@@ -367,6 +452,12 @@ public:
     for (auto &block : this->blocks)
       if (block.m() > 0 && block.n() > 0)
         block.gauss_jordan();
+  }
+
+  unsigned int
+  size() const final
+  {
+    return blocks.size();
   }
 
   unsigned int
@@ -481,6 +572,12 @@ public:
     for (auto &block : this->blocks)
       if (block.m() > 0 && block.n() > 0)
         block.gauss_jordan();
+  }
+
+  unsigned int
+  size() const final
+  {
+    return blocks.size();
   }
 
   unsigned int
