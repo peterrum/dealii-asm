@@ -336,22 +336,22 @@ public:
   DiagonalMatrixView() = default;
 
   template <typename MatrixType>
-  DiagonalMatrixView(const std::shared_ptr<const MatrixType> &matrix)
+  DiagonalMatrixView(const std::shared_ptr<MatrixType> &matrix)
   {
     this->initialize(matrix);
   }
 
   template <typename MatrixType>
   void
-  initialize(const std::shared_ptr<const MatrixType> &matrix)
+  initialize(const std::shared_ptr<MatrixType> &matrix)
   {
-    diagonals.resize(matrix.size());
+    diagonals.resize(matrix->size());
 
     Vector<Number> dst, src;
 
     for (unsigned int d = 0; d < diagonals.size(); ++d)
       {
-        const unsigned int n = matrix.size(d);
+        const unsigned int n = matrix->size(d);
 
         dst.reinit(n);
         src.reinit(n);
@@ -363,7 +363,7 @@ public:
             for (unsigned int j = 0; j < n; ++j)
               src[j] = (i == j);
 
-            matrix.vmult(d, dst, src);
+            matrix->vmult(d, dst, src);
 
             diagonals[d][i] = dst[i];
           }

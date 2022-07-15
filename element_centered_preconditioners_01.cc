@@ -267,7 +267,7 @@ create_system_preconditioner(const OperatorType &              op,
     {
       using RestictorType = Restrictors::ElementCenteredRestrictor<VectorType>;
       using MatrixType0   = SubMeshMatrixView<Number>;
-      using MatrixType1   = SubMeshMatrixView<Number>;
+      using MatrixType1   = DiagonalMatrixView<Number>;
       using InverseMatrixType = CGMatrixView<MatrixType0, MatrixType1>;
       using PreconditionerType =
         RestrictedPreconditioner<VectorType, InverseMatrixType, RestictorType>;
@@ -300,8 +300,7 @@ create_system_preconditioner(const OperatorType &              op,
       const auto matrix =
         std::make_shared<MatrixType0>(op_approx, restrictor, preconditioner_ad);
 
-      const auto precon =
-        std::make_shared<MatrixType1>(op_approx, restrictor, preconditioner_ad);
+      const auto precon = std::make_shared<MatrixType1>(matrix);
       precon->invert();
 
       const auto cg = std::make_shared<InverseMatrixType>(matrix, precon);
