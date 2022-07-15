@@ -280,7 +280,7 @@ public:
     // pcout << " - n dofs:  " << dof_handler.n_dofs() << std::endl;
     // pcout << std::endl;
 
-    DoFTools::make_zero_boundary_constraints(dof_handler, constraints);
+    DoFTools::make_zero_boundary_constraints(dof_handler, 1, constraints);
     constraints.close();
 
     // create system matrix
@@ -397,6 +397,10 @@ test(const boost::property_tree::ptree params)
 
   parallel::distributed::Triangulation<dim> tria(MPI_COMM_WORLD);
   GridGenerator::hyper_cube(tria);
+
+  for (const auto &face : tria.active_face_iterators())
+    face->set_boundary_id(1);
+
   tria.refine_global(n_global_refinements);
 
   FE_Q<dim>      fe(fe_degree);
