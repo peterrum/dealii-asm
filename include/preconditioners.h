@@ -314,10 +314,6 @@ protected:
   initialize_internal(const std::shared_ptr<const RestrictorType> &restrictor)
   {
     this->restrictor = restrictor;
-
-    for (auto &block : blocks)
-      if (block.m() > 0 && block.n() > 0)
-        block.gauss_jordan();
   }
 
   std::shared_ptr<const RestrictorType> restrictor;
@@ -364,6 +360,11 @@ public:
       global_sparsity_pattern,
       restrictor->get_indices(),
       this->blocks);
+
+    // TODO: make inversion optional
+    for (auto &block : this->blocks)
+      if (block.m() > 0 && block.n() > 0)
+        block.gauss_jordan();
 
     this->initialize_internal(restrictor);
   }
@@ -458,6 +459,11 @@ public:
                   system_matrix(local_dof_indices[i], local_dof_indices[j]) :
                   0;
         }
+
+    // TODO: make inversion optional
+    for (auto &block : this->blocks)
+      if (block.m() > 0 && block.n() > 0)
+        block.gauss_jordan();
 
     this->initialize_internal(restrictor);
   }
