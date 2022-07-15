@@ -547,29 +547,23 @@ class SubMeshPreconditioner
   : public RestrictedPreconditionerBase<VectorType, RestrictorType>
 {
 public:
-  using Number         = typename VectorType::value_type;
-  using AdditionalData = typename SubMeshMatrixView<Number>::AdditionalData;
+  using Number = typename VectorType::value_type;
 
   SubMeshPreconditioner() = default;
 
-  template <typename OperatorType>
   SubMeshPreconditioner(
-    const std::shared_ptr<const OperatorType> &  op,
-    const std::shared_ptr<const RestrictorType> &restrictor,
-    const AdditionalData &additional_data = AdditionalData())
+    const std::shared_ptr<const SubMeshMatrixView<Number>> &inverse_matrix_view,
+    const std::shared_ptr<const RestrictorType> &           restrictor)
   {
-    this->initialize(op, restrictor, additional_data);
+    this->initialize(inverse_matrix_view, restrictor);
   }
 
-  template <typename OperatorType>
   void
-  initialize(const std::shared_ptr<const OperatorType> &  op,
-             const std::shared_ptr<const RestrictorType> &restrictor,
-             const AdditionalData &additional_data = AdditionalData())
+  initialize(
+    const std::shared_ptr<const SubMeshMatrixView<Number>> &inverse_matrix_view,
+    const std::shared_ptr<const RestrictorType> &           restrictor)
   {
-    inverse_matrix_view.initialize(op, restrictor, additional_data);
-
-    inverse_matrix_view.invert();
+    this->inverse_matrix_view = inverse_matrix_view;
 
     this->initialize_internal(restrictor);
   }
@@ -580,9 +574,9 @@ protected:
               Vector<Number> &      dst,
               const Vector<Number> &src) const final
   {
-    inverse_matrix_view.vmult(c, dst, src);
+    inverse_matrix_view->vmult(c, dst, src);
   }
 
 private:
-  SubMeshMatrixView<Number> inverse_matrix_view;
+  std::shared_ptr<const SubMeshMatrixView<Number>> inverse_matrix_view;
 };

@@ -186,6 +186,7 @@ create_system_preconditioner(const OperatorType &              op,
                              const boost::property_tree::ptree params)
 {
   using VectorType = typename OperatorType::vector_type;
+  using Number     = typename VectorType::value_type;
 
   const auto type = params.get<std::string>("type", "");
 
@@ -216,10 +217,11 @@ create_system_preconditioner(const OperatorType &              op,
   else if (type == "SubMeshPreconditioner")
     {
       using RestictorType = Restrictors::ElementCenteredRestrictor<VectorType>;
+      using InverseMatrixType = SubMeshMatrixView<Number>;
       using PreconditionerType =
         SubMeshPreconditioner<VectorType, RestictorType>;
 
-      typename PreconditionerType::AdditionalData preconditioner_ad;
+      typename InverseMatrixType::AdditionalData preconditioner_ad;
 
       preconditioner_ad.sub_mesh_approximation =
         params.get<unsigned int>("sub mesh approximation",
@@ -243,10 +245,15 @@ create_system_preconditioner(const OperatorType &              op,
         std::make_shared<const RestictorType>(op_approx->get_dof_handler(),
                                               restrictor_ad);
 
+      const auto inverse_matrix =
+        std::make_shared<InverseMatrixType>(op_approx,
+                                            restrictor,
+                                            preconditioner_ad);
+      inverse_matrix->invert();
+
       // preconditioner
-      return std::make_shared<const PreconditionerType>(op_approx,
-                                                        restrictor,
-                                                        preconditioner_ad);
+      return std::make_shared<const PreconditionerType>(inverse_matrix,
+                                                        restrictor);
     }
 
   AssertThrow(false, ExcMessage("Preconditioner <" + type + "> is not known!"));
