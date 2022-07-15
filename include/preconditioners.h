@@ -220,61 +220,61 @@ private:
 
 
 template <typename VectorType>
-class
-PreconditionerBase
+class PreconditionerBase
 {
-  public:
-    using vector_type = VectorType;
+public:
+  using vector_type = VectorType;
 
-    virtual void
-    vmult(VectorType & dst, const VectorType & src) const = 0;
+  virtual void
+  vmult(VectorType &dst, const VectorType &src) const = 0;
 };
 
 
 
 /**
- * An additive Schwarz preconditioner. It is fully defined by a 
+ * An additive Schwarz preconditioner. It is fully defined by a
  * sparse system matrix and a restrictor. The restrictor is used
  * to extract (overlapping) blocks from the matrix and potentially
  * to weights the contributations.
  */
 template <typename VectorType, typename RestrictorType>
-class
-AdditiveSchwarzPreconditioner : public PreconditionerBase<VectorType>
+class AdditiveSchwarzPreconditioner : public PreconditionerBase<VectorType>
 {
-  public:
-    using Number = typename VectorType::value_type;
+public:
+  using Number = typename VectorType::value_type;
 
-    AdditiveSchwarzPreconditioner() = default;
+  AdditiveSchwarzPreconditioner() = default;
 
-    template <typename GlobalSparseMatrixType, typename GlobalSparsityPattern>
-    AdditiveSchwarzPreconditioner(const std::shared_ptr<const RestrictorType> & restrictor,
-               const GlobalSparseMatrixType &global_sparse_matrix,
-               const GlobalSparsityPattern & global_sparsity_pattern)
-    {   
-      this->initialize(restrictor, global_sparse_matrix, global_sparsity_pattern);
-    }
+  template <typename GlobalSparseMatrixType, typename GlobalSparsityPattern>
+  AdditiveSchwarzPreconditioner(
+    const std::shared_ptr<const RestrictorType> &restrictor,
+    const GlobalSparseMatrixType &               global_sparse_matrix,
+    const GlobalSparsityPattern &                global_sparsity_pattern)
+  {
+    this->initialize(restrictor, global_sparse_matrix, global_sparsity_pattern);
+  }
 
-    /**
-     * Initialize class with a sparse matrix and a restrictor.
-     */
-    template <typename GlobalSparseMatrixType, typename GlobalSparsityPattern>
-    void
-    initialize(const std::shared_ptr<const RestrictorType> & restrictor,
-               const GlobalSparseMatrixType &global_sparse_matrix,
-               const GlobalSparsityPattern & global_sparsity_pattern)
-    {
-      this->restrictor = restrictor;
+  /**
+   * Initialize class with a sparse matrix and a restrictor.
+   */
+  template <typename GlobalSparseMatrixType, typename GlobalSparsityPattern>
+  void
+  initialize(const std::shared_ptr<const RestrictorType> &restrictor,
+             const GlobalSparseMatrixType &               global_sparse_matrix,
+             const GlobalSparsityPattern &global_sparsity_pattern)
+  {
+    this->restrictor = restrictor;
 
-      dealii::SparseMatrixTools::restrict_to_full_matrices(global_sparse_matrix,
-                                           global_sparsity_pattern,
-                                         restrictor->get_indices(),
-                                         blocks);
+    dealii::SparseMatrixTools::restrict_to_full_matrices(
+      global_sparse_matrix,
+      global_sparsity_pattern,
+      restrictor->get_indices(),
+      blocks);
 
     for (auto &block : blocks)
       if (block.m() > 0 && block.n() > 0)
         block.gauss_jordan();
-    }
+  }
 
   /**
    * Perform matrix-vector product by looping over all blocks,
@@ -283,14 +283,14 @@ AdditiveSchwarzPreconditioner : public PreconditionerBase<VectorType>
    * global vector.
    */
   void
-  vmult(VectorType & dst, const VectorType & src) const override
+  vmult(VectorType &dst, const VectorType &src) const override
   {
     dealii::Vector<Number> src_, dst_;
 
     dst = 0.0;
     src.update_ghost_values();
 
-    for(unsigned int c = 0; c < blocks.size(); ++c)
+    for (unsigned int c = 0; c < blocks.size(); ++c)
       {
         const auto block = blocks[c];
 
@@ -313,7 +313,43 @@ AdditiveSchwarzPreconditioner : public PreconditionerBase<VectorType>
     src.zero_out_ghost_values();
   }
 
-  private:
-    std::shared_ptr<const RestrictorType> restrictor;
-    std::vector<FullMatrix<Number>>  blocks;
+private:
+  std::shared_ptr<const RestrictorType> restrictor;
+  std::vector<FullMatrix<Number>>       blocks;
+};
+
+
+
+/**
+ * TODO.
+ */
+template <typename VectorType, typename RestrictorType>
+class SubMeshPreconditioner : public PreconditionerBase<VectorType>
+{
+public:
+  using Number = typename VectorType::value_type;
+
+  SubMeshPreconditioner() = default;
+
+  SubMeshPreconditioner(const std::shared_ptr<const RestrictorType> &restrictor)
+  {
+    this->initialize(restrictor);
+  }
+
+  void
+  initialize(const std::shared_ptr<const RestrictorType> &restrictor)
+  {
+    AssertThrow(false, ExcNotImplemented());
+
+    this->restrictor = restrictor;
+  }
+
+  void
+  vmult(VectorType &, const VectorType &) const override
+  {
+    AssertThrow(false, ExcNotImplemented());
+  }
+
+private:
+  std::shared_ptr<const RestrictorType> restrictor;
 };

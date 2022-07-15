@@ -213,6 +213,29 @@ create_system_preconditioner(const OperatorType &              op,
         op_approx->get_sparse_matrix(),
         op_approx->get_sparsity_pattern());
     }
+  else if (type == "SubMeshPreconditioner")
+    {
+      // approximate matrix
+      const auto op_approx = get_approximation(op, params);
+
+      // restrictor
+      using RestictorType = Restrictors::ElementCenteredRestrictor<VectorType>;
+
+      typename RestictorType::AdditionalData restrictor_ad;
+
+      restrictor_ad.n_overlap      = params.get<unsigned int>("n overlap", 1);
+      restrictor_ad.weighting_type = get_weighting_type(params);
+
+      AssertThrow(restrictor_ad.n_overlap == 1, ExcNotImplemented());
+
+      const auto restrictor =
+        std::make_shared<const RestictorType>(op_approx->get_dof_handler(),
+                                              restrictor_ad);
+
+      // preconditioner
+      return std::make_shared<
+        const SubMeshPreconditioner<VectorType, RestictorType>>(restrictor);
+    }
 
   AssertThrow(false, ExcMessage("Preconditioner <" + type + "> is not known!"));
 
