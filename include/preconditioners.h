@@ -381,9 +381,12 @@ public:
              const std::shared_ptr<const RestrictorType> &restrictor,
              const AdditionalData &additional_data = AdditionalData())
   {
+    this->blocks.resize(op->get_triangulation().n_active_cells());
+
     for (const auto &cell : op->get_dof_handler().active_cell_iterators())
       if (cell->is_locally_owned())
         {
+          // create subgrid
           auto sub_cells =
             dealii::GridTools::extract_all_surrounding_cells_cartesian<
               OperatorType::dimension>(cell,
@@ -392,20 +395,42 @@ public:
           Triangulation<OperatorType::dimension> sub_tria;
           dealii::GridGenerator::create_mesh_from_cells(sub_cells, sub_tria);
 
+          // define operator on subgrid
           OperatorType sub_op(op->get_mapping(),
                               sub_tria,
                               op->get_fe(),
                               op->get_quadrature());
 
-          // TODO: make sub_cells local
+          // make cells local
+          auto sub_tria_iterator = sub_tria.begin();
+          for (auto &sub_cell : sub_cells)
+            if (sub_cell.state() == IteratorState::valid)
+              sub_cell = sub_tria_iterator++;
+          Assert(sub_tria_iterator == sub_tria.end(), ExcInternalError());
 
-          const auto indices =
+          // extrac local dof indices
+          const auto local_dof_indices =
             dealii::DoFTools::get_dof_indices_cell_with_overlap(
               sub_op.get_dof_handler(),
               sub_cells,
               this->restrictor->get_n_overlap());
 
-          // TODO: extract submatrix
+          const unsigned int dofs_per_cell = local_dof_indices.size();
+
+          // extract submatrix
+          auto &cell_matrix = this->blocks[cell->active_cell_index()];
+          cell_matrix       = FullMatrix<Number>(dofs_per_cell, dofs_per_cell);
+
+          const auto &system_matrix    = sub_op.get_sparse_matrix();
+          const auto &sparsity_pattern = sub_op.get_sparsity_pattern();
+
+          for (unsigned int i = 0; i < dofs_per_cell; ++i)
+            for (unsigned int j = 0; j < dofs_per_cell; ++j)
+              cell_matrix(i, j) =
+                sparsity_pattern.exists(local_dof_indices[i],
+                                        local_dof_indices[j]) ?
+                  system_matrix(local_dof_indices[i], local_dof_indices[j]) :
+                  0;
         }
 
     this->initialize_internal(restrictor);
