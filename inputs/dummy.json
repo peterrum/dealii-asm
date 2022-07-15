@@ -1,7 +1,14 @@
 {
     "dim" : 2,
-    "degree" : 2,
+    "degree" : 6,
     "n refinements" : 5,
-    "solver" : {"type" : "CG"},
-    "preconditioner" : {"type" : "AdditiveSchwarzPreconditioner", "n overlap" : 3, "matrix approximation" : "equidistant"}
+    "solver" : {
+        "type" : "GMRES"
+    },
+    "preconditioner" : {
+        "type" : "AdditiveSchwarzPreconditioner", 
+        "n overlap" : 5, 
+        "weighting type" : "symm", 
+        "matrix approximation" : "none"
+    }
 }

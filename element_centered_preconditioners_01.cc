@@ -62,6 +62,26 @@ try_get_child(const boost::property_tree::ptree params, std::string label)
     }
 }
 
+
+Restrictors::WeightingType
+get_weighting_type(const boost::property_tree::ptree params)
+{
+  const auto type = params.get<std::string>("weighting type", "symm");
+
+  if (type == "symm")
+    return Restrictors::WeightingType::symm;
+  else if (type == "pre")
+    return Restrictors::WeightingType::pre;
+  else if (type == "post")
+    return Restrictors::WeightingType::post;
+  else if (type == "none")
+    return Restrictors::WeightingType::none;
+
+  AssertThrow(false, ExcMessage("Weighting type <" + type + "> is not known!"))
+
+    return Restrictors::WeightingType::none;
+}
+
 template <typename MatrixType, typename PreconditionerType, typename VectorType>
 std::shared_ptr<ReductionControl>
 solve(const MatrixType &                               A,
@@ -70,7 +90,7 @@ solve(const MatrixType &                               A,
       const std::shared_ptr<const PreconditionerType> &preconditioner,
       const boost::property_tree::ptree                params)
 {
-  const auto max_iterations = params.get<unsigned int>("max iterations", 100);
+  const auto max_iterations = params.get<unsigned int>("max iterations", 1000);
   const auto abs_tolerance  = params.get<double>("abs tolerance", 1e-10);
   const auto rel_tolerance  = params.get<double>("rel tolerance", 1e-2);
   const auto type           = params.get<std::string>("type", "");
@@ -88,7 +108,10 @@ solve(const MatrixType &                               A,
     }
   else if (type == "GMRES")
     {
-      SolverGMRES<VectorType> solver(*reduction_control);
+      typename SolverGMRES<VectorType>::AdditionalData additional_data;
+      additional_data.right_preconditioning = true;
+
+      SolverGMRES<VectorType> solver(*reduction_control, additional_data);
       solver.solve(A, x, b, *preconditioner);
     }
   else
@@ -97,6 +120,62 @@ solve(const MatrixType &                               A,
     }
 
   return reduction_control;
+}
+
+
+
+template <typename OperatorType>
+std::shared_ptr<const OperatorType>
+get_approximation(const OperatorType &              op,
+                  const boost::property_tree::ptree params)
+{
+  std::shared_ptr<const OperatorType> op_approx;
+
+  const std::string matrix_approximation =
+    params.get<std::string>("matrix approximation", "none");
+
+  if (matrix_approximation == "none")
+    {
+      op_approx.reset(&op, [](auto *) {
+        // nothing to do
+      });
+    }
+  else if (matrix_approximation == "lobatto")
+    {
+      const unsigned int fe_degree = op.get_fe().tensor_degree();
+      const unsigned int dim       = OperatorType::dimension;
+
+      const auto subdivision_point =
+        QGaussLobatto<1>(fe_degree + 1).get_points();
+      const FE_Q_iso_Q1<dim> fe_q1_n(subdivision_point);
+      const QIterated<dim>   quad_q1_n(QGauss<1>(2), subdivision_point);
+
+      op_approx = std::make_shared<OperatorType>(op.get_mapping(),
+                                                 op.get_triangulation(),
+                                                 fe_q1_n,
+                                                 quad_q1_n);
+    }
+  else if (matrix_approximation == "equidistant")
+    {
+      const unsigned int fe_degree = op.get_fe().tensor_degree();
+      const unsigned int dim       = OperatorType::dimension;
+
+      const FE_Q_iso_Q1<dim> fe_q1_h(fe_degree);
+      const QIterated<dim>   quad_q1_h(QGauss<1>(2), fe_degree + 1);
+
+      op_approx = std::make_shared<OperatorType>(op.get_mapping(),
+                                                 op.get_triangulation(),
+                                                 fe_q1_h,
+                                                 quad_q1_h);
+    }
+  else
+    {
+      AssertThrow(false,
+                  ExcMessage("Matrix approximation <" + matrix_approximation +
+                             "> is not known!"))
+    }
+
+  return op_approx;
 }
 
 
@@ -112,77 +191,27 @@ create_system_preconditioner(const OperatorType &              op,
 
   if (type == "AdditiveSchwarzPreconditioner")
     {
+      // approximate matrix
+      const auto op_approx = get_approximation(op, params);
+
+      // restrictor
       using RestictorType = Restrictors::ElementCenteredRestrictor<VectorType>;
 
       typename RestictorType::AdditionalData restrictor_ad;
 
       restrictor_ad.n_overlap      = params.get<unsigned int>("n overlap", 1);
-      restrictor_ad.weighting_type = Restrictors::WeightingType::symm;
-
-      const OperatorType *op_ptr = &op;
-
-      std::shared_ptr<OperatorType> op_approx;
-
-      std::string matrix_approximation =
-        params.get<std::string>("matrix approximation", "none");
-
-      if (matrix_approximation == "none")
-        {
-          op_approx = std::make_shared<OperatorType>(op.get_mapping(),
-                                                     op.get_triangulation(),
-                                                     op.get_fe(),
-                                                     op.get_quadrature());
-
-          op_ptr = op_approx.get();
-        }
-      else if (matrix_approximation == "lobatto")
-        {
-          const unsigned int fe_degree = op.get_fe().tensor_degree();
-          const unsigned int dim       = OperatorType::dimension;
-
-          const auto subdivision_point =
-            QGaussLobatto<1>(fe_degree + 1).get_points();
-          const FE_Q_iso_Q1<dim> fe_q1_n(subdivision_point);
-          const QIterated<dim>   quad_q1_n(QGauss<1>(2), subdivision_point);
-
-          op_approx = std::make_shared<OperatorType>(op.get_mapping(),
-                                                     op.get_triangulation(),
-                                                     fe_q1_n,
-                                                     quad_q1_n);
-
-          op_ptr = op_approx.get();
-        }
-      else if (matrix_approximation == "equidistant")
-        {
-          const unsigned int fe_degree = op.get_fe().tensor_degree();
-          const unsigned int dim       = OperatorType::dimension;
-
-          const FE_Q_iso_Q1<dim> fe_q1_h(fe_degree);
-          const QIterated<dim>   quad_q1_h(QGauss<1>(2), fe_degree + 1);
-
-          op_approx = std::make_shared<OperatorType>(op.get_mapping(),
-                                                     op.get_triangulation(),
-                                                     fe_q1_h,
-                                                     quad_q1_h);
-
-          op_ptr = op_approx.get();
-        }
-      else
-        {
-          AssertThrow(false,
-                      ExcMessage("Matrix approximation <" +
-                                 matrix_approximation + "> is not known!"))
-        }
+      restrictor_ad.weighting_type = get_weighting_type(params);
 
       const auto restrictor =
-        std::make_shared<const RestictorType>(op_ptr->get_dof_handler(),
+        std::make_shared<const RestictorType>(op_approx->get_dof_handler(),
                                               restrictor_ad);
 
+      // preconditioner
       return std::make_shared<
         const AdditiveSchwarzPreconditioner<VectorType, RestictorType>>(
         restrictor,
-        op_ptr->get_sparse_matrix(),
-        op_ptr->get_sparsity_pattern());
+        op_approx->get_sparse_matrix(),
+        op_approx->get_sparsity_pattern());
     }
 
   AssertThrow(false, ExcMessage("Preconditioner <" + type + "> is not known!"));
@@ -236,7 +265,7 @@ public:
 
     partitioner = std::make_shared<Utilities::MPI::Partitioner>(
       dof_handler.locally_owned_dofs(),
-      DoFTools::extract_locally_active_dofs(dof_handler),
+      DoFTools::extract_locally_relevant_dofs(dof_handler),
       dof_handler.get_communicator());
   }
 
