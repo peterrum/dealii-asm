@@ -241,6 +241,9 @@ public:
     AssertThrow(false, ExcNotImplemented());
   }
 
+  virtual unsigned int
+  size(const unsigned int c) const = 0;
+
 private:
 };
 
@@ -302,6 +305,13 @@ public:
     solver_cg.solve(matrix, dst, src, precon);
   }
 
+  unsigned int
+  size(const unsigned int c) const final
+  {
+    AssertDimension(matrix_0->size(c), matrix_1->size(c));
+    return matrix_0->size(c);
+  }
+
 private:
   std::shared_ptr<const MatrixType0> matrix_0;
   std::shared_ptr<const MatrixType1> matrix_1;
@@ -357,6 +367,13 @@ public:
     for (auto &block : this->blocks)
       if (block.m() > 0 && block.n() > 0)
         block.gauss_jordan();
+  }
+
+  unsigned int
+  size(const unsigned int c) const final
+  {
+    AssertDimension(blocks[c].m(), blocks[c].n());
+    return blocks[c].m();
   }
 
 private:
@@ -464,6 +481,13 @@ public:
     for (auto &block : this->blocks)
       if (block.m() > 0 && block.n() > 0)
         block.gauss_jordan();
+  }
+
+  unsigned int
+  size(const unsigned int c) const final
+  {
+    AssertDimension(blocks[c].m(), blocks[c].n());
+    return blocks[c].m();
   }
 
 private:
