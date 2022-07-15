@@ -497,29 +497,23 @@ public:
 
   AdditiveSchwarzPreconditioner() = default;
 
-  template <typename GlobalSparseMatrixType, typename GlobalSparsityPattern>
   AdditiveSchwarzPreconditioner(
-    const std::shared_ptr<const RestrictorType> &restrictor,
-    const GlobalSparseMatrixType &               global_sparse_matrix,
-    const GlobalSparsityPattern &                global_sparsity_pattern)
+    const std::shared_ptr<const RestrictedMatrixView<Number>>
+      &                                          inverse_matrix_view,
+    const std::shared_ptr<const RestrictorType> &restrictor)
   {
-    this->initialize(restrictor, global_sparse_matrix, global_sparsity_pattern);
+    this->initialize(inverse_matrix_view, restrictor);
   }
 
   /**
    * Initialize class with a sparse matrix and a restrictor.
    */
-  template <typename GlobalSparseMatrixType, typename GlobalSparsityPattern>
   void
-  initialize(const std::shared_ptr<const RestrictorType> &restrictor,
-             const GlobalSparseMatrixType &               global_sparse_matrix,
-             const GlobalSparsityPattern &global_sparsity_pattern)
+  initialize(const std::shared_ptr<const RestrictedMatrixView<Number>>
+               &                                          inverse_matrix_view,
+             const std::shared_ptr<const RestrictorType> &restrictor)
   {
-    inverse_matrix_view.initialize(restrictor,
-                                   global_sparse_matrix,
-                                   global_sparsity_pattern);
-
-    inverse_matrix_view.invert();
+    this->inverse_matrix_view = inverse_matrix_view;
 
     this->initialize_internal(restrictor);
   }
@@ -530,11 +524,11 @@ protected:
               Vector<Number> &      dst,
               const Vector<Number> &src) const final
   {
-    inverse_matrix_view.vmult(c, dst, src);
+    inverse_matrix_view->vmult(c, dst, src);
   }
 
 private:
-  RestrictedMatrixView<Number> inverse_matrix_view;
+  std::shared_ptr<const RestrictedMatrixView<Number>> inverse_matrix_view;
 };
 
 
