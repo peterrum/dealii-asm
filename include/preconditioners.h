@@ -299,6 +299,114 @@ private:
 };
 
 
+
+template <typename Number>
+class SubMeshMatrixView : public MatrixView<Number>
+{
+public:
+  struct AdditionalData
+  {
+    AdditionalData(const unsigned int sub_mesh_approximation = 1)
+      : sub_mesh_approximation(sub_mesh_approximation)
+    {}
+
+    unsigned int sub_mesh_approximation;
+  };
+
+  SubMeshMatrixView() = default;
+
+  template <typename OperatorType, typename RestrictorType>
+  SubMeshMatrixView(const std::shared_ptr<const OperatorType> &  op,
+                    const std::shared_ptr<const RestrictorType> &restrictor,
+                    const AdditionalData &additional_data = AdditionalData())
+  {
+    this->initialize(op, restrictor, additional_data);
+  }
+
+  /**
+   * Initialize class with a sparse matrix and a restrictor.
+   */
+  template <typename OperatorType, typename RestrictorType>
+  void
+  initialize(const std::shared_ptr<const OperatorType> &  op,
+             const std::shared_ptr<const RestrictorType> &restrictor,
+             const AdditionalData &additional_data = AdditionalData())
+  {
+    this->blocks.resize(op->get_triangulation().n_active_cells());
+
+    for (const auto &cell : op->get_dof_handler().active_cell_iterators())
+      if (cell->is_locally_owned())
+        {
+          // create subgrid
+          auto sub_cells =
+            dealii::GridTools::extract_all_surrounding_cells_cartesian<
+              OperatorType::dimension>(cell,
+                                       additional_data.sub_mesh_approximation);
+
+          Triangulation<OperatorType::dimension> sub_tria;
+          dealii::GridGenerator::create_mesh_from_cells(sub_cells, sub_tria);
+
+          // define operator on subgrid
+          OperatorType sub_op(op->get_mapping(),
+                              sub_tria,
+                              op->get_fe(),
+                              op->get_quadrature());
+
+          // make cells local
+          auto sub_tria_iterator = sub_tria.begin();
+          for (auto &sub_cell : sub_cells)
+            if (sub_cell.state() == IteratorState::valid)
+              sub_cell = sub_tria_iterator++;
+            else
+              sub_cell = sub_tria.end();
+          Assert(sub_tria_iterator == sub_tria.end(), ExcInternalError());
+
+          // extrac local dof indices
+          const auto local_dof_indices =
+            dealii::DoFTools::get_dof_indices_cell_with_overlap(
+              sub_op.get_dof_handler(), sub_cells, restrictor->get_n_overlap());
+
+          const unsigned int dofs_per_cell = local_dof_indices.size();
+
+          // extract submatrix
+          auto &cell_matrix = this->blocks[cell->active_cell_index()];
+          cell_matrix       = FullMatrix<Number>(dofs_per_cell, dofs_per_cell);
+
+          const auto &system_matrix    = sub_op.get_sparse_matrix();
+          const auto &sparsity_pattern = sub_op.get_sparsity_pattern();
+
+          for (unsigned int i = 0; i < dofs_per_cell; ++i)
+            for (unsigned int j = 0; j < dofs_per_cell; ++j)
+              cell_matrix(i, j) =
+                sparsity_pattern.exists(local_dof_indices[i],
+                                        local_dof_indices[j]) ?
+                  system_matrix(local_dof_indices[i], local_dof_indices[j]) :
+                  0;
+        }
+  }
+
+  void
+  vmult(const unsigned int    c,
+        Vector<Number> &      dst,
+        const Vector<Number> &src) const final
+  {
+    blocks[c].vmult(dst, src);
+  }
+
+  virtual void
+  invert()
+  {
+    for (auto &block : this->blocks)
+      if (block.m() > 0 && block.n() > 0)
+        block.gauss_jordan();
+  }
+
+private:
+  std::vector<FullMatrix<Number>> blocks;
+};
+
+
+
 template <typename VectorType>
 class PreconditionerBase
 {
@@ -439,16 +547,8 @@ class SubMeshPreconditioner
   : public RestrictedPreconditionerBase<VectorType, RestrictorType>
 {
 public:
-  using Number = typename VectorType::value_type;
-
-  struct AdditionalData
-  {
-    AdditionalData(const unsigned int sub_mesh_approximation = 1)
-      : sub_mesh_approximation(sub_mesh_approximation)
-    {}
-
-    unsigned int sub_mesh_approximation;
-  };
+  using Number         = typename VectorType::value_type;
+  using AdditionalData = typename SubMeshMatrixView<Number>::AdditionalData;
 
   SubMeshPreconditioner() = default;
 
@@ -467,62 +567,9 @@ public:
              const std::shared_ptr<const RestrictorType> &restrictor,
              const AdditionalData &additional_data = AdditionalData())
   {
-    this->blocks.resize(op->get_triangulation().n_active_cells());
+    inverse_matrix_view.initialize(op, restrictor, additional_data);
 
-    for (const auto &cell : op->get_dof_handler().active_cell_iterators())
-      if (cell->is_locally_owned())
-        {
-          // create subgrid
-          auto sub_cells =
-            dealii::GridTools::extract_all_surrounding_cells_cartesian<
-              OperatorType::dimension>(cell,
-                                       additional_data.sub_mesh_approximation);
-
-          Triangulation<OperatorType::dimension> sub_tria;
-          dealii::GridGenerator::create_mesh_from_cells(sub_cells, sub_tria);
-
-          // define operator on subgrid
-          OperatorType sub_op(op->get_mapping(),
-                              sub_tria,
-                              op->get_fe(),
-                              op->get_quadrature());
-
-          // make cells local
-          auto sub_tria_iterator = sub_tria.begin();
-          for (auto &sub_cell : sub_cells)
-            if (sub_cell.state() == IteratorState::valid)
-              sub_cell = sub_tria_iterator++;
-            else
-              sub_cell = sub_tria.end();
-          Assert(sub_tria_iterator == sub_tria.end(), ExcInternalError());
-
-          // extrac local dof indices
-          const auto local_dof_indices =
-            dealii::DoFTools::get_dof_indices_cell_with_overlap(
-              sub_op.get_dof_handler(), sub_cells, restrictor->get_n_overlap());
-
-          const unsigned int dofs_per_cell = local_dof_indices.size();
-
-          // extract submatrix
-          auto &cell_matrix = this->blocks[cell->active_cell_index()];
-          cell_matrix       = FullMatrix<Number>(dofs_per_cell, dofs_per_cell);
-
-          const auto &system_matrix    = sub_op.get_sparse_matrix();
-          const auto &sparsity_pattern = sub_op.get_sparsity_pattern();
-
-          for (unsigned int i = 0; i < dofs_per_cell; ++i)
-            for (unsigned int j = 0; j < dofs_per_cell; ++j)
-              cell_matrix(i, j) =
-                sparsity_pattern.exists(local_dof_indices[i],
-                                        local_dof_indices[j]) ?
-                  system_matrix(local_dof_indices[i], local_dof_indices[j]) :
-                  0;
-        }
-
-    // TODO: make inversion optional
-    for (auto &block : this->blocks)
-      if (block.m() > 0 && block.n() > 0)
-        block.gauss_jordan();
+    inverse_matrix_view.invert();
 
     this->initialize_internal(restrictor);
   }
@@ -533,9 +580,9 @@ protected:
               Vector<Number> &      dst,
               const Vector<Number> &src) const final
   {
-    blocks[c].vmult(dst, src);
+    inverse_matrix_view.vmult(c, dst, src);
   }
 
 private:
-  std::vector<FullMatrix<Number>> blocks;
+  SubMeshMatrixView<Number> inverse_matrix_view;
 };
