@@ -405,6 +405,116 @@ private:
 
 
 template <typename Number>
+class TriDiagonalMatrixView : public MatrixView<Number>
+{
+public:
+  TriDiagonalMatrixView() = default;
+
+  template <typename MatrixType>
+  TriDiagonalMatrixView(const std::shared_ptr<MatrixType> &matrix)
+  {
+    this->initialize(matrix);
+  }
+
+  template <typename MatrixType>
+  void
+  initialize(const std::shared_ptr<MatrixType> &matrix)
+  {
+    diagonals.resize(matrix->size());
+
+    Vector<Number> dst, src;
+
+    for (unsigned int d = 0; d < diagonals.size(); ++d)
+      {
+        const unsigned int n = matrix->size(d);
+
+        dst.reinit(n);
+        src.reinit(n);
+
+        for (unsigned int i = 0; i < 3; ++i)
+          diagonals[d][i].resize(n);
+
+        for (unsigned int i = 0; i < n; ++i)
+          {
+            for (unsigned int j = 0; j < n; ++j)
+              src[j] = (i == j);
+
+            matrix->vmult(d, dst, src);
+
+            if (i + 1 != n)
+              diagonals[d][0][i + 1] = dst[i + 1];
+
+            diagonals[d][1][i] = dst[i];
+
+            if (i != 0)
+              diagonals[d][2][i - 1] = dst[i - 1];
+          }
+      }
+  }
+  virtual void
+  invert()
+  {
+    // nothing to do
+    this->is_inverted = true;
+  }
+
+  void
+  vmult(const unsigned int    cell,
+        Vector<Number> &      dst,
+        const Vector<Number> &src) const final
+  {
+    Assert(is_inverted, ExcNotImplemented());
+
+    const unsigned int dofs_per_cell = src.size();
+
+    const auto &a = diagonals[cell][0];
+    const auto &b = diagonals[cell][1];
+    const auto &c = diagonals[cell][2];
+
+    b_temp.reinit(dofs_per_cell);
+    d_temp.reinit(dofs_per_cell);
+
+    // forward substitution
+    b_temp[0] = b[0];
+    d_temp[0] = src[0];
+    for (unsigned int q = 1; q < dofs_per_cell; ++q)
+      {
+        const auto w = a[q] / b_temp[q - 1];
+        b_temp[q]    = b[q] - w * c[q - 1];
+        d_temp[q]    = src[q] - w * d_temp[q - 1];
+      }
+
+    // backward substitution
+    dst[dofs_per_cell - 1] =
+      d_temp[dofs_per_cell - 1] / b_temp[dofs_per_cell - 1];
+    for (unsigned int q = dofs_per_cell - 1; q > 0; --q)
+      dst[q - 1] = (d_temp[q - 1] - c[q - 1] * dst[q]) / b_temp[q - 1];
+  }
+
+  unsigned int
+  size() const final
+  {
+    return diagonals.size();
+  }
+
+  unsigned int
+  size(const unsigned int c) const final
+  {
+    return diagonals[c][0].size();
+  }
+
+private:
+  std::vector<std::array<std::vector<Number>, 3>> diagonals;
+
+  mutable Vector<Number> b_temp;
+  mutable Vector<Number> d_temp;
+
+  bool is_inverted = false;
+};
+
+
+
+template <typename Number>
 class RestrictedMatrixView : public MatrixView<Number>
 {
 public:
