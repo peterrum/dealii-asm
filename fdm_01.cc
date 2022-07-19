@@ -125,8 +125,9 @@ setup_fdm(const typename Triangulation<dim>::cell_iterator &cell,
       for (unsigned int i = 0; i < n_dofs_1D_without_overlap; ++i)
         for (unsigned int j = 0; j < n_dofs_1D_without_overlap; ++j)
           {
-            mass_matrix[i][j] = mass_matrix_reference[i][j] * cell_extend[d][1];
-            derivative_matrix[i][j] =
+            mass_matrix[i + n_overlap - 1][j + n_overlap - 1] =
+              mass_matrix_reference[i][j] * cell_extend[d][1];
+            derivative_matrix[i + n_overlap - 1][j + n_overlap - 1] =
               derivative_matrix_reference[i][j] / cell_extend[d][1];
           }
 
@@ -136,20 +137,27 @@ setup_fdm(const typename Triangulation<dim>::cell_iterator &cell,
           // left neighbor
           Assert(cell_extend[d][0] > 0.0, ExcInternalError());
 
-          mass_matrix[0][0] +=
-            mass_matrix_reference[n_dofs_1D_without_overlap - 1]
-                                 [n_dofs_1D_without_overlap - 1] *
-            cell_extend[d][0];
-          derivative_matrix[0][0] +=
-            derivative_matrix_reference[n_dofs_1D_without_overlap - 1]
-                                       [n_dofs_1D_without_overlap - 1] /
-            cell_extend[d][0];
+          for (unsigned int i = 0; i < n_overlap; ++i)
+            for (unsigned int j = 0; j < n_overlap; ++j)
+              {
+                mass_matrix[i][j] +=
+                  mass_matrix_reference[n_dofs_1D_without_overlap - n_overlap +
+                                        i][n_dofs_1D_without_overlap -
+                                           n_overlap + j] *
+                  cell_extend[d][0];
+                derivative_matrix[i][j] +=
+                  derivative_matrix_reference[n_dofs_1D_without_overlap -
+                                              n_overlap + i]
+                                             [n_dofs_1D_without_overlap -
+                                              n_overlap + j] /
+                  cell_extend[d][0];
+              }
         }
       else if (cell->face(2 * d)->boundary_id() == 1 /*DBC*/)
         {
           // left DBC
-          clear_row_and_column(0 /*TODO*/, mass_matrix);
-          clear_row_and_column(0 /*TODO*/, derivative_matrix);
+          clear_row_and_column(n_overlap - 1, mass_matrix);
+          clear_row_and_column(n_overlap - 1, derivative_matrix);
         }
       else
         {
@@ -161,16 +169,25 @@ setup_fdm(const typename Triangulation<dim>::cell_iterator &cell,
         {
           Assert(cell_extend[d][2] > 0.0, ExcInternalError());
 
-          mass_matrix[n_dofs_1D - 1][n_dofs_1D - 1] +=
-            mass_matrix_reference[0][0] * cell_extend[d][2];
-          derivative_matrix[n_dofs_1D - 1][n_dofs_1D - 1] +=
-            derivative_matrix_reference[0][0] / cell_extend[d][2];
+          for (unsigned int i = 0; i < n_overlap; ++i)
+            for (unsigned int j = 0; j < n_overlap; ++j)
+              {
+                mass_matrix[n_overlap + n_dofs_1D_without_overlap + i - 2]
+                           [n_overlap + n_dofs_1D_without_overlap + j - 2] +=
+                  mass_matrix_reference[i][j] * cell_extend[d][2];
+                derivative_matrix[n_overlap + n_dofs_1D_without_overlap + i - 2]
+                                 [n_overlap + n_dofs_1D_without_overlap + j -
+                                  2] +=
+                  derivative_matrix_reference[i][j] / cell_extend[d][2];
+              }
         }
       else if (cell->face(2 * d + 1)->boundary_id() == 1 /*DBC*/)
         {
           // right DBC
-          clear_row_and_column(n_dofs_1D - 1 /*TODO*/, mass_matrix);
-          clear_row_and_column(n_dofs_1D - 1 /*TODO*/, derivative_matrix);
+          clear_row_and_column(n_overlap + n_dofs_1D_without_overlap - 2,
+                               mass_matrix);
+          clear_row_and_column(n_overlap + n_dofs_1D_without_overlap - 2,
+                               derivative_matrix);
         }
       else
         {
@@ -271,8 +288,12 @@ test(const unsigned int fe_degree, const unsigned int n_overlap)
   const auto harmonic_patch_extend =
     GridTools::compute_harmonic_patch_extend(mapping, tria, quadrature_face);
 
+
+  Restrictors::ElementCenteredRestrictor<Vector<double>>::AdditionalData ad;
+  ad.n_overlap = n_overlap;
+
   Restrictors::ElementCenteredRestrictor<Vector<double>> restrictor;
-  restrictor.reinit(dof_handler);
+  restrictor.reinit(dof_handler, ad);
 
   std::vector<FullMatrix<double>> blocks;
   dealii::SparseMatrixTools::restrict_to_full_matrices(laplace_matrix,
@@ -282,7 +303,7 @@ test(const unsigned int fe_degree, const unsigned int n_overlap)
 
   for (const auto &cell : tria.active_cell_iterators())
     {
-      if (cell->active_cell_index() != 5)
+      if (cell->active_cell_index() != 3)
         continue;
 
       const auto &patch_extend =
