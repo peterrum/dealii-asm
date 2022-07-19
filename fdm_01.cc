@@ -27,6 +27,8 @@
 #include "include/grid_tools.h"
 #include "include/restrictors.h"
 
+#define QUADRATURE_TYP QGauss
+
 using namespace dealii;
 
 template <int dim, typename Number>
@@ -259,9 +261,9 @@ test(const unsigned int fe_degree, const unsigned int n_overlap)
   FE_Q<dim> fe(fe_degree);
   FE_Q<1>   fe_1D(fe_degree);
 
-  QGauss<dim>     quadrature(fe_degree + 1);
-  QGauss<dim - 1> quadrature_face(fe_degree + 1);
-  QGauss<1>       quadrature_1D(fe_degree + 1);
+  QUADRATURE_TYP<dim>     quadrature(fe_degree + 1);
+  QUADRATURE_TYP<dim - 1> quadrature_face(fe_degree + 1);
+  QUADRATURE_TYP<1>       quadrature_1D(fe_degree + 1);
 
   MappingQ1<dim> mapping;
 
