@@ -20,6 +20,7 @@
 #include <deal.II/lac/trilinos_sparse_matrix.h>
 #include <deal.II/lac/trilinos_sparsity_pattern.h>
 
+#include <deal.II/numerics/data_out.h>
 #include <deal.II/numerics/matrix_creator.h>
 #include <deal.II/numerics/vector_tools.h>
 
@@ -246,7 +247,6 @@ setup_fdm(const typename Triangulation<dim>::cell_iterator &cell,
 
   MyTensorProductMatrixSymmetricSum<dim, Number> fdm;
   fdm.reinit(mass_matrices, derivative_matrices);
-
   fdm.set_mask(masks);
 
   return fdm;
@@ -267,13 +267,19 @@ test(const unsigned int fe_degree, const unsigned int n_overlap)
 
   Triangulation<dim> tria;
 
-  const double right = 1.0;
-
   std::vector<std::vector<double>> step_sizes(dim);
+
+#if false
+  const double right = 1.0;
 
   for (unsigned int d = 0; d < dim; ++d)
     for (unsigned int i = 0; i < 3; ++i)
       step_sizes[d].push_back(right / 3.0);
+#else
+  for (unsigned int d = 0, c = 1; d < dim; ++d)
+    for (unsigned int i = 0; i < 3; ++i, ++c)
+      step_sizes[d].push_back(c * 1.1);
+#endif
 
   Point<dim> point;
 
@@ -283,6 +289,12 @@ test(const unsigned int fe_degree, const unsigned int n_overlap)
 
   GridGenerator::subdivided_hyper_rectangle(
     tria, step_sizes, Point<dim>(), point, false);
+
+  DataOut<dim> data_out;
+  data_out.attach_triangulation(tria);
+  data_out.build_patches();
+  data_out.write_vtu_in_parallel("mesh.vtu", tria.get_communicator());
+
 
   for (const auto &face : tria.active_face_iterators())
     if (face->at_boundary())
