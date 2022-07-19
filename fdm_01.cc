@@ -33,13 +33,43 @@ class MyTensorProductMatrixSymmetricSum
   : public TensorProductMatrixSymmetricSum<dim, Number, -1>
 {
 public:
-  std::array<Table<2, Number>, dim> &
-  get_eigenvectors()
+  void
+  set_mask(const std::array<std::vector<bool>, dim> masks)
   {
-    return this->eigenvectors;
+    this->masks = masks;
+
+    const unsigned int n_dofs_1D = this->eigenvalues[0].size();
+
+    for (unsigned int d = 0; d < dim; ++d)
+      for (unsigned int i = 0; i < n_dofs_1D; ++i)
+        if (masks[d][i] == false)
+          for (unsigned int j = 0; j < n_dofs_1D; ++j)
+            this->eigenvectors[d][i][j] = 0.0;
+  }
+
+  void
+  apply_inverse(const ArrayView<Number> &      dst,
+                const ArrayView<const Number> &src) const
+  {
+    TensorProductMatrixSymmetricSum<dim, Number, -1>::apply_inverse(dst, src);
+
+    const unsigned int n = this->eigenvalues[0].size();
+
+    if (dim == 2)
+      {
+        for (unsigned int i1 = 0, c = 0; i1 < n; ++i1)
+          for (unsigned int i0 = 0; i0 < n; ++i0, ++c)
+            if ((masks[1][i1] == false) || (masks[0][i0] == false))
+              dst[c] = src[c];
+      }
+    else
+      {
+        AssertThrow(false, ExcNotImplemented());
+      }
   }
 
 private:
+  std::array<std::vector<bool>, dim> masks;
 };
 
 template <int dim, typename Number>
@@ -202,7 +232,7 @@ setup_fdm(const typename Triangulation<dim>::cell_iterator &cell,
             masks[d][i]             = false;
           }
 
-#if true
+#if false
       mass_matrix.print_formatted(std::cout, 3, true, 10);
       std::cout << std::endl;
       derivative_matrix.print_formatted(std::cout, 3, true, 10);
@@ -217,11 +247,7 @@ setup_fdm(const typename Triangulation<dim>::cell_iterator &cell,
   MyTensorProductMatrixSymmetricSum<dim, Number> fdm;
   fdm.reinit(mass_matrices, derivative_matrices);
 
-  for (unsigned int d = 0; d < dim; ++d)
-    for (unsigned int i = 0; i < n_dofs_1D; ++i)
-      if (masks[d][i] == false)
-        for (unsigned int j = 0; j < n_dofs_1D; ++j)
-          fdm.get_eigenvectors()[d][i][j] = 0.0;
+  fdm.set_mask(masks);
 
   return fdm;
 }
@@ -303,7 +329,7 @@ test(const unsigned int fe_degree, const unsigned int n_overlap)
 
   for (const auto &cell : tria.active_cell_iterators())
     {
-      if (cell->active_cell_index() != 3)
+      if (cell->active_cell_index() != 5)
         continue;
 
       const auto &patch_extend =
