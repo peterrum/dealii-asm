@@ -103,20 +103,13 @@ setup_fdm(const typename Triangulation<dim>::cell_iterator &cell,
   std::array<FullMatrix<Number>, dim> derivative_matrices;
   std::array<std::vector<bool>, dim>  masks;
 
-  const auto clear_row_and_column =
-    [](const unsigned int n, auto &matrix, const unsigned int size) {
-      for (unsigned int i = 0; i < size; ++i)
-        {
-          matrix[i][n] = 0.0;
-          matrix[n][i] = 0.0;
-        }
-    };
-
-  const auto clear_row =
-    [](const unsigned int n, auto &matrix, const unsigned int size) {
-      for (unsigned int i = 0; i < size; ++i)
+  const auto clear_row_and_column = [&](const unsigned int n, auto &matrix) {
+    for (unsigned int i = 0; i < n_dofs_1D; ++i)
+      {
+        matrix[i][n] = 0.0;
         matrix[n][i] = 0.0;
-    };
+      }
+  };
 
   // 2) loop over all dimensions and create mass and stiffness
   // matrix so that boundary conditions and overlap are considered
@@ -154,8 +147,8 @@ setup_fdm(const typename Triangulation<dim>::cell_iterator &cell,
       else if (cell->face(2 * d)->boundary_id() == 1 /*DBC*/)
         {
           // left DBC
-          clear_row_and_column(0 /*TODO*/, mass_matrix, n_dofs_1D);
-          clear_row_and_column(0 /*TODO*/, derivative_matrix, n_dofs_1D);
+          clear_row_and_column(0 /*TODO*/, mass_matrix);
+          clear_row_and_column(0 /*TODO*/, derivative_matrix);
         }
       else
         {
@@ -175,10 +168,8 @@ setup_fdm(const typename Triangulation<dim>::cell_iterator &cell,
       else if (cell->face(2 * d + 1)->boundary_id() == 1 /*DBC*/)
         {
           // right DBC
-          clear_row_and_column(n_dofs_1D - 1 /*TODO*/, mass_matrix, n_dofs_1D);
-          clear_row_and_column(n_dofs_1D - 1 /*TODO*/,
-                               derivative_matrix,
-                               n_dofs_1D);
+          clear_row_and_column(n_dofs_1D - 1 /*TODO*/, mass_matrix);
+          clear_row_and_column(n_dofs_1D - 1 /*TODO*/, derivative_matrix);
         }
       else
         {
@@ -209,11 +200,10 @@ setup_fdm(const typename Triangulation<dim>::cell_iterator &cell,
   fdm.reinit(mass_matrices, derivative_matrices);
 
   for (unsigned int d = 0; d < dim; ++d)
-    {
-      for (unsigned int i = 0; i < n_dofs_1D; ++i)
-        if (masks[d][i] == false)
-          clear_row(i, fdm.get_eigenvectors()[d], n_dofs_1D);
-    }
+    for (unsigned int i = 0; i < n_dofs_1D; ++i)
+      if (masks[d][i] == false)
+        for (unsigned int j = 0; j < n_dofs_1D; ++j)
+          fdm.get_eigenvectors()[d][i][j] = 0.0;
 
   return fdm;
 }
