@@ -39,7 +39,6 @@ public:
     return this->eigenvectors;
   }
 
-
 private:
 };
 
@@ -104,19 +103,20 @@ setup_fdm(const typename Triangulation<dim>::cell_iterator &cell,
   std::array<FullMatrix<Number>, dim> derivative_matrices;
   std::array<std::vector<bool>, dim>  masks;
 
-  const auto clear_row_and_column = [](const unsigned int n,
-                                       auto &             matrix,
-                                       const unsigned int size,
-                                       const bool         set_one) {
-    for (unsigned int i = 0; i < size; ++i)
-      {
-        matrix[i][n] = 0.0;
-        matrix[n][i] = 0.0;
-      }
+  const auto clear_row_and_column =
+    [](const unsigned int n, auto &matrix, const unsigned int size) {
+      for (unsigned int i = 0; i < size; ++i)
+        {
+          matrix[i][n] = 0.0;
+          matrix[n][i] = 0.0;
+        }
+    };
 
-    if (set_one)
-      matrix[n][n] = 1.0;
-  };
+  const auto clear_row =
+    [](const unsigned int n, auto &matrix, const unsigned int size) {
+      for (unsigned int i = 0; i < size; ++i)
+        matrix[n][i] = 0.0;
+    };
 
   // 2) loop over all dimensions and create mass and stiffness
   // matrix so that boundary conditions and overlap are considered
@@ -154,10 +154,8 @@ setup_fdm(const typename Triangulation<dim>::cell_iterator &cell,
       else if (cell->face(2 * d)->boundary_id() == 1 /*DBC*/)
         {
           // left DBC
-          clear_row_and_column(0 /*TODO*/, mass_matrix, n_dofs_1D, true);
-          clear_row_and_column(0 /*TODO*/, derivative_matrix, n_dofs_1D, true);
-
-          masks[d][0] = false;
+          clear_row_and_column(0 /*TODO*/, mass_matrix, n_dofs_1D);
+          clear_row_and_column(0 /*TODO*/, derivative_matrix, n_dofs_1D);
         }
       else
         {
@@ -177,17 +175,10 @@ setup_fdm(const typename Triangulation<dim>::cell_iterator &cell,
       else if (cell->face(2 * d + 1)->boundary_id() == 1 /*DBC*/)
         {
           // right DBC
-
-          clear_row_and_column(n_dofs_1D - 1 /*TODO*/,
-                               mass_matrix,
-                               n_dofs_1D,
-                               true);
+          clear_row_and_column(n_dofs_1D - 1 /*TODO*/, mass_matrix, n_dofs_1D);
           clear_row_and_column(n_dofs_1D - 1 /*TODO*/,
                                derivative_matrix,
-                               n_dofs_1D,
-                               true);
-
-          masks[d][n_dofs_1D - 1] = false;
+                               n_dofs_1D);
         }
       else
         {
@@ -197,13 +188,15 @@ setup_fdm(const typename Triangulation<dim>::cell_iterator &cell,
       for (unsigned int i = 0; i < n_dofs_1D; ++i)
         if (derivative_matrix[i][i] == 0.0)
           {
-            masks[d][i] = false;
+            mass_matrix[i][i]       = 1.0;
+            derivative_matrix[i][i] = 1.0;
+            masks[d][i]             = false;
           }
 
-#if false
-      mass_matrix.print(std::cout);
+#if true
+      mass_matrix.print_formatted(std::cout, 3, true, 10);
       std::cout << std::endl;
-      derivative_matrix.print(std::cout);
+      derivative_matrix.print_formatted(std::cout, 3, true, 10);
       std::cout << std::endl;
       std::cout << std::endl;
 #endif
@@ -215,12 +208,11 @@ setup_fdm(const typename Triangulation<dim>::cell_iterator &cell,
   MyTensorProductMatrixSymmetricSum<dim, Number> fdm;
   fdm.reinit(mass_matrices, derivative_matrices);
 
-  // if(false)
   for (unsigned int d = 0; d < dim; ++d)
     {
       for (unsigned int i = 0; i < n_dofs_1D; ++i)
         if (masks[d][i] == false)
-          clear_row_and_column(i, fdm.get_eigenvectors()[d], n_dofs_1D, false);
+          clear_row(i, fdm.get_eigenvectors()[d], n_dofs_1D);
     }
 
   return fdm;
@@ -299,7 +291,7 @@ test(const unsigned int fe_degree)
 
   for (const auto &cell : tria.active_cell_iterators())
     {
-      if (cell->active_cell_index() != 2)
+      if (cell->active_cell_index() != 5)
         continue;
 
       const auto &patch_extend =
