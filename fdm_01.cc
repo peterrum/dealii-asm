@@ -47,8 +47,11 @@ MyTensorProductMatrixSymmetricSum<dim, Number>
 setup_fdm(const typename Triangulation<dim>::cell_iterator &cell,
           const FiniteElement<1> &                          fe,
           const Quadrature<1> &                             quadrature,
-          const dealii::ndarray<double, dim, 3> &           cell_extend)
+          const dealii::ndarray<double, dim, 3> &           cell_extend,
+          const unsigned int                                n_overlap)
 {
+  AssertIndexRange(0, n_overlap);
+
   // 1) create element mass and siffness matrix (without overlap)
   Triangulation<1> tria;
   GridGenerator::hyper_cube(tria);
@@ -94,8 +97,6 @@ setup_fdm(const typename Triangulation<dim>::cell_iterator &cell,
                                   q_index) *
              fe_values.JxW(q_index));
         }
-
-  const unsigned int n_overlap = 1;
 
   const unsigned int n_dofs_1D = fe.n_dofs_per_cell() - 2 + 2 * n_overlap;
 
@@ -210,7 +211,7 @@ setup_fdm(const typename Triangulation<dim>::cell_iterator &cell,
 
 template <int dim>
 void
-test(const unsigned int fe_degree)
+test(const unsigned int fe_degree, const unsigned int n_overlap)
 {
   FE_Q<dim> fe(fe_degree);
   FE_Q<1>   fe_1D(fe_degree);
@@ -297,8 +298,8 @@ test(const unsigned int fe_degree)
       std::cout << std::endl;
 #endif
 
-      const auto fdm =
-        setup_fdm<dim, double>(cell, fe_1D, quadrature_1D, patch_extend);
+      const auto fdm = setup_fdm<dim, double>(
+        cell, fe_1D, quadrature_1D, patch_extend, n_overlap);
 
       Vector<double> src, dst;
 
@@ -336,9 +337,10 @@ main(int argc, char *argv[])
 
   const unsigned int dim       = argc > 1 ? atoi(argv[1]) : 2;
   const unsigned int fe_degree = argc > 2 ? atoi(argv[2]) : 2;
+  const unsigned int n_overlap = argc > 3 ? atoi(argv[3]) : 1;
 
   if (dim == 2)
-    test<2>(fe_degree);
+    test<2>(fe_degree, n_overlap);
   else
     AssertThrow(false, ExcNotImplemented());
 }
