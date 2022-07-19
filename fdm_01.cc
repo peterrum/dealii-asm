@@ -267,17 +267,22 @@ test(const unsigned int fe_degree, const unsigned int n_overlap)
 
   Triangulation<dim> tria;
 
-  const double left  = 0.0;
   const double right = 1.0;
 
   std::vector<std::vector<double>> step_sizes(dim);
 
   for (unsigned int d = 0; d < dim; ++d)
     for (unsigned int i = 0; i < 3; ++i)
-      step_sizes[d].push_back((right - left) / 3);
+      step_sizes[d].push_back(right / 3.0);
+
+  Point<dim> point;
+
+  for (unsigned int d = 0; d < dim; ++d)
+    for (const auto &value : step_sizes[d])
+      point[d] += value;
 
   GridGenerator::subdivided_hyper_rectangle(
-    tria, step_sizes, Point<dim>(left, left), Point<dim>(right, right), false);
+    tria, step_sizes, Point<dim>(), point, false);
 
   for (const auto &face : tria.active_face_iterators())
     if (face->at_boundary())
@@ -329,7 +334,7 @@ test(const unsigned int fe_degree, const unsigned int n_overlap)
 
   for (const auto &cell : tria.active_cell_iterators())
     {
-      if (cell->active_cell_index() != 5)
+      if (cell->active_cell_index() != 2)
         continue;
 
       const auto &patch_extend =
