@@ -136,12 +136,12 @@ setup_fdm(const typename Triangulation<dim>::cell_iterator &cell,
           const dealii::ndarray<double, dim, 3> &           cell_extend,
           const unsigned int                                n_overlap)
 {
-  AssertIndexRange(0, n_overlap);
-
   // 1) create element mass and siffness matrix (without overlap)
   const auto [M_ref, K_ref, is_dg] =
     create_referece_cell_matrices<Number>(fe, quadrature);
 
+  AssertIndexRange(n_overlap, M_ref.n());
+  AssertIndexRange(0, n_overlap);
   AssertThrow(is_dg == false, ExcNotImplemented());
 
   const unsigned int n_dofs_1D              = M_ref.n();
