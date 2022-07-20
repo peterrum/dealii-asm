@@ -168,14 +168,14 @@ setup_fdm(const typename Triangulation<dim>::cell_iterator &cell,
 
       masks[d].assign(n_dofs_1D_with_overlap, true);
 
-      // inner DoFs
+      // inner cell
       for (unsigned int i = 0; i < n_dofs_1D; ++i)
         for (unsigned int j = 0; j < n_dofs_1D; ++j)
           {
-            M[i + n_overlap - 1][j + n_overlap - 1] =
-              M_ref[i][j] * cell_extend[d][1];
-            K[i + n_overlap - 1][j + n_overlap - 1] =
-              K_ref[i][j] / cell_extend[d][1];
+            const unsigned int i0 = i + n_overlap - 1;
+            const unsigned int j0 = j + n_overlap - 1;
+            M[i0][j0]             = M_ref[i][j] * cell_extend[d][1];
+            K[i0][j0]             = K_ref[i][j] / cell_extend[d][1];
           }
 
       // left neighbor or left boundary
@@ -187,19 +187,18 @@ setup_fdm(const typename Triangulation<dim>::cell_iterator &cell,
           for (unsigned int i = 0; i < n_overlap; ++i)
             for (unsigned int j = 0; j < n_overlap; ++j)
               {
-                M[i][j] +=
-                  M_ref[n_dofs_1D - n_overlap + i][n_dofs_1D - n_overlap + j] *
-                  cell_extend[d][0];
-                K[i][j] +=
-                  K_ref[n_dofs_1D - n_overlap + i][n_dofs_1D - n_overlap + j] /
-                  cell_extend[d][0];
+                const unsigned int i0 = n_dofs_1D - n_overlap + i;
+                const unsigned int j0 = n_dofs_1D - n_overlap + j;
+                M[i][j] += M_ref[i0][j0] * cell_extend[d][0];
+                K[i][j] += K_ref[i0][j0] / cell_extend[d][0];
               }
         }
       else if (cell->face(2 * d)->boundary_id() == 1 /*DBC*/)
         {
           // left DBC
-          clear_row_and_column(n_overlap - 1, M);
-          clear_row_and_column(n_overlap - 1, K);
+          const unsigned i0 = n_overlap - 1;
+          clear_row_and_column(i0, M);
+          clear_row_and_column(i0, K);
         }
       else
         {
@@ -216,7 +215,6 @@ setup_fdm(const typename Triangulation<dim>::cell_iterator &cell,
               {
                 const unsigned int i0 = n_overlap + n_dofs_1D + i - 2;
                 const unsigned int j0 = n_overlap + n_dofs_1D + j - 2;
-
                 M[i0][j0] += M_ref[i][j] * cell_extend[d][2];
                 K[i0][j0] += K_ref[i][j] / cell_extend[d][2];
               }
@@ -242,14 +240,6 @@ setup_fdm(const typename Triangulation<dim>::cell_iterator &cell,
             K[i][i]     = 1.0;
             masks[d][i] = false;
           }
-
-#if false
-      M.print_formatted(std::cout, 3, true, 10);
-      std::cout << std::endl;
-      K.print_formatted(std::cout, 3, true, 10);
-      std::cout << std::endl;
-      std::cout << std::endl;
-#endif
 
       Ms[d] = M;
       Ks[d] = K;
