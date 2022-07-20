@@ -231,6 +231,10 @@ setup_fdm(const typename Triangulation<dim>::cell_iterator &cell,
           // right NBC -> nothing to do
         }
 
+      // set zero diagonal entries to one so that the matrices are
+      // invertible; we will ignore those entries with masking; zero
+      // diagonal entries might be due to 1) DBC and 2) overlap into
+      // a non-existent cell
       for (unsigned int i = 0; i < n_dofs_1D_with_overlap; ++i)
         if (K[i][i] == 0.0)
           {
