@@ -147,14 +147,15 @@ setup_fdm(const typename Triangulation<dim>::cell_iterator &cell,
   AssertThrow(is_dg == false, ExcNotImplemented());
 
   const unsigned int n_dofs_1D_without_overlap = mass_matrix_reference.n();
-  const unsigned int n_dofs_1D = mass_matrix_reference.n() - 2 + 2 * n_overlap;
+  const unsigned int n_dofs_1D_with_overlap =
+    mass_matrix_reference.n() - 2 + 2 * n_overlap;
 
   std::array<FullMatrix<Number>, dim> mass_matrices;
   std::array<FullMatrix<Number>, dim> derivative_matrices;
   std::array<std::vector<bool>, dim>  masks;
 
   const auto clear_row_and_column = [&](const unsigned int n, auto &matrix) {
-    for (unsigned int i = 0; i < n_dofs_1D; ++i)
+    for (unsigned int i = 0; i < n_dofs_1D_with_overlap; ++i)
       {
         matrix[i][n] = 0.0;
         matrix[n][i] = 0.0;
@@ -165,10 +166,12 @@ setup_fdm(const typename Triangulation<dim>::cell_iterator &cell,
   // matrix so that boundary conditions and overlap are considered
   for (unsigned int d = 0; d < dim; ++d)
     {
-      FullMatrix<Number> mass_matrix(n_dofs_1D, n_dofs_1D);
-      FullMatrix<Number> derivative_matrix(n_dofs_1D, n_dofs_1D);
+      FullMatrix<Number> mass_matrix(n_dofs_1D_with_overlap,
+                                     n_dofs_1D_with_overlap);
+      FullMatrix<Number> derivative_matrix(n_dofs_1D_with_overlap,
+                                           n_dofs_1D_with_overlap);
 
-      masks[d].assign(n_dofs_1D, true);
+      masks[d].assign(n_dofs_1D_with_overlap, true);
 
       // inner DoFs
       for (unsigned int i = 0; i < n_dofs_1D_without_overlap; ++i)
@@ -243,7 +246,7 @@ setup_fdm(const typename Triangulation<dim>::cell_iterator &cell,
           // right NBC -> nothing to do
         }
 
-      for (unsigned int i = 0; i < n_dofs_1D; ++i)
+      for (unsigned int i = 0; i < n_dofs_1D_with_overlap; ++i)
         if (derivative_matrix[i][i] == 0.0)
           {
             mass_matrix[i][i]       = 1.0;
