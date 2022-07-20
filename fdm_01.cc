@@ -139,17 +139,16 @@ setup_fdm(const typename Triangulation<dim>::cell_iterator &cell,
   AssertIndexRange(0, n_overlap);
 
   // 1) create element mass and siffness matrix (without overlap)
-  const auto [mass_matrix_reference, derivative_matrix_reference, is_dg] =
+  const auto [M_ref, K_ref, is_dg] =
     create_referece_cell_matrices<Number>(fe, quadrature);
 
   AssertThrow(is_dg == false, ExcNotImplemented());
 
-  const unsigned int n_dofs_1D = mass_matrix_reference.n();
-  const unsigned int n_dofs_1D_with_overlap =
-    mass_matrix_reference.n() - 2 + 2 * n_overlap;
+  const unsigned int n_dofs_1D              = M_ref.n();
+  const unsigned int n_dofs_1D_with_overlap = M_ref.n() - 2 + 2 * n_overlap;
 
-  std::array<FullMatrix<Number>, dim> mass_matrices;
-  std::array<FullMatrix<Number>, dim> derivative_matrices;
+  std::array<FullMatrix<Number>, dim> Ms;
+  std::array<FullMatrix<Number>, dim> Ks;
   std::array<std::vector<bool>, dim>  masks;
 
   const auto clear_row_and_column = [&](const unsigned int n, auto &matrix) {
@@ -164,10 +163,8 @@ setup_fdm(const typename Triangulation<dim>::cell_iterator &cell,
   // matrix so that boundary conditions and overlap are considered
   for (unsigned int d = 0; d < dim; ++d)
     {
-      FullMatrix<Number> mass_matrix(n_dofs_1D_with_overlap,
-                                     n_dofs_1D_with_overlap);
-      FullMatrix<Number> derivative_matrix(n_dofs_1D_with_overlap,
-                                           n_dofs_1D_with_overlap);
+      FullMatrix<Number> M(n_dofs_1D_with_overlap, n_dofs_1D_with_overlap);
+      FullMatrix<Number> K(n_dofs_1D_with_overlap, n_dofs_1D_with_overlap);
 
       masks[d].assign(n_dofs_1D_with_overlap, true);
 
@@ -175,10 +172,10 @@ setup_fdm(const typename Triangulation<dim>::cell_iterator &cell,
       for (unsigned int i = 0; i < n_dofs_1D; ++i)
         for (unsigned int j = 0; j < n_dofs_1D; ++j)
           {
-            mass_matrix[i + n_overlap - 1][j + n_overlap - 1] =
-              mass_matrix_reference[i][j] * cell_extend[d][1];
-            derivative_matrix[i + n_overlap - 1][j + n_overlap - 1] =
-              derivative_matrix_reference[i][j] / cell_extend[d][1];
+            M[i + n_overlap - 1][j + n_overlap - 1] =
+              M_ref[i][j] * cell_extend[d][1];
+            K[i + n_overlap - 1][j + n_overlap - 1] =
+              K_ref[i][j] / cell_extend[d][1];
           }
 
       // left neighbor or left boundary
@@ -190,21 +187,19 @@ setup_fdm(const typename Triangulation<dim>::cell_iterator &cell,
           for (unsigned int i = 0; i < n_overlap; ++i)
             for (unsigned int j = 0; j < n_overlap; ++j)
               {
-                mass_matrix[i][j] +=
-                  mass_matrix_reference[n_dofs_1D - n_overlap + i]
-                                       [n_dofs_1D - n_overlap + j] *
+                M[i][j] +=
+                  M_ref[n_dofs_1D - n_overlap + i][n_dofs_1D - n_overlap + j] *
                   cell_extend[d][0];
-                derivative_matrix[i][j] +=
-                  derivative_matrix_reference[n_dofs_1D - n_overlap + i]
-                                             [n_dofs_1D - n_overlap + j] /
+                K[i][j] +=
+                  K_ref[n_dofs_1D - n_overlap + i][n_dofs_1D - n_overlap + j] /
                   cell_extend[d][0];
               }
         }
       else if (cell->face(2 * d)->boundary_id() == 1 /*DBC*/)
         {
           // left DBC
-          clear_row_and_column(n_overlap - 1, mass_matrix);
-          clear_row_and_column(n_overlap - 1, derivative_matrix);
+          clear_row_and_column(n_overlap - 1, M);
+          clear_row_and_column(n_overlap - 1, K);
         }
       else
         {
@@ -219,19 +214,19 @@ setup_fdm(const typename Triangulation<dim>::cell_iterator &cell,
           for (unsigned int i = 0; i < n_overlap; ++i)
             for (unsigned int j = 0; j < n_overlap; ++j)
               {
-                mass_matrix[n_overlap + n_dofs_1D + i - 2]
-                           [n_overlap + n_dofs_1D + j - 2] +=
-                  mass_matrix_reference[i][j] * cell_extend[d][2];
-                derivative_matrix[n_overlap + n_dofs_1D + i - 2]
-                                 [n_overlap + n_dofs_1D + j - 2] +=
-                  derivative_matrix_reference[i][j] / cell_extend[d][2];
+                M[n_overlap + n_dofs_1D + i - 2]
+                 [n_overlap + n_dofs_1D + j - 2] +=
+                  M_ref[i][j] * cell_extend[d][2];
+                K[n_overlap + n_dofs_1D + i - 2]
+                 [n_overlap + n_dofs_1D + j - 2] +=
+                  K_ref[i][j] / cell_extend[d][2];
               }
         }
       else if (cell->face(2 * d + 1)->boundary_id() == 1 /*DBC*/)
         {
           // right DBC
-          clear_row_and_column(n_overlap + n_dofs_1D - 2, mass_matrix);
-          clear_row_and_column(n_overlap + n_dofs_1D - 2, derivative_matrix);
+          clear_row_and_column(n_overlap + n_dofs_1D - 2, M);
+          clear_row_and_column(n_overlap + n_dofs_1D - 2, K);
         }
       else
         {
@@ -239,27 +234,27 @@ setup_fdm(const typename Triangulation<dim>::cell_iterator &cell,
         }
 
       for (unsigned int i = 0; i < n_dofs_1D_with_overlap; ++i)
-        if (derivative_matrix[i][i] == 0.0)
+        if (K[i][i] == 0.0)
           {
-            mass_matrix[i][i]       = 1.0;
-            derivative_matrix[i][i] = 1.0;
-            masks[d][i]             = false;
+            M[i][i]     = 1.0;
+            K[i][i]     = 1.0;
+            masks[d][i] = false;
           }
 
 #if false
-      mass_matrix.print_formatted(std::cout, 3, true, 10);
+      M.print_formatted(std::cout, 3, true, 10);
       std::cout << std::endl;
-      derivative_matrix.print_formatted(std::cout, 3, true, 10);
+      K.print_formatted(std::cout, 3, true, 10);
       std::cout << std::endl;
       std::cout << std::endl;
 #endif
 
-      mass_matrices[d]       = mass_matrix;
-      derivative_matrices[d] = derivative_matrix;
+      Ms[d] = M;
+      Ks[d] = K;
     }
 
   MyTensorProductMatrixSymmetricSum<dim, Number> fdm;
-  fdm.reinit(mass_matrices, derivative_matrices);
+  fdm.reinit(Ms, Ks);
   fdm.set_mask(masks);
 
   return fdm;
