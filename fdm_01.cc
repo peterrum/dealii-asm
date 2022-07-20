@@ -144,6 +144,9 @@ setup_fdm(const typename Triangulation<dim>::cell_iterator &cell,
   AssertIndexRange(0, n_overlap);
   AssertThrow(is_dg == false, ExcNotImplemented());
 
+  // 2) loop over all dimensions and create 1D mass and stiffness
+  // matrices so that boundary conditions and overlap are considered
+
   const unsigned int n_dofs_1D              = M_ref.n();
   const unsigned int n_dofs_1D_with_overlap = M_ref.n() - 2 + 2 * n_overlap;
 
@@ -159,8 +162,6 @@ setup_fdm(const typename Triangulation<dim>::cell_iterator &cell,
       }
   };
 
-  // 2) loop over all dimensions and create mass and stiffness
-  // matrix so that boundary conditions and overlap are considered
   for (unsigned int d = 0; d < dim; ++d)
     {
       FullMatrix<Number> M(n_dofs_1D_with_overlap, n_dofs_1D_with_overlap);
@@ -249,6 +250,7 @@ setup_fdm(const typename Triangulation<dim>::cell_iterator &cell,
       Ks[d] = K;
     }
 
+  // 3) setup FDM routine
   MyTensorProductMatrixSymmetricSum<dim, Number> fdm;
   fdm.reinit(Ms, Ks);
   fdm.set_mask(masks);
