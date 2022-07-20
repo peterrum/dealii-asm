@@ -89,12 +89,10 @@ create_referece_cell_matrices(const FiniteElement<1> &fe,
 
   MappingQ1<1> mapping;
 
-  const unsigned int n_dofs_1D_without_overlap = fe.n_dofs_per_cell();
+  const unsigned int n_dofs_1D = fe.n_dofs_per_cell();
 
-  FullMatrix<Number> mass_matrix_reference(n_dofs_1D_without_overlap,
-                                           n_dofs_1D_without_overlap);
-  FullMatrix<Number> derivative_matrix_reference(n_dofs_1D_without_overlap,
-                                                 n_dofs_1D_without_overlap);
+  FullMatrix<Number> mass_matrix_reference(n_dofs_1D, n_dofs_1D);
+  FullMatrix<Number> derivative_matrix_reference(n_dofs_1D, n_dofs_1D);
 
   FEValues<1> fe_values(mapping,
                         fe,
@@ -146,7 +144,7 @@ setup_fdm(const typename Triangulation<dim>::cell_iterator &cell,
 
   AssertThrow(is_dg == false, ExcNotImplemented());
 
-  const unsigned int n_dofs_1D_without_overlap = mass_matrix_reference.n();
+  const unsigned int n_dofs_1D = mass_matrix_reference.n();
   const unsigned int n_dofs_1D_with_overlap =
     mass_matrix_reference.n() - 2 + 2 * n_overlap;
 
@@ -174,8 +172,8 @@ setup_fdm(const typename Triangulation<dim>::cell_iterator &cell,
       masks[d].assign(n_dofs_1D_with_overlap, true);
 
       // inner DoFs
-      for (unsigned int i = 0; i < n_dofs_1D_without_overlap; ++i)
-        for (unsigned int j = 0; j < n_dofs_1D_without_overlap; ++j)
+      for (unsigned int i = 0; i < n_dofs_1D; ++i)
+        for (unsigned int j = 0; j < n_dofs_1D; ++j)
           {
             mass_matrix[i + n_overlap - 1][j + n_overlap - 1] =
               mass_matrix_reference[i][j] * cell_extend[d][1];
@@ -193,15 +191,12 @@ setup_fdm(const typename Triangulation<dim>::cell_iterator &cell,
             for (unsigned int j = 0; j < n_overlap; ++j)
               {
                 mass_matrix[i][j] +=
-                  mass_matrix_reference[n_dofs_1D_without_overlap - n_overlap +
-                                        i][n_dofs_1D_without_overlap -
-                                           n_overlap + j] *
+                  mass_matrix_reference[n_dofs_1D - n_overlap + i]
+                                       [n_dofs_1D - n_overlap + j] *
                   cell_extend[d][0];
                 derivative_matrix[i][j] +=
-                  derivative_matrix_reference[n_dofs_1D_without_overlap -
-                                              n_overlap + i]
-                                             [n_dofs_1D_without_overlap -
-                                              n_overlap + j] /
+                  derivative_matrix_reference[n_dofs_1D - n_overlap + i]
+                                             [n_dofs_1D - n_overlap + j] /
                   cell_extend[d][0];
               }
         }
@@ -224,22 +219,19 @@ setup_fdm(const typename Triangulation<dim>::cell_iterator &cell,
           for (unsigned int i = 0; i < n_overlap; ++i)
             for (unsigned int j = 0; j < n_overlap; ++j)
               {
-                mass_matrix[n_overlap + n_dofs_1D_without_overlap + i - 2]
-                           [n_overlap + n_dofs_1D_without_overlap + j - 2] +=
+                mass_matrix[n_overlap + n_dofs_1D + i - 2]
+                           [n_overlap + n_dofs_1D + j - 2] +=
                   mass_matrix_reference[i][j] * cell_extend[d][2];
-                derivative_matrix[n_overlap + n_dofs_1D_without_overlap + i - 2]
-                                 [n_overlap + n_dofs_1D_without_overlap + j -
-                                  2] +=
+                derivative_matrix[n_overlap + n_dofs_1D + i - 2]
+                                 [n_overlap + n_dofs_1D + j - 2] +=
                   derivative_matrix_reference[i][j] / cell_extend[d][2];
               }
         }
       else if (cell->face(2 * d + 1)->boundary_id() == 1 /*DBC*/)
         {
           // right DBC
-          clear_row_and_column(n_overlap + n_dofs_1D_without_overlap - 2,
-                               mass_matrix);
-          clear_row_and_column(n_overlap + n_dofs_1D_without_overlap - 2,
-                               derivative_matrix);
+          clear_row_and_column(n_overlap + n_dofs_1D - 2, mass_matrix);
+          clear_row_and_column(n_overlap + n_dofs_1D - 2, derivative_matrix);
         }
       else
         {
