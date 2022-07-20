@@ -75,17 +75,12 @@ private:
   std::array<std::vector<bool>, dim> masks;
 };
 
-template <int dim, typename Number>
-MyTensorProductMatrixSymmetricSum<dim, Number>
-setup_fdm(const typename Triangulation<dim>::cell_iterator &cell,
-          const FiniteElement<1> &                          fe,
-          const Quadrature<1> &                             quadrature,
-          const dealii::ndarray<double, dim, 3> &           cell_extend,
-          const unsigned int                                n_overlap)
-{
-  AssertIndexRange(0, n_overlap);
 
-  // 1) create element mass and siffness matrix (without overlap)
+template <typename Number>
+std::tuple<FullMatrix<Number>, FullMatrix<Number>, bool>
+create_referece_cell_matrices(const FiniteElement<1> &fe,
+                              const Quadrature<1> &   quadrature)
+{
   Triangulation<1> tria;
   GridGenerator::hyper_cube(tria);
 
@@ -131,7 +126,28 @@ setup_fdm(const typename Triangulation<dim>::cell_iterator &cell,
              fe_values.JxW(q_index));
         }
 
-  const unsigned int n_dofs_1D = fe.n_dofs_per_cell() - 2 + 2 * n_overlap;
+  return {mass_matrix_reference, derivative_matrix_reference, false};
+}
+
+
+template <int dim, typename Number>
+MyTensorProductMatrixSymmetricSum<dim, Number>
+setup_fdm(const typename Triangulation<dim>::cell_iterator &cell,
+          const FiniteElement<1> &                          fe,
+          const Quadrature<1> &                             quadrature,
+          const dealii::ndarray<double, dim, 3> &           cell_extend,
+          const unsigned int                                n_overlap)
+{
+  AssertIndexRange(0, n_overlap);
+
+  // 1) create element mass and siffness matrix (without overlap)
+  const auto [mass_matrix_reference, derivative_matrix_reference, is_dg] =
+    create_referece_cell_matrices<Number>(fe, quadrature);
+
+  AssertThrow(is_dg == false, ExcNotImplemented());
+
+  const unsigned int n_dofs_1D_without_overlap = mass_matrix_reference.n();
+  const unsigned int n_dofs_1D = mass_matrix_reference.n() - 2 + 2 * n_overlap;
 
   std::array<FullMatrix<Number>, dim> mass_matrices;
   std::array<FullMatrix<Number>, dim> derivative_matrices;
