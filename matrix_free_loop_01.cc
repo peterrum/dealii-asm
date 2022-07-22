@@ -31,156 +31,133 @@
 
 using namespace dealii;
 
-
-template <int dim>
-void
-test(const unsigned int fe_degree,
-     const unsigned int n_global_refinements,
-     const unsigned int n_overlap)
+template <int dim, typename Number, typename VectorizedArrayType>
+class ASPoissonPreconditioner
 {
-  using Number              = double;
-  using VectorizedArrayType = VectorizedArray<Number>;
-  using VectorType          = LinearAlgebra::distributed::Vector<double>;
+public:
+  using VectorType = LinearAlgebra::distributed::Vector<double>;
 
-  FE_Q<dim> fe(fe_degree);
-  FE_Q<1>   fe_1D(fe_degree);
+  ASPoissonPreconditioner(
+    const MatrixFree<dim, Number, VectorizedArrayType> &matrix_free,
+    const unsigned int                                  n_overlap,
+    const Mapping<dim> &                                mapping,
+    const FiniteElement<1> &                            fe_1D,
+    const QGauss<dim - 1> &                             quadrature_face,
+    const Quadrature<1> &                               quadrature_1D)
+    : matrix_free(matrix_free)
+    , fe_degree(matrix_free.get_dof_handler().get_fe().tensor_degree())
+    , n_overlap(n_overlap)
+  {
+    const auto &dof_handler = matrix_free.get_dof_handler();
 
-  QGauss<dim>     quadrature(fe_degree + 1);
-  QGauss<dim - 1> quadrature_face(fe_degree + 1);
-  QGauss<1>       quadrature_1D(fe_degree + 1);
+    // set up ConstraintInfo
+    // ... allocate memory
+    constraint_info.reinit(matrix_free.n_physical_cells());
 
-  ConditionalOStream pcout(std::cout,
-                           Utilities::MPI::this_mpi_process(MPI_COMM_WORLD) ==
-                             0);
+    auto partitioner_for_fdm = matrix_free.get_vector_partitioner();
 
-  parallel::distributed::Triangulation<dim> tria(MPI_COMM_WORLD);
-  GridGenerator::hyper_cube(tria);
-  tria.refine_global(n_global_refinements);
+    if (n_overlap > 1)
+      {
+        const auto &locally_owned_dofs = dof_handler.locally_owned_dofs();
 
-  DoFHandler<dim> dof_handler(tria);
-  dof_handler.distribute_dofs(FE_Q<dim>(fe_degree));
+        std::vector<types::global_dof_index> ghost_indices;
 
-  MappingQ1<dim> mapping;
+        for (unsigned int cell = 0, cell_counter = 0;
+             cell < matrix_free.n_cell_batches();
+             ++cell)
+          {
+            for (unsigned int v = 0;
+                 v < matrix_free.n_active_entries_per_cell_batch(cell);
+                 ++v, ++cell_counter)
+              {
+                const auto cells =
+                  dealii::GridTools::extract_all_surrounding_cells_cartesian<
+                    dim>(matrix_free.get_cell_iterator(cell, v),
+                         n_overlap <= 1 ? 0 : dim);
 
-  AffineConstraints<double> constraints;
-  DoFTools::make_zero_boundary_constraints(dof_handler, constraints);
-  constraints.close();
+                const auto local_dofs =
+                  dealii::DoFTools::get_dof_indices_cell_with_overlap(
+                    dof_handler, cells, n_overlap, true);
 
-  MatrixFree<dim, Number, VectorizedArrayType> matrix_free;
-  matrix_free.reinit(mapping, dof_handler, constraints, quadrature);
+                for (const auto i : local_dofs)
+                  if ((locally_owned_dofs.is_element(i) == false) &&
+                      (i != numbers::invalid_unsigned_int))
+                    ghost_indices.push_back(i);
+              }
+          }
 
-  // set up ConstraintInfo
-  internal::MatrixFreeFunctions::ConstraintInfo<dim, VectorizedArrayType>
-    constraint_info;
+        std::sort(ghost_indices.begin(), ghost_indices.end());
+        ghost_indices.erase(std::unique(ghost_indices.begin(),
+                                        ghost_indices.end()),
+                            ghost_indices.end());
 
-  // ... allocate memory
-  constraint_info.reinit(matrix_free.n_physical_cells());
+        IndexSet is_ghost_indices(locally_owned_dofs.size());
+        is_ghost_indices.add_indices(ghost_indices.begin(),
+                                     ghost_indices.end());
 
-  auto partitioner_for_fdm = matrix_free.get_vector_partitioner();
+        partitioner_for_fdm = std::make_shared<Utilities::MPI::Partitioner>(
+          locally_owned_dofs, is_ghost_indices, dof_handler.get_communicator());
+      }
 
-  if (n_overlap > 1)
-    {
-      const auto &locally_owned_dofs = dof_handler.locally_owned_dofs();
+    fdm.resize(matrix_free.n_cell_batches());
 
-      std::vector<types::global_dof_index> ghost_indices;
+    const auto harmonic_patch_extend =
+      GridTools::compute_harmonic_patch_extend(mapping,
+                                               dof_handler.get_triangulation(),
+                                               quadrature_face);
 
-      for (unsigned int cell = 0, cell_counter = 0;
-           cell < matrix_free.n_cell_batches();
-           ++cell)
-        {
-          for (unsigned int v = 0;
-               v < matrix_free.n_active_entries_per_cell_batch(cell);
-               ++v, ++cell_counter)
-            {
-              const auto cells =
-                dealii::GridTools::extract_all_surrounding_cells_cartesian<dim>(
-                  matrix_free.get_cell_iterator(cell, v),
-                  n_overlap <= 1 ? 0 : dim);
+    // ... collect DoF indices
+    cell_ptr = {0};
+    for (unsigned int cell = 0, cell_counter = 0;
+         cell < matrix_free.n_cell_batches();
+         ++cell)
+      {
+        std::array<MyTensorProductMatrixSymmetricSum<dim, Number>,
+                   VectorizedArrayType::size()>
+          scalar_fdm;
 
-              const auto local_dofs =
-                dealii::DoFTools::get_dof_indices_cell_with_overlap(dof_handler,
-                                                                    cells,
-                                                                    n_overlap,
-                                                                    true);
+        for (unsigned int v = 0;
+             v < matrix_free.n_active_entries_per_cell_batch(cell);
+             ++v, ++cell_counter)
+          {
+            const auto cell_iterator = matrix_free.get_cell_iterator(cell, v);
 
-              for (const auto i : local_dofs)
-                if ((locally_owned_dofs.is_element(i) == false) &&
-                    (i != numbers::invalid_unsigned_int))
-                  ghost_indices.push_back(i);
-            }
-        }
+            const auto cells =
+              dealii::GridTools::extract_all_surrounding_cells_cartesian<dim>(
+                cell_iterator, n_overlap <= 1 ? 0 : dim);
 
-      std::sort(ghost_indices.begin(), ghost_indices.end());
-      ghost_indices.erase(std::unique(ghost_indices.begin(),
-                                      ghost_indices.end()),
-                          ghost_indices.end());
+            constraint_info.read_dof_indices(
+              cell_counter,
+              dealii::DoFTools::get_dof_indices_cell_with_overlap(
+                dof_handler, cells, n_overlap, true),
+              partitioner_for_fdm);
 
-      IndexSet is_ghost_indices(locally_owned_dofs.size());
-      is_ghost_indices.add_indices(ghost_indices.begin(), ghost_indices.end());
+            scalar_fdm[v] = setup_fdm<dim, Number>(
+              cell_iterator,
+              fe_1D,
+              quadrature_1D,
+              harmonic_patch_extend[cell_iterator->active_cell_index()],
+              n_overlap);
+          }
 
-      partitioner_for_fdm = std::make_shared<Utilities::MPI::Partitioner>(
-        locally_owned_dofs, is_ghost_indices, dof_handler.get_communicator());
-    }
+        cell_ptr.push_back(cell_ptr.back() +
+                           matrix_free.n_active_entries_per_cell_batch(cell));
 
-  std::vector<MyTensorProductMatrixSymmetricSum<dim, VectorizedArrayType>> fdm(
-    matrix_free.n_cell_batches());
+        fdm[cell] =
+          MyTensorProductMatrixSymmetricSum<dim, Number>::template transpose<
+            VectorizedArrayType::size()>(
+            scalar_fdm, matrix_free.n_active_entries_per_cell_batch(cell));
+      }
 
-  const auto harmonic_patch_extend =
-    GridTools::compute_harmonic_patch_extend(mapping, tria, quadrature_face);
+    constraint_info.finalize();
 
-  // ... collect DoF indices
-  std::vector<unsigned int> cell_ptr = {0};
-  for (unsigned int cell = 0, cell_counter = 0;
-       cell < matrix_free.n_cell_batches();
-       ++cell)
-    {
-      std::array<MyTensorProductMatrixSymmetricSum<dim, Number>,
-                 VectorizedArrayType::size()>
-        scalar_fdm;
+    src_.reinit(partitioner_for_fdm);
+    dst_.reinit(partitioner_for_fdm);
+  }
 
-      for (unsigned int v = 0;
-           v < matrix_free.n_active_entries_per_cell_batch(cell);
-           ++v, ++cell_counter)
-        {
-          const auto cell_iterator = matrix_free.get_cell_iterator(cell, v);
-
-          const auto cells =
-            dealii::GridTools::extract_all_surrounding_cells_cartesian<dim>(
-              cell_iterator, n_overlap <= 1 ? 0 : dim);
-
-          constraint_info.read_dof_indices(
-            cell_counter,
-            dealii::DoFTools::get_dof_indices_cell_with_overlap(
-              dof_handler, cells, n_overlap, true),
-            partitioner_for_fdm);
-
-          scalar_fdm[v] = setup_fdm<dim, Number>(
-            cell_iterator,
-            fe_1D,
-            quadrature_1D,
-            harmonic_patch_extend[cell_iterator->active_cell_index()],
-            n_overlap);
-        }
-
-      cell_ptr.push_back(cell_ptr.back() +
-                         matrix_free.n_active_entries_per_cell_batch(cell));
-
-      fdm[cell] =
-        MyTensorProductMatrixSymmetricSum<dim, Number>::template transpose<
-          VectorizedArrayType::size()>(
-          scalar_fdm, matrix_free.n_active_entries_per_cell_batch(cell));
-    }
-
-  constraint_info.finalize();
-
-  VectorType src, dst, src_, dst_;
-
-  matrix_free.initialize_dof_vector(src);
-  matrix_free.initialize_dof_vector(dst);
-  src_.reinit(partitioner_for_fdm);
-  dst_.reinit(partitioner_for_fdm);
-
-  const auto vmult = [&](auto &dst, const auto &src) {
+  void
+  vmult(VectorType &dst, const VectorType &src) const
+  {
     AlignedVector<VectorizedArrayType> src__(
       Utilities::pow(fe_degree + 2 * n_overlap - 1, dim));
     AlignedVector<VectorizedArrayType> dst__(
@@ -223,9 +200,70 @@ test(const unsigned int fe_degree,
     // compress
     dst_.compress(VectorOperation::add);
     dst.copy_locally_owned_data_from(dst_);
-  };
+  }
 
-  vmult(dst, src);
+private:
+  const MatrixFree<dim, Number, VectorizedArrayType> &matrix_free;
+  const unsigned int                                  fe_degree;
+  const unsigned int                                  n_overlap;
+
+  internal::MatrixFreeFunctions::ConstraintInfo<dim, VectorizedArrayType>
+                            constraint_info;
+  std::vector<unsigned int> cell_ptr;
+
+  std::vector<MyTensorProductMatrixSymmetricSum<dim, VectorizedArrayType>> fdm;
+
+  mutable VectorType src_;
+  mutable VectorType dst_;
+};
+
+
+template <int dim>
+void
+test(const unsigned int fe_degree,
+     const unsigned int n_global_refinements,
+     const unsigned int n_overlap)
+{
+  using Number              = double;
+  using VectorizedArrayType = VectorizedArray<Number>;
+  using VectorType          = LinearAlgebra::distributed::Vector<double>;
+
+  FE_Q<dim> fe(fe_degree);
+  FE_Q<1>   fe_1D(fe_degree);
+
+  QGauss<dim>     quadrature(fe_degree + 1);
+  QGauss<dim - 1> quadrature_face(fe_degree + 1);
+  QGauss<1>       quadrature_1D(fe_degree + 1);
+
+  ConditionalOStream pcout(std::cout,
+                           Utilities::MPI::this_mpi_process(MPI_COMM_WORLD) ==
+                             0);
+
+  parallel::distributed::Triangulation<dim> tria(MPI_COMM_WORLD);
+  GridGenerator::hyper_cube(tria);
+  tria.refine_global(n_global_refinements);
+
+  DoFHandler<dim> dof_handler(tria);
+  dof_handler.distribute_dofs(FE_Q<dim>(fe_degree));
+
+  MappingQ1<dim> mapping;
+
+  AffineConstraints<double> constraints;
+  DoFTools::make_zero_boundary_constraints(dof_handler, constraints);
+  constraints.close();
+
+  MatrixFree<dim, Number, VectorizedArrayType> matrix_free;
+  matrix_free.reinit(mapping, dof_handler, constraints, quadrature);
+
+  VectorType src, dst, src_, dst_;
+
+  matrix_free.initialize_dof_vector(src);
+  matrix_free.initialize_dof_vector(dst);
+
+  ASPoissonPreconditioner<dim, Number, VectorizedArrayType> precon(
+    matrix_free, n_overlap, mapping, fe_1D, quadrature_face, quadrature_1D);
+
+  precon.vmult(dst, src);
 }
 
 
