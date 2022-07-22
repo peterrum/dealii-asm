@@ -39,8 +39,15 @@ test(const unsigned int fe_degree,
      const unsigned int n_overlap)
 {
   using Number              = double;
-  using VectorizedArrayType = VectorizedArray<Number>;
+  using VectorizedArrayType = VectorizedArray<Number>; 
   using VectorType          = LinearAlgebra::distributed::Vector<double>;
+  
+  FE_Q<dim> fe(fe_degree);
+  FE_Q<1>   fe_1D(fe_degree);
+
+  QGauss<dim>     quadrature(fe_degree + 1);
+  QGauss<dim - 1> quadrature_face(fe_degree + 1);
+  QGauss<1>       quadrature_1D(fe_degree + 1);
 
   ConditionalOStream pcout(std::cout,
                            Utilities::MPI::this_mpi_process(MPI_COMM_WORLD) ==
@@ -52,8 +59,6 @@ test(const unsigned int fe_degree,
 
   DoFHandler<dim> dof_handler(tria);
   dof_handler.distribute_dofs(FE_Q<dim>(fe_degree));
-
-  QGauss<dim> quadrature(fe_degree + 1);
 
   MappingQ1<dim> mapping;
 
@@ -119,6 +124,9 @@ test(const unsigned int fe_degree,
 
   std::vector<MyTensorProductMatrixSymmetricSum<dim, VectorizedArrayType>>  fdm(matrix_free.n_cell_batches());
 
+  const auto harmonic_patch_extend =
+    GridTools::compute_harmonic_patch_extend(mapping, tria, quadrature_face);
+
   // ... collect DoF indices
   std::vector<unsigned int> cell_ptr = {0};
   for (unsigned int cell = 0, cell_counter = 0;
@@ -131,9 +139,11 @@ test(const unsigned int fe_degree,
            v < matrix_free.n_active_entries_per_cell_batch(cell);
            ++v, ++cell_counter)
         {
+          const auto cell_iterator = matrix_free.get_cell_iterator(cell, v);
+
           const auto cells =
             dealii::GridTools::extract_all_surrounding_cells_cartesian<dim>(
-              matrix_free.get_cell_iterator(cell, v), n_overlap <= 1 ? 0 : dim);
+              cell_iterator, n_overlap <= 1 ? 0 : dim);
 
           constraint_info.read_dof_indices(
             cell_counter,
@@ -141,13 +151,15 @@ test(const unsigned int fe_degree,
               dof_handler, cells, n_overlap, true),
             partitioner_for_fdm);
 
-            // TODO: fill scalar_fdm
+            scalar_fdm[v] = setup_fdm<dim, Number>(cell_iterator, fe_1D, quadrature_1D, harmonic_patch_extend[cell_iterator->active_cell_index()], 
+              n_overlap);
         }
 
       cell_ptr.push_back(cell_ptr.back() +
                          matrix_free.n_active_entries_per_cell_batch(cell));
 
-      fdm[cell] = MyTensorProductMatrixSymmetricSum<dim, Number>::template transpose<VectorizedArrayType::size()>(scalar_fdm);                   
+      fdm[cell] = MyTensorProductMatrixSymmetricSum<dim, Number>::template transpose<VectorizedArrayType::size()>(scalar_fdm, 
+      matrix_free.n_active_entries_per_cell_batch(cell));                   
     }
 
   constraint_info.finalize();
@@ -160,7 +172,9 @@ test(const unsigned int fe_degree,
   dst_.reinit(partitioner_for_fdm);
 
   const auto vmult = [&](auto &dst, const auto &src) {
-    AlignedVector<VectorizedArrayType> scratch_data(
+    AlignedVector<VectorizedArrayType> src__(
+      Utilities::pow(fe_degree + 2 * n_overlap - 1, dim));
+    AlignedVector<VectorizedArrayType> dst__(
       Utilities::pow(fe_degree + 2 * n_overlap - 1, dim));
 
     // update ghost values
@@ -173,26 +187,27 @@ test(const unsigned int fe_degree,
         internal::VectorReader<Number, VectorizedArrayType> reader;
         constraint_info.read_write_operation(reader,
                                              src_,
-                                             scratch_data,
+                                             src__,
                                              cell_ptr[cell],
                                              cell_ptr[cell + 1] -
                                                cell_ptr[cell],
-                                             scratch_data.size(),
+                                             src__.size(),
                                              true);
 
-        // 2) cell operation
-        // TODO: fast diagonalization method
+        // 2) cell operation: fast diagonalization method
+        fdm[cell].apply_inverse(make_array_view(dst__.begin(), dst__.end()), 
+                                make_array_view(src__.begin(), src__.end()));
 
         // 3) scatter
         internal::VectorDistributorLocalToGlobal<Number, VectorizedArrayType>
           writer;
         constraint_info.read_write_operation(writer,
                                              dst_,
-                                             scratch_data,
+                                             dst__,
                                              cell_ptr[cell],
                                              cell_ptr[cell + 1] -
                                                cell_ptr[cell],
-                                             scratch_data.size(),
+                                             dst__.size(),
                                              true);
       }
 
