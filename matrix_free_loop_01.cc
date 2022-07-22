@@ -156,6 +156,39 @@ public:
 
     src_.reinit(partitioner_for_fdm);
     dst_.reinit(partitioner_for_fdm);
+
+    {
+      AlignedVector<VectorizedArrayType> dst__(
+        Utilities::pow(fe_degree + 2 * n_overlap - 1, dim));
+
+      dst_ = 0.0;
+
+      for (auto &i : dst__)
+        i = 1.0;
+
+      for (unsigned int cell = 0; cell < matrix_free.n_cell_batches(); ++cell)
+        {
+          internal::VectorDistributorLocalToGlobal<Number, VectorizedArrayType>
+            writer;
+          constraint_info.read_write_operation(writer,
+                                               dst_,
+                                               dst__,
+                                               cell_ptr[cell],
+                                               cell_ptr[cell + 1] -
+                                                 cell_ptr[cell],
+                                               dst__.size(),
+                                               true);
+        }
+
+      dst_.compress(VectorOperation::add);
+
+      matrix_free.initialize_dof_vector(weights);
+
+      weights.copy_locally_owned_data_from(dst_);
+
+      for (auto &i : weights)
+        i = (i == 0.0) ? 1.0 : (1.0 / i);
+    }
   }
 
   void
@@ -174,6 +207,7 @@ public:
 
     for (unsigned int cell = 0; cell < matrix_free.n_cell_batches(); ++cell)
       {
+        // 1) gather
         internal::VectorReader<Number, VectorizedArrayType> reader;
         constraint_info.read_write_operation(reader,
                                              src_,
@@ -204,6 +238,7 @@ public:
     // compress
     dst_.compress(VectorOperation::add);
     dst.copy_locally_owned_data_from(dst_);
+    dst.scale(weights);
   }
 
 private:
@@ -219,6 +254,8 @@ private:
 
   mutable VectorType src_;
   mutable VectorType dst_;
+
+  VectorType weights;
 };
 
 
@@ -300,7 +337,7 @@ test(const unsigned int fe_degree,
      const unsigned int n_overlap)
 {
   using Number              = double;
-  using VectorizedArrayType = VectorizedArray<Number, 1>;
+  using VectorizedArrayType = VectorizedArray<Number>;
   using VectorType          = LinearAlgebra::distributed::Vector<double>;
 
   FE_Q<dim> fe(fe_degree);
@@ -350,7 +387,7 @@ test(const unsigned int fe_degree,
   ReductionControl reduction_control(100);
 
   SolverGMRES<VectorType>::AdditionalData additional_data;
-  additional_data.right_preconditioning = false;
+  additional_data.right_preconditioning = true;
 
   SolverGMRES<VectorType> solver(reduction_control, additional_data);
 
