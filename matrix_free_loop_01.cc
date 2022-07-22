@@ -98,7 +98,8 @@ test(const unsigned int fe_degree,
                                                                     true);
 
               for (const auto i : local_dofs)
-                if (locally_owned_dofs.is_element(i) == false)
+                if ((locally_owned_dofs.is_element(i) == false) &&
+                    (i != numbers::invalid_unsigned_int))
                   ghost_indices.push_back(i);
             }
         }
