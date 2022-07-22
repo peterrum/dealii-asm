@@ -33,10 +33,10 @@ using namespace dealii;
 
 template <int dim>
 void
-test(const unsigned int fe_degree, const unsigned int n_global_refinements)
+test(const unsigned int fe_degree,
+     const unsigned int n_global_refinements,
+     const unsigned int n_overlap)
 {
-  const unsigned int n_overlap = 1;
-
   using Number              = double;
   using VectorizedArrayType = VectorizedArray<Number>;
   using VectorType          = LinearAlgebra::distributed::Vector<double>;
@@ -70,7 +70,7 @@ test(const unsigned int fe_degree, const unsigned int n_global_refinements)
   // ... allocate memory
   constraint_info.reinit(matrix_free.n_physical_cells());
 
-  auto partitioner = matrix_free.get_vector_partitioner();
+  auto partitioner_for_fdm = matrix_free.get_vector_partitioner();
 
   if (n_overlap > 1)
     {
@@ -110,7 +110,7 @@ test(const unsigned int fe_degree, const unsigned int n_global_refinements)
       IndexSet is_ghost_indices(locally_owned_dofs.size());
       is_ghost_indices.add_indices(ghost_indices.begin(), ghost_indices.end());
 
-      partitioner = std::make_shared<Utilities::MPI::Partitioner>(
+      partitioner_for_fdm = std::make_shared<Utilities::MPI::Partitioner>(
         locally_owned_dofs, is_ghost_indices, dof_handler.get_communicator());
     }
 
@@ -133,7 +133,7 @@ test(const unsigned int fe_degree, const unsigned int n_global_refinements)
             dealii::DoFTools::get_dof_indices_cell_with_overlap(dof_handler,
                                                                 cells,
                                                                 n_overlap),
-            partitioner);
+            partitioner_for_fdm);
         }
 
       cell_ptr.push_back(cell_ptr.back() +
@@ -146,8 +146,8 @@ test(const unsigned int fe_degree, const unsigned int n_global_refinements)
 
   matrix_free.initialize_dof_vector(src);
   matrix_free.initialize_dof_vector(dst);
-  src_.reinit(partitioner);
-  dst_.reinit(partitioner);
+  src_.reinit(partitioner_for_fdm);
+  dst_.reinit(partitioner_for_fdm);
 
   const auto vmult = [&](auto &dst, const auto &src) {
     AlignedVector<VectorizedArrayType> scratch_data(
@@ -191,7 +191,6 @@ test(const unsigned int fe_degree, const unsigned int n_global_refinements)
     dst.copy_locally_owned_data_from(dst_);
   };
 
-
   vmult(dst, src);
 }
 
@@ -206,9 +205,10 @@ main(int argc, char *argv[])
   const unsigned int fe_degree = (argc >= 3) ? std::atoi(argv[2]) : 1;
   const unsigned int n_global_refinements =
     (argc >= 4) ? std::atoi(argv[3]) : 6;
+  const unsigned int n_overlap = (argc >= 5) ? std::atoi(argv[4]) : 1;
 
   if (dim == 2)
-    test<2>(fe_degree, n_global_refinements);
+    test<2>(fe_degree, n_global_refinements, n_overlap);
   else
     AssertThrow(false, ExcNotImplemented());
 }
