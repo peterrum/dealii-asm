@@ -70,6 +70,50 @@ test(const unsigned int fe_degree, const unsigned int n_global_refinements)
   // ... allocate memory
   constraint_info.reinit(matrix_free.n_physical_cells());
 
+  auto partitioner = matrix_free.get_vector_partitioner();
+
+  if (n_overlap > 1)
+    {
+      const auto &locally_owned_dofs = dof_handler.locally_owned_dofs();
+
+      std::vector<types::global_dof_index> ghost_indices;
+
+      for (unsigned int cell = 0, cell_counter = 0;
+           cell < matrix_free.n_cell_batches();
+           ++cell)
+        {
+          for (unsigned int v = 0;
+               v < matrix_free.n_active_entries_per_cell_batch(cell);
+               ++v, ++cell_counter)
+            {
+              const auto cells =
+                dealii::GridTools::extract_all_surrounding_cells_cartesian<dim>(
+                  matrix_free.get_cell_iterator(cell, v),
+                  n_overlap <= 1 ? 0 : dim);
+
+              const auto local_dofs =
+                dealii::DoFTools::get_dof_indices_cell_with_overlap(dof_handler,
+                                                                    cells,
+                                                                    n_overlap);
+
+              for (const auto i : local_dofs)
+                if (locally_owned_dofs.is_element(i) == false)
+                  ghost_indices.push_back(i);
+            }
+        }
+
+      std::sort(ghost_indices.begin(), ghost_indices.end());
+      ghost_indices.erase(std::unique(ghost_indices.begin(),
+                                      ghost_indices.end()),
+                          ghost_indices.end());
+
+      IndexSet is_ghost_indices(locally_owned_dofs.size());
+      is_ghost_indices.add_indices(ghost_indices.begin(), ghost_indices.end());
+
+      partitioner = std::make_shared<Utilities::MPI::Partitioner>(
+        locally_owned_dofs, is_ghost_indices, dof_handler.get_communicator());
+    }
+
   // ... collect DoF indices
   std::vector<unsigned int> cell_ptr = {0};
   for (unsigned int cell = 0, cell_counter = 0;
@@ -89,7 +133,7 @@ test(const unsigned int fe_degree, const unsigned int n_global_refinements)
             dealii::DoFTools::get_dof_indices_cell_with_overlap(dof_handler,
                                                                 cells,
                                                                 n_overlap),
-            {});
+            partitioner);
         }
 
       cell_ptr.push_back(cell_ptr.back() +
@@ -102,8 +146,8 @@ test(const unsigned int fe_degree, const unsigned int n_global_refinements)
 
   matrix_free.initialize_dof_vector(src);
   matrix_free.initialize_dof_vector(dst);
-  matrix_free.initialize_dof_vector(src_);
-  matrix_free.initialize_dof_vector(dst_);
+  src_.reinit(partitioner);
+  dst_.reinit(partitioner);
 
   const auto vmult = [&](auto &dst, const auto &src) {
     AlignedVector<VectorizedArrayType> scratch_data(
