@@ -12,7 +12,9 @@
 
 #include <deal.II/lac/diagonal_matrix.h>
 #include <deal.II/lac/dynamic_sparsity_pattern.h>
+#include <deal.II/lac/precondition.h>
 #include <deal.II/lac/solver_cg.h>
+#include <deal.II/lac/solver_gmres.h>
 #include <deal.II/lac/sparse_matrix_tools.h>
 #include <deal.II/lac/trilinos_precondition.h>
 #include <deal.II/lac/trilinos_sparse_matrix.h>
@@ -172,7 +174,6 @@ public:
 
     for (unsigned int cell = 0; cell < matrix_free.n_cell_batches(); ++cell)
       {
-        // 1) gather
         internal::VectorReader<Number, VectorizedArrayType> reader;
         constraint_info.read_write_operation(reader,
                                              src_,
@@ -228,7 +229,8 @@ class PoissonOperator
 public:
   using VectorType = LinearAlgebra::distributed::Vector<Number>;
 
-  PoissonOperator(const MatrixFree<dim, Number> &matrix_free)
+  PoissonOperator(
+    const MatrixFree<dim, Number, VectorizedArrayType> &matrix_free)
     : matrix_free(matrix_free)
   {}
 
@@ -298,7 +300,7 @@ test(const unsigned int fe_degree,
      const unsigned int n_overlap)
 {
   using Number              = double;
-  using VectorizedArrayType = VectorizedArray<Number>;
+  using VectorizedArrayType = VectorizedArray<Number, 1>;
   using VectorType          = LinearAlgebra::distributed::Vector<double>;
 
   FE_Q<dim> fe(fe_degree);
@@ -314,6 +316,11 @@ test(const unsigned int fe_degree,
 
   parallel::distributed::Triangulation<dim> tria(MPI_COMM_WORLD);
   GridGenerator::hyper_cube(tria);
+
+  for (const auto &face : tria.active_face_iterators())
+    if (face->at_boundary())
+      face->set_boundary_id(1);
+
   tria.refine_global(n_global_refinements);
 
   DoFHandler<dim> dof_handler(tria);
@@ -322,7 +329,7 @@ test(const unsigned int fe_degree,
   MappingQ1<dim> mapping;
 
   AffineConstraints<double> constraints;
-  DoFTools::make_zero_boundary_constraints(dof_handler, constraints);
+  DoFTools::make_zero_boundary_constraints(dof_handler, 1, constraints);
   constraints.close();
 
   MatrixFree<dim, Number, VectorizedArrayType> matrix_free;
@@ -340,11 +347,17 @@ test(const unsigned int fe_degree,
   ASPoissonPreconditioner<dim, Number, VectorizedArrayType> precon(
     matrix_free, n_overlap, mapping, fe_1D, quadrature_face, quadrature_1D);
 
-  precon.vmult(x, b);
+  ReductionControl reduction_control(100);
 
-  ReductionControl     reduction_control;
-  SolverCG<VectorType> solver(reduction_control);
-  solver.solve(op, x, b, precon);
+  SolverGMRES<VectorType>::AdditionalData additional_data;
+  additional_data.right_preconditioning = false;
+
+  SolverGMRES<VectorType> solver(reduction_control, additional_data);
+
+  if (true)
+    solver.solve(op, x, b, precon);
+  else
+    solver.solve(op, x, b, PreconditionIdentity());
 
   pcout << reduction_control.last_step() << std::endl;
 }

@@ -103,11 +103,11 @@ namespace dealii
                 eigenvectors[d][i][j][v] = in[v].eigenvectors[d][i][j];
 
           for (unsigned int v = 0; v < NN; ++v)
-            for (unsigned int i = 0; i < in[0].eigenvalues.size(); ++i)
+            for (unsigned int i = 0; i < in[0].eigenvalues[d].size(); ++i)
               eigenvalues[d][i][v] = in[v].eigenvalues[d][i];
 
           for (unsigned int v = 0; v < NN; ++v)
-            for (unsigned int i = 0; i < in[0].masks.size(); ++i)
+            for (unsigned int i = 0; i < in[0].masks[d].size(); ++i)
               masks[d][i][v] = in[v].masks[d][i];
         }
 
