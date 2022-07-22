@@ -45,9 +45,8 @@ public:
 
     for (unsigned int d = 0; d < dim; ++d)
       for (unsigned int i = 0; i < n_dofs_1D; ++i)
-        if (masks[d][i] == false)
-          for (unsigned int j = 0; j < n_dofs_1D; ++j)
-            this->eigenvectors[d][i][j] = 0.0;
+        for (unsigned int j = 0; j < n_dofs_1D; ++j)
+          this->eigenvectors[d][i][j] *= masks[d][i];
   }
 
   void
@@ -62,8 +61,10 @@ public:
       {
         for (unsigned int i1 = 0, c = 0; i1 < n; ++i1)
           for (unsigned int i0 = 0; i0 < n; ++i0, ++c)
-            if ((masks[1][i1] == false) || (masks[0][i0] == false))
-              dst[c] = src[c];
+          {
+            const auto mask = masks[1][i1] * masks[0][i0];
+            dst[c] = mask * dst[c] + (Number(1)-mask) * src[c];            
+          }
       }
     else
       {
