@@ -26,55 +26,11 @@
 
 #include "include/grid_tools.h"
 #include "include/restrictors.h"
+#include "include/tensor_product_matrix.h"
 
 #define QUADRATURE_TYP QGauss
 
 using namespace dealii;
-
-template <int dim, typename Number>
-class MyTensorProductMatrixSymmetricSum
-  : public TensorProductMatrixSymmetricSum<dim, Number, -1>
-{
-public:
-  void
-  set_mask(const std::array<AlignedVector<Number>, dim> masks)
-  {
-    this->masks = masks;
-
-    const unsigned int n_dofs_1D = this->eigenvalues[0].size();
-
-    for (unsigned int d = 0; d < dim; ++d)
-      for (unsigned int i = 0; i < n_dofs_1D; ++i)
-        for (unsigned int j = 0; j < n_dofs_1D; ++j)
-          this->eigenvectors[d][i][j] *= masks[d][i];
-  }
-
-  void
-  apply_inverse(const ArrayView<Number> &      dst,
-                const ArrayView<const Number> &src) const
-  {
-    TensorProductMatrixSymmetricSum<dim, Number, -1>::apply_inverse(dst, src);
-
-    const unsigned int n = this->eigenvalues[0].size();
-
-    if (dim == 2)
-      {
-        for (unsigned int i1 = 0, c = 0; i1 < n; ++i1)
-          for (unsigned int i0 = 0; i0 < n; ++i0, ++c)
-          {
-            const auto mask = masks[1][i1] * masks[0][i0];
-            dst[c] = mask * dst[c] + (Number(1)-mask) * src[c];            
-          }
-      }
-    else
-      {
-        AssertThrow(false, ExcNotImplemented());
-      }
-  }
-
-private:
-  std::array<AlignedVector<Number>, dim> masks;
-};
 
 
 template <typename Number>
@@ -151,9 +107,9 @@ setup_fdm(const typename Triangulation<dim>::cell_iterator &cell,
   const unsigned int n_dofs_1D              = M_ref.n();
   const unsigned int n_dofs_1D_with_overlap = M_ref.n() - 2 + 2 * n_overlap;
 
-  std::array<FullMatrix<Number>, dim> Ms;
-  std::array<FullMatrix<Number>, dim> Ks;
-  std::array<AlignedVector<Number>, dim>  masks;
+  std::array<FullMatrix<Number>, dim>    Ms;
+  std::array<FullMatrix<Number>, dim>    Ks;
+  std::array<AlignedVector<Number>, dim> masks;
 
   const auto clear_row_and_column = [&](const unsigned int n, auto &matrix) {
     for (unsigned int i = 0; i < n_dofs_1D_with_overlap; ++i)
