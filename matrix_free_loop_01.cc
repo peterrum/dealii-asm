@@ -19,6 +19,7 @@
 #include <deal.II/lac/trilinos_sparsity_pattern.h>
 
 #include <deal.II/matrix_free/constraint_info.h>
+#include <deal.II/matrix_free/fe_evaluation.h>
 #include <deal.II/matrix_free/matrix_free.h>
 #include <deal.II/matrix_free/vector_access_internal.h>
 
@@ -167,6 +168,8 @@ public:
     src_.copy_locally_owned_data_from(src);
     src_.update_ghost_values();
 
+    dst_ = 0.0;
+
     for (unsigned int cell = 0; cell < matrix_free.n_cell_batches(); ++cell)
       {
         // 1) gather
@@ -218,6 +221,76 @@ private:
 };
 
 
+
+template <int dim, typename Number, typename VectorizedArrayType>
+class PoissonOperator
+{
+public:
+  using VectorType = LinearAlgebra::distributed::Vector<Number>;
+
+  PoissonOperator(const MatrixFree<dim, Number> &matrix_free)
+    : matrix_free(matrix_free)
+  {}
+
+  void
+  initialize_dof_vector(VectorType &vec)
+  {
+    matrix_free.initialize_dof_vector(vec);
+  }
+
+  void
+  rhs(VectorType &vec) const
+  {
+    const int dummy = 0;
+
+    matrix_free.template cell_loop<VectorType, int>(
+      [&](const auto &, auto &dst, const auto &, const auto cells) {
+        FEEvaluation<dim, -1, 0, 1, Number, VectorizedArrayType> phi(
+          matrix_free);
+        for (unsigned int cell = cells.first; cell < cells.second; ++cell)
+          {
+            phi.reinit(cell);
+            for (unsigned int q = 0; q < phi.dofs_per_cell; ++q)
+              phi.submit_value(1.0, q);
+
+            phi.integrate_scatter(EvaluationFlags::values, dst);
+          }
+      },
+      vec,
+      dummy,
+      true);
+  }
+
+
+  void
+  vmult(VectorType &dst, const VectorType &src) const
+  {
+    matrix_free.template cell_loop<VectorType, VectorType>(
+      [&](const auto &, auto &dst, const auto &src, const auto cells) {
+        FEEvaluation<dim, -1, 0, 1, Number, VectorizedArrayType> phi(
+          matrix_free);
+        for (unsigned int cell = cells.first; cell < cells.second; ++cell)
+          {
+            phi.reinit(cell);
+            phi.gather_evaluate(src, EvaluationFlags::gradients);
+
+            for (unsigned int q = 0; q < phi.dofs_per_cell; ++q)
+              phi.submit_gradient(phi.get_gradient(q), q);
+
+            phi.integrate_scatter(EvaluationFlags::gradients, dst);
+          }
+      },
+      dst,
+      src,
+      true);
+  }
+
+private:
+  const MatrixFree<dim, Number, VectorizedArrayType> &matrix_free;
+};
+
+
+
 template <int dim>
 void
 test(const unsigned int fe_degree,
@@ -255,15 +328,25 @@ test(const unsigned int fe_degree,
   MatrixFree<dim, Number, VectorizedArrayType> matrix_free;
   matrix_free.reinit(mapping, dof_handler, constraints, quadrature);
 
-  VectorType src, dst, src_, dst_;
+  PoissonOperator<dim, Number, VectorizedArrayType> op(matrix_free);
 
-  matrix_free.initialize_dof_vector(src);
-  matrix_free.initialize_dof_vector(dst);
+  VectorType b, x;
+
+  op.initialize_dof_vector(b);
+  op.initialize_dof_vector(x);
+
+  op.rhs(b);
 
   ASPoissonPreconditioner<dim, Number, VectorizedArrayType> precon(
     matrix_free, n_overlap, mapping, fe_1D, quadrature_face, quadrature_1D);
 
-  precon.vmult(dst, src);
+  precon.vmult(x, b);
+
+  ReductionControl     reduction_control;
+  SolverCG<VectorType> solver(reduction_control);
+  solver.solve(op, x, b, precon);
+
+  pcout << reduction_control.last_step() << std::endl;
 }
 
 
