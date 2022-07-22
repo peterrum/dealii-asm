@@ -27,6 +27,7 @@
 
 #include "include/dof_tools.h"
 #include "include/grid_tools.h"
+#include "include/tensor_product_matrix.h"
 
 using namespace dealii;
 
@@ -116,12 +117,16 @@ test(const unsigned int fe_degree,
         locally_owned_dofs, is_ghost_indices, dof_handler.get_communicator());
     }
 
+  std::vector<MyTensorProductMatrixSymmetricSum<dim, VectorizedArrayType>>  fdm(matrix_free.n_cell_batches());
+
   // ... collect DoF indices
   std::vector<unsigned int> cell_ptr = {0};
   for (unsigned int cell = 0, cell_counter = 0;
        cell < matrix_free.n_cell_batches();
        ++cell)
     {
+      std::array<MyTensorProductMatrixSymmetricSum<dim, Number>, VectorizedArrayType::size()> scalar_fdm;
+
       for (unsigned int v = 0;
            v < matrix_free.n_active_entries_per_cell_batch(cell);
            ++v, ++cell_counter)
@@ -135,10 +140,14 @@ test(const unsigned int fe_degree,
             dealii::DoFTools::get_dof_indices_cell_with_overlap(
               dof_handler, cells, n_overlap, true),
             partitioner_for_fdm);
+
+            // TODO: fill scalar_fdm
         }
 
       cell_ptr.push_back(cell_ptr.back() +
                          matrix_free.n_active_entries_per_cell_batch(cell));
+
+      fdm[cell] = MyTensorProductMatrixSymmetricSum<dim, Number>::template transpose<VectorizedArrayType::size()>(scalar_fdm);                   
     }
 
   constraint_info.finalize();
