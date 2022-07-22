@@ -94,7 +94,8 @@ test(const unsigned int fe_degree,
               const auto local_dofs =
                 dealii::DoFTools::get_dof_indices_cell_with_overlap(dof_handler,
                                                                     cells,
-                                                                    n_overlap);
+                                                                    n_overlap,
+                                                                    true);
 
               for (const auto i : local_dofs)
                 if (locally_owned_dofs.is_element(i) == false)
@@ -130,9 +131,8 @@ test(const unsigned int fe_degree,
 
           constraint_info.read_dof_indices(
             cell_counter,
-            dealii::DoFTools::get_dof_indices_cell_with_overlap(dof_handler,
-                                                                cells,
-                                                                n_overlap),
+            dealii::DoFTools::get_dof_indices_cell_with_overlap(
+              dof_handler, cells, n_overlap, true),
             partitioner_for_fdm);
         }
 

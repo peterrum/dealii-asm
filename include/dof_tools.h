@@ -13,7 +13,8 @@ namespace dealii
       const DoFHandler<dim> &                   dof_handler,
       const std::array<typename Triangulation<dim>::cell_iterator,
                        Utilities::pow(3, dim)> &cells,
-      unsigned int                              n_overlap = 0)
+      const unsigned int                        n_overlap  = 0,
+      const bool                                return_all = false)
     {
       AssertDimension(dof_handler.get_fe_collection().size(), 1);
 
@@ -66,6 +67,8 @@ namespace dealii
             for (unsigned int i = 0; i < n_dofs_1D; ++i, ++c)
               if (i != 0 && i != fe_degree && j != 0 && j != fe_degree)
                 inner_dof_indices.emplace_back(dof_indices[c]);
+              else if (return_all)
+                inner_dof_indices.emplace_back(numbers::invalid_unsigned_int);
 
           AssertDimension(inner_dof_indices.size(),
                           Utilities::pow(n_dofs_with_overlap_1D, dim));
@@ -110,6 +113,9 @@ namespace dealii
                 if (cells[ii].state() == IteratorState::valid)
                   dof_indices[c] = all_dofs[ii][jj];
               }
+
+          if (return_all)
+            return dof_indices;
 
           std::vector<types::global_dof_index> dof_indices_cleaned;
 
