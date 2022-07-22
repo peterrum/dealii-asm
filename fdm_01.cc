@@ -37,7 +37,7 @@ class MyTensorProductMatrixSymmetricSum
 {
 public:
   void
-  set_mask(const std::array<std::vector<bool>, dim> masks)
+  set_mask(const std::array<AlignedVector<Number>, dim> masks)
   {
     this->masks = masks;
 
@@ -72,7 +72,7 @@ public:
   }
 
 private:
-  std::array<std::vector<bool>, dim> masks;
+  std::array<AlignedVector<Number>, dim> masks;
 };
 
 
@@ -152,7 +152,7 @@ setup_fdm(const typename Triangulation<dim>::cell_iterator &cell,
 
   std::array<FullMatrix<Number>, dim> Ms;
   std::array<FullMatrix<Number>, dim> Ks;
-  std::array<std::vector<bool>, dim>  masks;
+  std::array<AlignedVector<Number>, dim>  masks;
 
   const auto clear_row_and_column = [&](const unsigned int n, auto &matrix) {
     for (unsigned int i = 0; i < n_dofs_1D_with_overlap; ++i)
@@ -167,7 +167,7 @@ setup_fdm(const typename Triangulation<dim>::cell_iterator &cell,
       FullMatrix<Number> M(n_dofs_1D_with_overlap, n_dofs_1D_with_overlap);
       FullMatrix<Number> K(n_dofs_1D_with_overlap, n_dofs_1D_with_overlap);
 
-      masks[d].assign(n_dofs_1D_with_overlap, true);
+      masks[d].resize(n_dofs_1D_with_overlap, true);
 
       // inner cell
       for (unsigned int i = 0; i < n_dofs_1D; ++i)
