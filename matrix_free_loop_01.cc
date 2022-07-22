@@ -39,9 +39,9 @@ test(const unsigned int fe_degree,
      const unsigned int n_overlap)
 {
   using Number              = double;
-  using VectorizedArrayType = VectorizedArray<Number>; 
+  using VectorizedArrayType = VectorizedArray<Number>;
   using VectorType          = LinearAlgebra::distributed::Vector<double>;
-  
+
   FE_Q<dim> fe(fe_degree);
   FE_Q<1>   fe_1D(fe_degree);
 
@@ -122,7 +122,8 @@ test(const unsigned int fe_degree,
         locally_owned_dofs, is_ghost_indices, dof_handler.get_communicator());
     }
 
-  std::vector<MyTensorProductMatrixSymmetricSum<dim, VectorizedArrayType>>  fdm(matrix_free.n_cell_batches());
+  std::vector<MyTensorProductMatrixSymmetricSum<dim, VectorizedArrayType>> fdm(
+    matrix_free.n_cell_batches());
 
   const auto harmonic_patch_extend =
     GridTools::compute_harmonic_patch_extend(mapping, tria, quadrature_face);
@@ -133,7 +134,9 @@ test(const unsigned int fe_degree,
        cell < matrix_free.n_cell_batches();
        ++cell)
     {
-      std::array<MyTensorProductMatrixSymmetricSum<dim, Number>, VectorizedArrayType::size()> scalar_fdm;
+      std::array<MyTensorProductMatrixSymmetricSum<dim, Number>,
+                 VectorizedArrayType::size()>
+        scalar_fdm;
 
       for (unsigned int v = 0;
            v < matrix_free.n_active_entries_per_cell_batch(cell);
@@ -151,15 +154,21 @@ test(const unsigned int fe_degree,
               dof_handler, cells, n_overlap, true),
             partitioner_for_fdm);
 
-            scalar_fdm[v] = setup_fdm<dim, Number>(cell_iterator, fe_1D, quadrature_1D, harmonic_patch_extend[cell_iterator->active_cell_index()], 
-              n_overlap);
+          scalar_fdm[v] = setup_fdm<dim, Number>(
+            cell_iterator,
+            fe_1D,
+            quadrature_1D,
+            harmonic_patch_extend[cell_iterator->active_cell_index()],
+            n_overlap);
         }
 
       cell_ptr.push_back(cell_ptr.back() +
                          matrix_free.n_active_entries_per_cell_batch(cell));
 
-      fdm[cell] = MyTensorProductMatrixSymmetricSum<dim, Number>::template transpose<VectorizedArrayType::size()>(scalar_fdm, 
-      matrix_free.n_active_entries_per_cell_batch(cell));                   
+      fdm[cell] =
+        MyTensorProductMatrixSymmetricSum<dim, Number>::template transpose<
+          VectorizedArrayType::size()>(
+          scalar_fdm, matrix_free.n_active_entries_per_cell_batch(cell));
     }
 
   constraint_info.finalize();
@@ -195,7 +204,7 @@ test(const unsigned int fe_degree,
                                              true);
 
         // 2) cell operation: fast diagonalization method
-        fdm[cell].apply_inverse(make_array_view(dst__.begin(), dst__.end()), 
+        fdm[cell].apply_inverse(make_array_view(dst__.begin(), dst__.end()),
                                 make_array_view(src__.begin(), src__.end()));
 
         // 3) scatter
