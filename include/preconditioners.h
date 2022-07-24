@@ -1,5 +1,13 @@
 #pragma once
 
+#include <deal.II/base/index_set.h>
+#include <deal.II/base/partitioner.h>
+
+#include <deal.II/dofs/dof_handler.h>
+
+#include <deal.II/lac/solver_cg.h>
+#include <deal.II/lac/sparse_matrix_tools.h>
+
 #include "dof_tools.h"
 #include "grid_generator.h"
 #include "grid_tools.h"
