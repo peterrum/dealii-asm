@@ -42,11 +42,9 @@ public:
 
   ASPoissonPreconditioner(
     const MatrixFree<dim, Number, VectorizedArrayType> &matrix_free,
-    const AffineConstraints<Number> &                   constraints,
     const unsigned int                                  n_overlap,
     const Mapping<dim> &                                mapping,
     const FiniteElement<1> &                            fe_1D,
-    const QGauss<dim> &                                 quadrature,
     const QGauss<dim - 1> &                             quadrature_face,
     const Quadrature<1> &                               quadrature_1D)
     : matrix_free(matrix_free)
@@ -191,52 +189,6 @@ public:
       for (auto &i : weights)
         i = (i == 0.0) ? 1.0 : (1.0 / i);
     }
-
-    {
-      this->indices.resize(dof_handler.get_triangulation().n_active_cells());
-
-      for (const auto &cell : dof_handler.active_cell_iterators())
-        if (cell->is_locally_owned())
-          {
-            const auto cells =
-              dealii::GridTools::extract_all_surrounding_cells_cartesian<dim>(
-                cell, n_overlap <= 1 ? 0 : dim);
-
-            this->indices[cell->active_cell_index()] =
-              dealii::DoFTools::get_dof_indices_cell_with_overlap(dof_handler,
-                                                                  cells,
-                                                                  n_overlap);
-          }
-
-
-      TrilinosWrappers::SparseMatrix    sparse_matrix;
-      TrilinosWrappers::SparsityPattern sparsity_pattern;
-
-      // create system matrix
-      sparsity_pattern.reinit(dof_handler.locally_owned_dofs(),
-                              dof_handler.get_communicator());
-      DoFTools::make_sparsity_pattern(dof_handler,
-                                      sparsity_pattern,
-                                      constraints,
-                                      false);
-      sparsity_pattern.compress();
-
-      sparse_matrix.reinit(sparsity_pattern);
-
-      MatrixCreator::create_laplace_matrix<dim,
-                                           dim,
-                                           TrilinosWrappers::SparseMatrix>(
-        mapping, dof_handler, quadrature, sparse_matrix, nullptr, constraints);
-
-      dealii::SparseMatrixTools::restrict_to_full_matrices(sparse_matrix,
-                                                           sparsity_pattern,
-                                                           this->indices,
-                                                           this->blocks);
-
-      for (auto &block : this->blocks)
-        if (block.m() > 0 && block.n() > 0)
-          block.gauss_jordan();
-    }
   }
 
   void
@@ -253,63 +205,34 @@ public:
 
     dst_ = 0.0;
 
-    if (true)
+    for (unsigned int cell = 0; cell < matrix_free.n_cell_batches(); ++cell)
       {
-        for (unsigned int cell = 0; cell < matrix_free.n_cell_batches(); ++cell)
-          {
-            // 1) gather
-            internal::VectorReader<Number, VectorizedArrayType> reader;
-            constraint_info.read_write_operation(reader,
-                                                 src_,
-                                                 src__,
-                                                 cell_ptr[cell],
-                                                 cell_ptr[cell + 1] -
-                                                   cell_ptr[cell],
-                                                 src__.size(),
-                                                 true);
+        // 1) gather
+        internal::VectorReader<Number, VectorizedArrayType> reader;
+        constraint_info.read_write_operation(reader,
+                                             src_,
+                                             src__,
+                                             cell_ptr[cell],
+                                             cell_ptr[cell + 1] -
+                                               cell_ptr[cell],
+                                             src__.size(),
+                                             true);
 
-            // 2) cell operation: fast diagonalization method
-            fdm[cell].apply_inverse(make_array_view(dst__.begin(), dst__.end()),
-                                    make_array_view(src__.begin(),
-                                                    src__.end()));
+        // 2) cell operation: fast diagonalization method
+        fdm[cell].apply_inverse(make_array_view(dst__.begin(), dst__.end()),
+                                make_array_view(src__.begin(), src__.end()));
 
-            // 3) scatter
-            internal::VectorDistributorLocalToGlobal<Number,
-                                                     VectorizedArrayType>
-              writer;
-            constraint_info.read_write_operation(writer,
-                                                 dst_,
-                                                 dst__,
-                                                 cell_ptr[cell],
-                                                 cell_ptr[cell + 1] -
-                                                   cell_ptr[cell],
-                                                 dst__.size(),
-                                                 true);
-          }
-      }
-    else
-      {
-        Vector<Number> src__, dst__;
-
-        for (const auto &cell :
-             matrix_free.get_dof_handler().active_cell_iterators())
-          if (cell->is_locally_owned())
-            {
-              const auto index = cell->active_cell_index();
-
-              const unsigned int n_dofs_per_cell = indices[index].size();
-
-              src__.reinit(n_dofs_per_cell);
-              dst__.reinit(n_dofs_per_cell);
-
-              for (unsigned int i = 0; i < n_dofs_per_cell; ++i)
-                src__[i] = src_[indices[index][i]];
-
-              blocks[index].vmult(dst__, src__);
-
-              for (unsigned int i = 0; i < n_dofs_per_cell; ++i)
-                dst_[indices[index][i]] += dst__[i];
-            }
+        // 3) scatter
+        internal::VectorDistributorLocalToGlobal<Number, VectorizedArrayType>
+          writer;
+        constraint_info.read_write_operation(writer,
+                                             dst_,
+                                             dst__,
+                                             cell_ptr[cell],
+                                             cell_ptr[cell + 1] -
+                                               cell_ptr[cell],
+                                             dst__.size(),
+                                             true);
       }
 
     // compress
@@ -333,10 +256,6 @@ private:
   mutable VectorType dst_;
 
   VectorType weights;
-
-  std::vector<std::vector<dealii::types::global_dof_index>>
-                                  indices; // TODO: remove
-  std::vector<FullMatrix<Number>> blocks;  //
 };
 
 
@@ -463,14 +382,7 @@ test(const unsigned int fe_degree,
   op.rhs(b);
 
   ASPoissonPreconditioner<dim, Number, VectorizedArrayType> precon(
-    matrix_free,
-    constraints,
-    n_overlap,
-    mapping,
-    fe_1D,
-    quadrature,
-    quadrature_face,
-    quadrature_1D);
+    matrix_free, n_overlap, mapping, fe_1D, quadrature_face, quadrature_1D);
 
   ReductionControl reduction_control(100);
 
