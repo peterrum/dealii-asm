@@ -16,6 +16,16 @@ PROJECT("exmples")
 
 DEAL_II_INITIALIZE_CACHED_VARIABLES()
 
+ADD_CUSTOM_TARGET(debug
+  COMMAND ${CMAKE_COMMAND} -DCMAKE_BUILD_TYPE=Debug ${CMAKE_SOURCE_DIR}
+  COMMENT "Switch CMAKE_BUILD_TYPE to Debug\nPlease call 'make' to build the debug project"
+  )
+
+ADD_CUSTOM_TARGET(release
+  COMMAND ${CMAKE_COMMAND} -DCMAKE_BUILD_TYPE=Release ${CMAKE_SOURCE_DIR}
+  COMMENT "Switch CMAKE_BUILD_TYPE to Release\nPlease call 'make' to build the release project"
+  )
+
 file(GLOB files "*.cc")
 foreach(file ${files})
   get_filename_component(app ${file} NAME_WLE)
