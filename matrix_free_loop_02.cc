@@ -7,6 +7,8 @@
 #include <deal.II/dofs/dof_tools.h>
 
 #include <deal.II/fe/fe_q.h>
+#include <deal.II/fe/mapping_q.h>
+#include <deal.II/fe/mapping_q_cache.h>
 
 #include <deal.II/grid/grid_generator.h>
 
@@ -46,6 +48,8 @@ test(const unsigned int fe_degree,
   using VectorizedArrayType = VectorizedArray<Number>;
   using VectorType          = LinearAlgebra::distributed::Vector<double>;
 
+  const unsigned int mapping_degree = fe_degree;
+
   FE_Q<dim> fe(fe_degree);
   FE_Q<1>   fe_1D(fe_degree);
 
@@ -69,40 +73,82 @@ test(const unsigned int fe_degree,
   DoFHandler<dim> dof_handler(tria);
   dof_handler.distribute_dofs(FE_Q<dim>(fe_degree));
 
-  MappingQ1<dim> mapping;
+  MappingQ<dim>      mapping(mapping_degree);
+  MappingQCache<dim> mapping_q_cache(mapping_degree);
+
+  mapping_q_cache.initialize(
+    mapping,
+    tria,
+    [](const auto &, const auto &point) {
+      Point<dim> result;
+
+      for (unsigned int d = 0; d < dim; ++d)
+        result[d] = std::sin(2 * numbers::PI * point[(d + 1) % dim]) *
+                    std::sin(numbers::PI * point[d]) * 0.1;
+
+      return result;
+    },
+    true);
 
   AffineConstraints<double> constraints;
   DoFTools::make_zero_boundary_constraints(dof_handler, 1, constraints);
   constraints.close();
 
   MatrixFree<dim, Number, VectorizedArrayType> matrix_free;
-  matrix_free.reinit(mapping, dof_handler, constraints, quadrature);
+  matrix_free.reinit(mapping_q_cache, dof_handler, constraints, quadrature);
 
-  PoissonOperator<dim, Number, VectorizedArrayType> op(matrix_free);
+  using OperatorType = PoissonOperator<dim, Number, VectorizedArrayType>;
+  using PreconditionerType =
+    ASPoissonPreconditioner<dim, Number, VectorizedArrayType>;
 
-  VectorType b, x;
+  OperatorType op(matrix_free);
 
-  op.initialize_dof_vector(b);
-  op.initialize_dof_vector(x);
+  VectorType src, dst;
 
-  op.rhs(b);
+  op.initialize_dof_vector(src);
+  op.initialize_dof_vector(dst);
 
-  ASPoissonPreconditioner<dim, Number, VectorizedArrayType> precon(
-    matrix_free, n_overlap, mapping, fe_1D, quadrature_face, quadrature_1D);
+  op.rhs(src);
 
-  ReductionControl reduction_control(100);
+  const auto precon = std::make_shared<PreconditionerType>(matrix_free,
+                                                           n_overlap,
+                                                           mapping_q_cache,
+                                                           fe_1D,
+                                                           quadrature_face,
+                                                           quadrature_1D);
 
-  SolverGMRES<VectorType>::AdditionalData additional_data;
-  additional_data.right_preconditioning = true;
+  PreconditionChebyshev<OperatorType, VectorType, PreconditionerType> chebyshev;
 
-  SolverGMRES<VectorType> solver(reduction_control, additional_data);
+  typename PreconditionChebyshev<OperatorType, VectorType, PreconditionerType>::
+    AdditionalData chebyshev_ad;
 
-  if (true)
-    solver.solve(op, x, b, precon);
-  else
-    solver.solve(op, x, b, PreconditionIdentity());
+  chebyshev_ad.preconditioner = precon;
+  chebyshev_ad.constraints.copy_from(constraints);
+  chebyshev_ad.degree = 3;
 
-  pcout << reduction_control.last_step() << std::endl;
+  chebyshev.initialize(op, chebyshev_ad);
+
+  const auto evs = chebyshev.estimate_eigenvalues(src);
+
+  pcout << evs.min_eigenvalue_estimate << " " << evs.max_eigenvalue_estimate
+        << std::endl;
+
+  pcout << 2.0 / (evs.min_eigenvalue_estimate + evs.max_eigenvalue_estimate)
+        << std::endl;
+
+
+  double     time_total = 0.0;
+  const auto timer      = std::chrono::system_clock::now();
+
+  for (unsigned int i = 0; i < 100; ++i)
+    chebyshev.vmult(dst, src);
+
+  time_total += std::chrono::duration_cast<std::chrono::nanoseconds>(
+                  std::chrono::system_clock::now() - timer)
+                  .count() /
+                1e9;
+
+  pcout << dof_handler.n_dofs() << " " << time_total << std::endl;
 }
 
 
@@ -120,6 +166,8 @@ main(int argc, char *argv[])
 
   if (dim == 2)
     test<2>(fe_degree, n_global_refinements, n_overlap);
+  else if (dim == 3)
+    test<3>(fe_degree, n_global_refinements, n_overlap);
   else
     AssertThrow(false, ExcNotImplemented());
 }

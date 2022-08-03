@@ -89,8 +89,6 @@ namespace dealii
             Utilities::pow(n_dofs_with_overlap_1D, dim),
             numbers::invalid_unsigned_int);
 
-          AssertDimension(dim, 2);
-
           const auto translate =
             [&](const auto i) -> std::pair<unsigned int, unsigned int> {
             if (i < n_overlap - 1)
@@ -101,18 +99,25 @@ namespace dealii
               return {2, i - (n_overlap + fe_degree - 1)};
           };
 
-          for (unsigned int j = 0, c = 0; j < n_dofs_with_overlap_1D; ++j)
-            for (unsigned int i = 0; i < n_dofs_with_overlap_1D; ++i, ++c)
-              {
-                const auto [i0, i1] = translate(i);
-                const auto [j0, j1] = translate(j);
+          for (unsigned int k = 0, c = 0;
+               k < (dim == 3 ? n_dofs_with_overlap_1D : 1);
+               ++k)
+            for (unsigned int j = 0;
+                 j < (dim >= 2 ? n_dofs_with_overlap_1D : 1);
+                 ++j)
+              for (unsigned int i = 0; i < n_dofs_with_overlap_1D; ++i, ++c)
+                {
+                  const auto [i0, i1] = translate(i);
+                  const auto [j0, j1] = translate(j);
+                  const auto [k0, k1] = translate(k);
 
-                const auto ii = i0 + 3 * j0;
-                const auto jj = i1 + n_dofs_1D * j1;
+                  const auto ii = i0 + 3 * j0 + 9 * k0;
+                  const auto jj =
+                    i1 + n_dofs_1D * j1 + n_dofs_1D * n_dofs_1D * k1;
 
-                if (cells[ii].state() == IteratorState::valid)
-                  dof_indices[c] = all_dofs[ii][jj];
-              }
+                  if (cells[ii].state() == IteratorState::valid)
+                    dof_indices[c] = all_dofs[ii][jj];
+                }
 
           if (return_all)
             return dof_indices;

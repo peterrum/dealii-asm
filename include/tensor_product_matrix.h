@@ -53,6 +53,16 @@ namespace dealii
                 dst[c]          = mask * dst[c] + (Number(1) - mask) * src[c];
               }
         }
+      else if (dim == 3)
+        {
+          for (unsigned int i2 = 0, c = 0; i2 < n; ++i2)
+            for (unsigned int i1 = 0; i1 < n; ++i1)
+              for (unsigned int i0 = 0; i0 < n; ++i0, ++c)
+                {
+                  const auto mask = masks[2][i2] * masks[1][i1] * masks[0][i0];
+                  dst[c]          = mask * dst[c] + (Number(1) - mask) * src[c];
+                }
+        }
       else
         {
           AssertThrow(false, ExcNotImplemented());

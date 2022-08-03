@@ -226,9 +226,17 @@ namespace dealii
                         set_entry({f0, f1}, cell_neighbor_neigbor);
 
                         if (level >= 3)
-                          {
-                            AssertThrow(false, ExcNotImplemented());
-                          }
+                          for (const auto f2 :
+                               cell_neighbor_neigbor->face_indices())
+                            if (((f0 / 2 != f2 / 2) && (f1 / 2 != f2 / 2)) &&
+                                (cell_neighbor_neigbor->at_boundary(f2) ==
+                                 false))
+                              {
+                                const auto cell_neighbor_neigbor_neigbor =
+                                  cell_neighbor_neigbor->neighbor(f2);
+                                set_entry({f0, f1, f2},
+                                          cell_neighbor_neigbor_neigbor);
+                              }
                       }
               }
         }
