@@ -204,8 +204,31 @@ create_system_preconditioner(const OperatorType &              op,
 
       if (preconditioner_type == "Diagonal")
         {
-          AssertThrow(false, ExcNotImplemented());
-          return {};
+          using PreconditionerType =
+            PreconditionChebyshev<OperatorType,
+                                  VectorType,
+                                  DiagonalMatrix<VectorType>>;
+
+          const auto precon_diag =
+            std::make_shared<DiagonalMatrix<VectorType>>();
+          op.compute_inverse_diagonal(precon_diag->get_vector());
+
+          typename PreconditionerType::AdditionalData additional_data;
+
+          additional_data.preconditioner = precon_diag;
+          additional_data.constraints.copy_from(op.get_constraints());
+          additional_data.degree = params.get<unsigned int>("degree", 3);
+
+          auto preconditioner_wrapper = std::make_shared<
+            PreconditionerAdapter<VectorType, PreconditionerType>>();
+
+          auto &preconditioner = preconditioner_wrapper->get_preconditioner();
+
+          preconditioner.initialize(op, additional_data);
+
+          // TODO: print eigenvalues
+
+          return preconditioner_wrapper;
         }
       else
         {
@@ -391,6 +414,21 @@ public:
       dof_handler.get_communicator());
   }
 
+
+  types::global_dof_index
+  m() const
+  {
+    return dof_handler.n_dofs();
+  }
+
+
+  Number
+  el(unsigned int, unsigned int) const
+  {
+    AssertThrow(false, ExcNotImplemented());
+    return 0;
+  }
+
   void
   vmult(VectorType &dst, const VectorType &src) const
   {
@@ -458,7 +496,7 @@ public:
   }
 
   void
-  compute_inverse_diagonal(VectorType &vec)
+  compute_inverse_diagonal(VectorType &vec) const
   {
     this->initialize_dof_vector(vec);
 

@@ -788,3 +788,25 @@ private:
   std::shared_ptr<const InverseMatrixType> inverse_matrix;
   std::shared_ptr<const RestrictorType>    restrictor;
 };
+
+template <typename VectorType, typename PreconditionerType>
+class PreconditionerAdapter : public PreconditionerBase<VectorType>
+{
+public:
+  PreconditionerAdapter() = default;
+
+  PreconditionerType &
+  get_preconditioner()
+  {
+    return preconditioner;
+  }
+
+  void
+  vmult(VectorType &dst, const VectorType &src) const override
+  {
+    preconditioner.vmult(dst, src);
+  }
+
+private:
+  PreconditionerType preconditioner;
+};
