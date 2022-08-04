@@ -13,6 +13,7 @@
 
 #include <deal.II/lac/diagonal_matrix.h>
 #include <deal.II/lac/dynamic_sparsity_pattern.h>
+#include <deal.II/lac/precondition.h>
 #include <deal.II/lac/solver_cg.h>
 #include <deal.II/lac/solver_gmres.h>
 #include <deal.II/lac/sparse_matrix_tools.h>
@@ -84,11 +85,11 @@ get_weighting_type(const boost::property_tree::ptree params)
 
 template <typename MatrixType, typename PreconditionerType, typename VectorType>
 std::shared_ptr<ReductionControl>
-solve(const MatrixType &                               A,
-      VectorType &                                     x,
-      const VectorType &                               b,
-      const std::shared_ptr<const PreconditionerType> &preconditioner,
-      const boost::property_tree::ptree                params)
+solve(const MatrixType &                              A,
+      VectorType &                                    x,
+      const VectorType &                              b,
+      const std::shared_ptr<const PreconditionerType> preconditioner,
+      const boost::property_tree::ptree               params)
 {
   const auto max_iterations = params.get<unsigned int>("max iterations", 1000);
   const auto abs_tolerance  = params.get<double>("abs tolerance", 1e-10);
@@ -424,6 +425,16 @@ public:
     return quadrature;
   }
 
+  void
+  compute_inverse_diagonal(VectorType &vec)
+  {
+    this->initialize_dof_vector(vec);
+
+    for (const auto entry : sparse_matrix)
+      if (entry.row() == entry.column())
+        vec[entry.row()] = 1.0 / entry.value();
+  }
+
 private:
   const Mapping<dim> &              mapping;
   DoFHandler<dim>                   dof_handler;
@@ -447,6 +458,9 @@ test(const boost::property_tree::ptree params)
   const auto solver_parameters = try_get_child(params, "solver");
   const auto preconditioner_parameters =
     try_get_child(params, "preconditioner");
+
+  const auto preconditioner_type =
+    preconditioner_parameters.get<std::string>("type", "");
 
   using Number     = double;
   using VectorType = LinearAlgebra::distributed::Vector<Number>;
@@ -484,8 +498,43 @@ test(const boost::property_tree::ptree params)
   std::shared_ptr<ReductionControl> reduction_control;
 
   // ASM on cell level
-  if (true)
+  if (preconditioner_type == "Identity")
     {
+      // note: handle it seperatly to exploit template specialization available
+      // for SoverCG + PreconditionIdentity
+
+      const auto preconditioner =
+        std::make_shared<const PreconditionIdentity>();
+
+      reduction_control =
+        solve(op, solution, rhs, preconditioner, solver_parameters);
+    }
+  else if (preconditioner_type == "Diagonal")
+    {
+      // note: handle it seperatly to exploit template specialization available
+      // for SoverCG + DiagonalMatrix
+
+      auto preconditioner = std::make_shared<DiagonalMatrix<VectorType>>();
+
+      op.compute_inverse_diagonal(preconditioner->get_vector());
+
+      const std::shared_ptr<const DiagonalMatrix<VectorType>>
+        const_preconditioner = preconditioner;
+
+      reduction_control =
+        solve(op, solution, rhs, const_preconditioner, solver_parameters);
+    }
+  else if (preconditioner_type == "Multigrid")
+    {
+      // note: handle it seperatly, since we need to set up the levels
+
+      AssertThrow(false, ExcNotImplemented());
+    }
+  else
+    {
+      std::cout << "B" << std::endl;
+      AssertThrow(preconditioner_type != "", ExcNotImplemented());
+
       const auto preconditioner =
         create_system_preconditioner(op, preconditioner_parameters);
 
