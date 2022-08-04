@@ -103,6 +103,8 @@ test(const unsigned int fe_degree,
   using VectorizedArrayType = VectorizedArray<Number>;
   using VectorType          = LinearAlgebra::distributed::Vector<double>;
 
+  const int n_rows_1d = 5; // TODO
+
   const unsigned int mapping_degree = fe_degree;
 
   FE_Q<dim> fe(fe_degree);
@@ -158,7 +160,7 @@ test(const unsigned int fe_degree,
   using MyOperatorType =
     MyOperator<PoissonOperator<dim, Number, VectorizedArrayType>>;
   using PreconditionerType =
-    ASPoissonPreconditioner<dim, Number, VectorizedArrayType>;
+    ASPoissonPreconditioner<dim, Number, VectorizedArrayType, n_rows_1d>;
 
   OperatorType   op(matrix_free);
   MyOperatorType my_op(op);

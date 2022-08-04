@@ -2,13 +2,14 @@
 
 #include <deal.II/matrix_free/tools.h>
 
-template <int dim, typename Number, typename VectorizedArrayType>
+template <int dim,
+          typename Number,
+          typename VectorizedArrayType,
+          int n_rows_1d = -1>
 class ASPoissonPreconditioner : public Subscriptor
 {
 public:
   using VectorType = LinearAlgebra::distributed::Vector<double>;
-
-  static constexpr int n_rows_1d = 5;
 
   ASPoissonPreconditioner(
     const MatrixFree<dim, Number, VectorizedArrayType> &matrix_free,
@@ -21,6 +22,10 @@ public:
     , fe_degree(matrix_free.get_dof_handler().get_fe().tensor_degree())
     , n_overlap(n_overlap)
   {
+    AssertThrow((n_rows_1d == -1) ||
+                  (n_rows_1d == fe_1D.degree + 2 * n_overlap - 1),
+                ExcNotImplemented());
+
     const auto &dof_handler = matrix_free.get_dof_handler();
 
     // set up ConstraintInfo
