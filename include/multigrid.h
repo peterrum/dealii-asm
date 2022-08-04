@@ -35,6 +35,10 @@ public:
   using SmootherType    = SmootherType_;
   using VectorType      = VectorType_;
 
+private:
+  using MGTransferType = MGTransferGlobalCoarsening<dim, VectorType>;
+
+public:
   PreconditionerGMG(
     const DoFHandler<dim> &dof_handler,
     const MGLevelObject<std::shared_ptr<const DoFHandler<dim>>>
@@ -49,9 +53,6 @@ public:
     , min_level(mg_dof_handlers.min_level())
     , max_level(mg_dof_handlers.max_level())
     , transfers(min_level, max_level)
-    , transfer(transfers, [&](const auto l, auto &vec) {
-      this->mg_operators[l]->initialize_dof_vector(vec);
-    })
   {
     // setup transfer operators
     for (auto l = min_level; l < max_level; ++l)
@@ -59,6 +60,11 @@ public:
                               *mg_dof_handlers[l],
                               *mg_constraints[l + 1],
                               *mg_constraints[l]);
+
+    transfer =
+      std::make_shared<MGTransferType>(transfers, [&](const auto l, auto &vec) {
+        this->mg_operators[l]->initialize_dof_vector(vec);
+      });
   }
 
   virtual SmootherType
@@ -103,7 +109,7 @@ public:
     // operators and smoothers together)
     mg = std::make_unique<Multigrid<VectorType>>(*mg_matrix,
                                                  *mg_coarse,
-                                                 transfer,
+                                                 *transfer,
                                                  mg_smoother,
                                                  mg_smoother,
                                                  min_level,
@@ -112,7 +118,7 @@ public:
     // convert multigrid algorithm to preconditioner
     preconditioner =
       std::make_unique<PreconditionMG<dim, VectorType, MGTransferType>>(
-        dof_handler, *mg, transfer);
+        dof_handler, *mg, *transfer);
   }
 
   virtual void
@@ -122,8 +128,6 @@ public:
   }
 
 protected:
-  using MGTransferType = MGTransferGlobalCoarsening<dim, VectorType>;
-
   const DoFHandler<dim> &dof_handler;
 
   const MGLevelObject<std::shared_ptr<const DoFHandler<dim>>> mg_dof_handlers;
@@ -135,7 +139,7 @@ protected:
   const unsigned int max_level;
 
   MGLevelObject<MGTwoLevelTransfer<dim, VectorType>> transfers;
-  MGTransferType                                     transfer;
+  std::shared_ptr<MGTransferType>                    transfer;
 
   mutable std::unique_ptr<mg::Matrix<VectorType>> mg_matrix;
 

@@ -442,10 +442,8 @@ public:
   create_mg_level_smoother(unsigned int           level,
                            const LevelMatrixType &level_matrix) final
   {
-#ifdef DEBUG
     pcout << "MyMultigrid::create_mg_level_smoother(" << level << ")"
           << std::endl;
-#endif
 
     (void)level;
 
@@ -732,8 +730,6 @@ test(const boost::property_tree::ptree params)
           mg_operators[l] =
             std::make_shared<OperatorType>(mapping, mg_tria, mg_fe, quadrature);
         }
-
-
 
       for (auto l = min_level; l <= max_level; ++l)
         {
