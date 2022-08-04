@@ -532,7 +532,6 @@ test(const boost::property_tree::ptree params)
     }
   else
     {
-      std::cout << "B" << std::endl;
       AssertThrow(preconditioner_type != "", ExcNotImplemented());
 
       const auto preconditioner =
