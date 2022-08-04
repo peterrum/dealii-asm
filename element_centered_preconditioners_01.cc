@@ -21,12 +21,6 @@
 #include <deal.II/lac/trilinos_sparse_matrix.h>
 #include <deal.II/lac/trilinos_sparsity_pattern.h>
 
-#include <deal.II/multigrid/mg_coarse.h>
-#include <deal.II/multigrid/mg_matrix.h>
-#include <deal.II/multigrid/mg_smoother.h>
-#include <deal.II/multigrid/mg_transfer_global_coarsening.h>
-#include <deal.II/multigrid/multigrid.h>
-
 #include <deal.II/numerics/matrix_creator.h>
 #include <deal.II/numerics/vector_tools.h>
 
@@ -35,6 +29,7 @@
 
 using namespace dealii;
 
+#include "include/multigrid.h"
 #include "include/preconditioners.h"
 #include "include/restrictors.h"
 
@@ -323,7 +318,7 @@ create_system_preconditioner(const OperatorType &              op,
 
 
 template <int dim, typename Number>
-class LaplaceOperator
+class LaplaceOperator : public Subscriptor
 {
 public:
   static const int dimension = dim;
@@ -375,6 +370,12 @@ public:
   vmult(VectorType &dst, const VectorType &src) const
   {
     sparse_matrix.vmult(dst, src);
+  }
+
+  void
+  Tvmult(VectorType &dst, const VectorType &src) const
+  {
+    sparse_matrix.Tvmult(dst, src);
   }
 
   const Mapping<dim> &
@@ -534,7 +535,12 @@ test(const boost::property_tree::ptree params)
     {
       // note: handle it seperatly, since we need to set up the levels
 
-      MGLevelObject<std::shared_ptr<LaplaceOperator<dim, Number>>> mg_operators;
+      using OperatorType = LaplaceOperator<dim, Number>;
+
+      MGLevelObject<std::shared_ptr<const DoFHandler<dim>>> mg_dof_handlers;
+      MGLevelObject<std::shared_ptr<const AffineConstraints<double>>>
+                                                   mg_constraints;
+      MGLevelObject<std::shared_ptr<OperatorType>> mg_operators;
 
       MGLevelObject<MGTwoLevelTransfer<dim, VectorType>>           transfers;
       std::unique_ptr<MGTransferGlobalCoarsening<dim, VectorType>> transfer;
@@ -553,6 +559,8 @@ test(const boost::property_tree::ptree params)
       const unsigned int max_level =
         (use_pmg ? mg_degress.size() : mg_triangulations.size()) - 1;
 
+      mg_dof_handlers.resize(min_level, max_level);
+      mg_constraints.resize(min_level, max_level);
       mg_operators.resize(min_level, max_level);
 
       for (unsigned int l = min_level; l <= max_level; ++l)
@@ -562,20 +570,32 @@ test(const boost::property_tree::ptree params)
                                       static_cast<Triangulation<dim> &>(tria) :
                                       *mg_triangulations[l];
 
-          mg_operators[l] = std::make_shared<LaplaceOperator<dim, Number>>(
-            mapping, mg_tria, mg_fe, quadrature);
+          mg_operators[l] =
+            std::make_shared<OperatorType>(mapping, mg_tria, mg_fe, quadrature);
         }
 
-      for (auto l = min_level; l < max_level; ++l)
-        transfers[l + 1].reinit(mg_operators[l + 1]->get_dof_handler(),
-                                mg_operators[l]->get_dof_handler(),
-                                mg_operators[l + 1]->get_constraints(),
-                                mg_operators[l]->get_constraints());
 
-      transfer = std::make_unique<MGTransferGlobalCoarsening<dim, VectorType>>(
-        transfers, [&](const auto l, auto &vector) {
-          mg_operators[l]->initialize_dof_vector(vector);
-        });
+
+      for (auto l = min_level; l <= max_level; ++l)
+        {
+          mg_dof_handlers[l] = std::shared_ptr<const DoFHandler<dim>>(
+            &mg_operators[l]->get_dof_handler(),
+            [](auto *) { /*nothing to do*/ });
+          mg_constraints[l] = std::shared_ptr<const AffineConstraints<double>>(
+            &mg_operators[l]->get_constraints(),
+            [](auto *) { /*nothing to do*/ });
+        }
+
+      const auto preconditioner =
+        std::make_shared<const MyMultigrid<dim, OperatorType, VectorType>>(
+          preconditioner_parameters,
+          op.get_dof_handler(),
+          mg_dof_handlers,
+          mg_constraints,
+          mg_operators);
+
+      reduction_control =
+        solve(op, solution, rhs, preconditioner, solver_parameters);
     }
   else
     {
