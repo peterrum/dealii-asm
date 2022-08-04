@@ -202,39 +202,43 @@ create_system_preconditioner(const OperatorType &              op,
 
       AssertThrow(preconditioner_type != "", ExcNotImplemented());
 
+      const auto setup_chebshev = [&](const auto precon) {
+        using PreconditionerType = PreconditionChebyshev<
+          OperatorType,
+          VectorType,
+          typename std::remove_cv<
+            typename std::remove_reference<decltype(*precon)>::type>::type>;
+
+        typename PreconditionerType::AdditionalData additional_data;
+
+        additional_data.preconditioner = precon;
+        additional_data.constraints.copy_from(op.get_constraints());
+        additional_data.degree = params.get<unsigned int>("degree", 3);
+
+        auto chebyshev = std::make_shared<PreconditionerType>();
+        chebyshev->initialize(op, additional_data);
+
+        // TODO: print eigenvalues
+
+        return std::make_shared<
+          PreconditionerAdapter<VectorType, PreconditionerType>>(chebyshev);
+      };
+
       if (preconditioner_type == "Diagonal")
         {
           const auto precon = std::make_shared<DiagonalMatrix<VectorType>>();
           op.compute_inverse_diagonal(precon->get_vector());
 
-          using PreconditionerType = PreconditionChebyshev<
-            OperatorType,
-            VectorType,
-            typename std::remove_cv<
-              typename std::remove_reference<decltype(*precon)>::type>::type>;
-
-          typename PreconditionerType::AdditionalData additional_data;
-
-          additional_data.preconditioner = precon;
-          additional_data.constraints.copy_from(op.get_constraints());
-          additional_data.degree = params.get<unsigned int>("degree", 3);
-
-          auto chebyshev = std::make_shared<PreconditionerType>();
-          chebyshev->initialize(op, additional_data);
-
-          // TODO: print eigenvalues
-
-          return std::make_shared<
-            PreconditionerAdapter<VectorType, PreconditionerType>>(chebyshev);
+          return setup_chebshev(precon);
         }
       else
         {
-          AssertThrow(false, ExcNotImplemented());
-
           const auto precon =
             create_system_preconditioner(op, preconditioner_parameters);
 
-          return {};
+          return setup_chebshev(
+            std::const_pointer_cast<
+              PreconditionerBase<typename OperatorType::vector_type>>(precon));
         }
     }
   else if (type == "AdditiveSchwarzPreconditioner")
@@ -582,14 +586,15 @@ test(const boost::property_tree::ptree params)
       // for SoverCG + DiagonalMatrix
 
       auto preconditioner = std::make_shared<DiagonalMatrix<VectorType>>();
-
       op.compute_inverse_diagonal(preconditioner->get_vector());
 
-      const std::shared_ptr<const DiagonalMatrix<VectorType>>
-        const_preconditioner = preconditioner;
-
       reduction_control =
-        solve(op, solution, rhs, const_preconditioner, solver_parameters);
+        solve(op,
+              solution,
+              rhs,
+              std::const_pointer_cast<const DiagonalMatrix<VectorType>>(
+                preconditioner),
+              solver_parameters);
     }
   else if (preconditioner_type == "Multigrid")
     {
