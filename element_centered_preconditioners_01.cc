@@ -21,6 +21,12 @@
 #include <deal.II/lac/trilinos_sparse_matrix.h>
 #include <deal.II/lac/trilinos_sparsity_pattern.h>
 
+#include <deal.II/multigrid/mg_coarse.h>
+#include <deal.II/multigrid/mg_matrix.h>
+#include <deal.II/multigrid/mg_smoother.h>
+#include <deal.II/multigrid/mg_transfer_global_coarsening.h>
+#include <deal.II/multigrid/multigrid.h>
+
 #include <deal.II/numerics/matrix_creator.h>
 #include <deal.II/numerics/vector_tools.h>
 
@@ -528,7 +534,48 @@ test(const boost::property_tree::ptree params)
     {
       // note: handle it seperatly, since we need to set up the levels
 
-      AssertThrow(false, ExcNotImplemented());
+      MGLevelObject<std::shared_ptr<LaplaceOperator<dim, Number>>> mg_operators;
+
+      MGLevelObject<MGTwoLevelTransfer<dim, VectorType>>           transfers;
+      std::unique_ptr<MGTransferGlobalCoarsening<dim, VectorType>> transfer;
+
+      const auto mg_degress = create_polynomial_coarsening_sequence(
+        fe_degree,
+        MGTransferGlobalCoarseningTools::PolynomialCoarseningSequenceType::
+          bisect);
+      const auto mg_triangulations =
+        MGTransferGlobalCoarseningTools::create_geometric_coarsening_sequence(
+          tria);
+
+      const bool use_pmg = false;
+
+      const unsigned int min_level = 0;
+      const unsigned int max_level =
+        (use_pmg ? mg_degress.size() : mg_triangulations.size()) - 1;
+
+      mg_operators.resize(min_level, max_level);
+
+      for (unsigned int l = min_level; l <= max_level; ++l)
+        {
+          const FE_Q<dim> mg_fe(use_pmg ? mg_degress[l] : fe_degree);
+          const auto &    mg_tria = use_pmg ?
+                                      static_cast<Triangulation<dim> &>(tria) :
+                                      *mg_triangulations[l];
+
+          mg_operators[l] = std::make_shared<LaplaceOperator<dim, Number>>(
+            mapping, mg_tria, mg_fe, quadrature);
+        }
+
+      for (auto l = min_level; l < max_level; ++l)
+        transfers[l + 1].reinit(mg_operators[l + 1]->get_dof_handler(),
+                                mg_operators[l]->get_dof_handler(),
+                                mg_operators[l + 1]->get_constraints(),
+                                mg_operators[l]->get_constraints());
+
+      transfer = std::make_unique<MGTransferGlobalCoarsening<dim, VectorType>>(
+        transfers, [&](const auto l, auto &vector) {
+          mg_operators[l]->initialize_dof_vector(vector);
+        });
     }
   else
     {
