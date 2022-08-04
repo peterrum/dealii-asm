@@ -1,0 +1,11 @@
+{
+    "dim" : 2,
+    "degree" : 3,
+    "n refinements" : 3,
+    "solver" : {
+        "type" : "GMRES"
+    },
+    "preconditioner" : {
+        "type" : "Identity"
+    }
+}
