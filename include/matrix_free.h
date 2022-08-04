@@ -6,6 +6,8 @@ class ASPoissonPreconditioner : public Subscriptor
 public:
   using VectorType = LinearAlgebra::distributed::Vector<double>;
 
+  static constexpr int n_rows_1d = 5;
+
   ASPoissonPreconditioner(
     const MatrixFree<dim, Number, VectorizedArrayType> &matrix_free,
     const unsigned int                                  n_overlap,
@@ -81,7 +83,7 @@ public:
          cell < matrix_free.n_cell_batches();
          ++cell)
       {
-        std::array<MyTensorProductMatrixSymmetricSum<dim, Number>,
+        std::array<MyTensorProductMatrixSymmetricSum<dim, Number, n_rows_1d>,
                    VectorizedArrayType::size()>
           scalar_fdm;
 
@@ -101,7 +103,7 @@ public:
                 dof_handler, cells, n_overlap, true),
               partitioner_for_fdm);
 
-            scalar_fdm[v] = setup_fdm<dim, Number>(
+            scalar_fdm[v] = setup_fdm<dim, Number, n_rows_1d>(
               cell_iterator,
               fe_1D,
               quadrature_1D,
@@ -112,9 +114,8 @@ public:
         cell_ptr.push_back(cell_ptr.back() +
                            matrix_free.n_active_entries_per_cell_batch(cell));
 
-        fdm[cell] =
-          MyTensorProductMatrixSymmetricSum<dim, Number>::template transpose<
-            VectorizedArrayType::size()>(
+        fdm[cell] = MyTensorProductMatrixSymmetricSum<dim, Number, n_rows_1d>::
+          template transpose<VectorizedArrayType::size()>(
             scalar_fdm, matrix_free.n_active_entries_per_cell_batch(cell));
       }
 
@@ -160,6 +161,103 @@ public:
   void
   vmult(VectorType &dst, const VectorType &src) const
   {
+    if (src.get_partitioner().get() ==
+        matrix_free.get_vector_partitioner().get())
+      {
+        matrix_free.template cell_loop<VectorType, VectorType>(
+          [&](const auto &matrix_free,
+              auto &      dst,
+              const auto &src,
+              const auto  cells) {
+            FEEvaluation<dim, -1, 0, 1, Number, VectorizedArrayType> phi_src(
+              matrix_free);
+            FEEvaluation<dim, -1, 0, 1, Number, VectorizedArrayType> phi_dst(
+              matrix_free);
+
+            for (unsigned int cell = cells.first; cell < cells.second; ++cell)
+              {
+                phi_src.reinit(cell);
+                phi_dst.reinit(cell);
+
+                phi_src.read_dof_values(src);
+
+                if (true)
+                  {
+                    fdm[cell].apply_inverse(
+                      ArrayView<VectorizedArrayType>(phi_dst.begin_dof_values(),
+                                                     phi_dst.dofs_per_cell),
+                      ArrayView<const VectorizedArrayType>(
+                        phi_src.begin_dof_values(), phi_src.dofs_per_cell));
+                  }
+                else
+                  {
+                    for (unsigned int i = 0; i < phi_src.dofs_per_cell; ++i)
+                      phi_dst.begin_dof_values()[i] =
+                        phi_src.begin_dof_values()[i];
+                  }
+
+                phi_dst.distribute_local_to_global(dst);
+              }
+          },
+          dst,
+          src,
+          true);
+      }
+    else
+      {
+        AlignedVector<VectorizedArrayType> src__(
+          Utilities::pow(fe_degree + 2 * n_overlap - 1, dim));
+        AlignedVector<VectorizedArrayType> dst__(
+          Utilities::pow(fe_degree + 2 * n_overlap - 1, dim));
+
+        // update ghost values
+        src_.copy_locally_owned_data_from(src);
+        src_.update_ghost_values();
+
+        dst_ = 0.0;
+
+        for (unsigned int cell = 0; cell < matrix_free.n_cell_batches(); ++cell)
+          {
+            // 1) gather
+            internal::VectorReader<Number, VectorizedArrayType> reader;
+            constraint_info.read_write_operation(reader,
+                                                 src_,
+                                                 src__,
+                                                 cell_ptr[cell],
+                                                 cell_ptr[cell + 1] -
+                                                   cell_ptr[cell],
+                                                 src__.size(),
+                                                 true);
+
+            // 2) cell operation: fast diagonalization method
+            fdm[cell].apply_inverse(make_array_view(dst__.begin(), dst__.end()),
+                                    make_array_view(src__.begin(),
+                                                    src__.end()));
+
+            // 3) scatter
+            internal::VectorDistributorLocalToGlobal<Number,
+                                                     VectorizedArrayType>
+              writer;
+            constraint_info.read_write_operation(writer,
+                                                 dst_,
+                                                 dst__,
+                                                 cell_ptr[cell],
+                                                 cell_ptr[cell + 1] -
+                                                   cell_ptr[cell],
+                                                 dst__.size(),
+                                                 true);
+          }
+
+        // compress
+        dst_.compress(VectorOperation::add);
+        dst.copy_locally_owned_data_from(dst_);
+      }
+    dst.scale(weights);
+  }
+
+  void
+  vmult_rw(VectorType &dst, const VectorType &src) const
+  {
     AlignedVector<VectorizedArrayType> src__(
       Utilities::pow(fe_degree + 2 * n_overlap - 1, dim));
     AlignedVector<VectorizedArrayType> dst__(
@@ -183,10 +281,6 @@ public:
                                                cell_ptr[cell],
                                              src__.size(),
                                              true);
-
-        // 2) cell operation: fast diagonalization method
-        fdm[cell].apply_inverse(make_array_view(dst__.begin(), dst__.end()),
-                                make_array_view(src__.begin(), src__.end()));
 
         // 3) scatter
         internal::VectorDistributorLocalToGlobal<Number, VectorizedArrayType>
@@ -216,7 +310,9 @@ private:
                             constraint_info;
   std::vector<unsigned int> cell_ptr;
 
-  std::vector<MyTensorProductMatrixSymmetricSum<dim, VectorizedArrayType>> fdm;
+  std::vector<
+    MyTensorProductMatrixSymmetricSum<dim, VectorizedArrayType, n_rows_1d>>
+    fdm;
 
   mutable VectorType src_;
   mutable VectorType dst_;

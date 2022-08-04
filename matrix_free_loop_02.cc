@@ -82,6 +82,8 @@ test(const unsigned int fe_degree,
     [](const auto &, const auto &point) {
       Point<dim> result;
 
+      return result;
+
       for (unsigned int d = 0; d < dim; ++d)
         result[d] = std::sin(2 * numbers::PI * point[(d + 1) % dim]) *
                     std::sin(numbers::PI * point[d]) * 0.1;
@@ -124,7 +126,7 @@ test(const unsigned int fe_degree,
 
   chebyshev_ad.preconditioner = precon;
   chebyshev_ad.constraints.copy_from(constraints);
-  chebyshev_ad.degree = 3;
+  chebyshev_ad.degree = 1;
 
   chebyshev.initialize(op, chebyshev_ad);
 
@@ -136,19 +138,28 @@ test(const unsigned int fe_degree,
   pcout << 2.0 / (evs.min_eigenvalue_estimate + evs.max_eigenvalue_estimate)
         << std::endl;
 
+  const auto run = [](const auto &runnable) {
+    double     time_total = 0.0;
+    const auto timer      = std::chrono::system_clock::now();
 
-  double     time_total = 0.0;
-  const auto timer      = std::chrono::system_clock::now();
+    for (unsigned int i = 0; i < 100; ++i)
+      runnable();
 
-  for (unsigned int i = 0; i < 100; ++i)
-    chebyshev.vmult(dst, src);
+    time_total += std::chrono::duration_cast<std::chrono::nanoseconds>(
+                    std::chrono::system_clock::now() - timer)
+                    .count() /
+                  1e9;
 
-  time_total += std::chrono::duration_cast<std::chrono::nanoseconds>(
-                  std::chrono::system_clock::now() - timer)
-                  .count() /
-                1e9;
+    return time_total;
+  };
 
-  pcout << dof_handler.n_dofs() << " " << time_total << std::endl;
+  const auto time_total_0  = run([&]() { op.vmult(dst, src); });
+  const auto time_total_1  = run([&]() { precon->vmult(dst, src); });
+  const auto time_total_1_ = run([&]() { precon->vmult_rw(dst, src); });
+  const auto time_total_2  = run([&]() { chebyshev.vmult(dst, src); });
+
+  pcout << dof_handler.n_dofs() << " " << time_total_0 << " " << time_total_1
+        << " " << time_total_1_ << " " << time_total_2 << std::endl;
 }
 
 

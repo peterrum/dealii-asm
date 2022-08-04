@@ -4,9 +4,9 @@
 
 namespace dealii
 {
-  template <int dim, typename Number>
+  template <int dim, typename Number, int n_rows_1d = -1>
   class MyTensorProductMatrixSymmetricSum
-    : public TensorProductMatrixSymmetricSum<dim, Number, -1>
+    : public TensorProductMatrixSymmetricSum<dim, Number, n_rows_1d>
   {
   public:
     void
@@ -40,7 +40,8 @@ namespace dealii
     apply_inverse(const ArrayView<Number> &      dst,
                   const ArrayView<const Number> &src) const
     {
-      TensorProductMatrixSymmetricSum<dim, Number, -1>::apply_inverse(dst, src);
+      TensorProductMatrixSymmetricSum<dim, Number, n_rows_1d>::apply_inverse(
+        dst, src);
 
       const unsigned int n = this->eigenvalues[0].size();
 
@@ -70,10 +71,13 @@ namespace dealii
     }
 
     template <std::size_t N>
-    static MyTensorProductMatrixSymmetricSum<dim, VectorizedArray<Number, N>>
-    transpose(
-      const std::array<MyTensorProductMatrixSymmetricSum<dim, Number>, N> &in,
-      const unsigned int NN = N)
+    static MyTensorProductMatrixSymmetricSum<dim,
+                                             VectorizedArray<Number, N>,
+                                             n_rows_1d>
+    transpose(const std::array<
+                MyTensorProductMatrixSymmetricSum<dim, Number, n_rows_1d>,
+                N> &             in,
+              const unsigned int NN = N)
     {
       std::array<Table<2, VectorizedArray<Number, N>>, dim> mass_matrix;
       std::array<Table<2, VectorizedArray<Number, N>>, dim> derivative_matrix;
@@ -121,7 +125,10 @@ namespace dealii
               masks[d][i][v] = in[v].masks[d][i];
         }
 
-      MyTensorProductMatrixSymmetricSum<dim, VectorizedArray<Number, N>> out;
+      MyTensorProductMatrixSymmetricSum<dim,
+                                        VectorizedArray<Number, N>,
+                                        n_rows_1d>
+        out;
       out.internal_reinit(
         mass_matrix, derivative_matrix, eigenvectors, eigenvalues, masks);
 
@@ -186,8 +193,8 @@ namespace dealii
   }
 
 
-  template <int dim, typename Number>
-  MyTensorProductMatrixSymmetricSum<dim, Number>
+  template <int dim, typename Number, int n_rows_1d = -1>
+  MyTensorProductMatrixSymmetricSum<dim, Number, n_rows_1d>
   setup_fdm(const typename Triangulation<dim>::cell_iterator &cell,
             const FiniteElement<1> &                          fe,
             const Quadrature<1> &                             quadrature,
@@ -309,7 +316,7 @@ namespace dealii
       }
 
     // 3) setup FDM routine
-    MyTensorProductMatrixSymmetricSum<dim, Number> fdm;
+    MyTensorProductMatrixSymmetricSum<dim, Number, n_rows_1d> fdm;
     fdm.reinit(Ms, Ks);
     fdm.set_mask(masks);
 
