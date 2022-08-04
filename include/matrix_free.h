@@ -257,52 +257,6 @@ public:
     dst.scale(weights);
   }
 
-  void
-  vmult_rw(VectorType &dst, const VectorType &src) const
-  {
-    AlignedVector<VectorizedArrayType> src__(
-      Utilities::pow(fe_degree + 2 * n_overlap - 1, dim));
-    AlignedVector<VectorizedArrayType> dst__(
-      Utilities::pow(fe_degree + 2 * n_overlap - 1, dim));
-
-    // update ghost values
-    src_.copy_locally_owned_data_from(src);
-    src_.update_ghost_values();
-
-    dst_ = 0.0;
-
-    for (unsigned int cell = 0; cell < matrix_free.n_cell_batches(); ++cell)
-      {
-        // 1) gather
-        internal::VectorReader<Number, VectorizedArrayType> reader;
-        constraint_info.read_write_operation(reader,
-                                             src_,
-                                             src__,
-                                             cell_ptr[cell],
-                                             cell_ptr[cell + 1] -
-                                               cell_ptr[cell],
-                                             src__.size(),
-                                             true);
-
-        // 3) scatter
-        internal::VectorDistributorLocalToGlobal<Number, VectorizedArrayType>
-          writer;
-        constraint_info.read_write_operation(writer,
-                                             dst_,
-                                             dst__,
-                                             cell_ptr[cell],
-                                             cell_ptr[cell + 1] -
-                                               cell_ptr[cell],
-                                             dst__.size(),
-                                             true);
-      }
-
-    // compress
-    dst_.compress(VectorOperation::add);
-    dst.copy_locally_owned_data_from(dst_);
-    dst.scale(weights);
-  }
-
   std::size_t
   memory_consumption() const
   {
@@ -334,6 +288,7 @@ template <int dim, typename Number, typename VectorizedArrayType>
 class PoissonOperator : public Subscriptor
 {
 public:
+  using value_type = Number;
   using VectorType = LinearAlgebra::distributed::Vector<Number>;
 
   using FECellIntegrator =

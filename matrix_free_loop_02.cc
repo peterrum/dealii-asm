@@ -38,18 +38,72 @@ using namespace dealii;
 
 #include "include/matrix_free.h"
 
+template <typename OperatorType>
+class MyOperator : public Subscriptor
+{
+public:
+  using value_type = typename OperatorType::value_type;
+  using VectorType = typename OperatorType::VectorType;
+
+  MyOperator(const OperatorType &op)
+    : op(op)
+  {}
+
+  void
+  vmult(VectorType &dst, const VectorType &src) const
+  {
+    op.vmult(dst, src);
+  }
+
+  types::global_dof_index
+  m() const
+  {
+    return op.m();
+  }
+
+
+  value_type
+  el(unsigned int i, unsigned int j) const
+  {
+    return op.el(i, j);
+  }
+
+private:
+  const OperatorType &op;
+};
+
+template <typename VectorType>
+class MyDiagonalMatrix : public Subscriptor
+{
+public:
+  void
+  vmult(VectorType &dst, const VectorType &src) const
+  {
+    op.vmult(dst, src);
+  }
+
+  VectorType &
+  get_vector()
+  {
+    return op.get_vector();
+  }
+
+private:
+  DiagonalMatrix<VectorType> op;
+};
+
 template <int dim>
 void
 test(const unsigned int fe_degree,
      const unsigned int n_global_refinements,
-     const unsigned int n_overlap)
+     const unsigned int n_overlap,
+     const unsigned int chebyshev_degree)
 {
   using Number              = double;
   using VectorizedArrayType = VectorizedArray<Number>;
   using VectorType          = LinearAlgebra::distributed::Vector<double>;
 
-  const unsigned int mapping_degree   = fe_degree;
-  const unsigned int chebyshev_degree = 2;
+  const unsigned int mapping_degree = fe_degree;
 
   FE_Q<dim> fe(fe_degree);
   FE_Q<1>   fe_1D(fe_degree);
@@ -101,10 +155,13 @@ test(const unsigned int fe_degree,
   matrix_free.reinit(mapping_q_cache, dof_handler, constraints, quadrature);
 
   using OperatorType = PoissonOperator<dim, Number, VectorizedArrayType>;
+  using MyOperatorType =
+    MyOperator<PoissonOperator<dim, Number, VectorizedArrayType>>;
   using PreconditionerType =
     ASPoissonPreconditioner<dim, Number, VectorizedArrayType>;
 
-  OperatorType op(matrix_free);
+  OperatorType   op(matrix_free);
+  MyOperatorType my_op(op);
 
   VectorType src, dst;
 
@@ -122,6 +179,9 @@ test(const unsigned int fe_degree,
 
   const auto precon_diag = std::make_shared<DiagonalMatrix<VectorType>>();
   op.compute_inverse_diagonal(precon_diag->get_vector());
+
+  const auto precon_my_diag = std::make_shared<MyDiagonalMatrix<VectorType>>();
+  op.compute_inverse_diagonal(precon_my_diag->get_vector());
 
   PreconditionChebyshev<OperatorType, VectorType, PreconditionerType>
     precon_chebyshev_fdm;
@@ -155,15 +215,49 @@ test(const unsigned int fe_degree,
     precon_chebyshev_diag.initialize(op, chebyshev_ad);
   }
 
+  PreconditionChebyshev<MyOperatorType, VectorType, DiagonalMatrix<VectorType>>
+    precon_chebyshev_diag_my_op;
+
+  {
+    typename PreconditionChebyshev<MyOperatorType,
+                                   VectorType,
+                                   DiagonalMatrix<VectorType>>::AdditionalData
+      chebyshev_ad;
+
+    chebyshev_ad.preconditioner = precon_diag;
+    chebyshev_ad.constraints.copy_from(constraints);
+    chebyshev_ad.degree = chebyshev_degree;
+
+    precon_chebyshev_diag_my_op.initialize(my_op, chebyshev_ad);
+  }
+
+  PreconditionChebyshev<OperatorType, VectorType, MyDiagonalMatrix<VectorType>>
+    precon_chebyshev_my_diag;
+
+  {
+    typename PreconditionChebyshev<OperatorType,
+                                   VectorType,
+                                   MyDiagonalMatrix<VectorType>>::AdditionalData
+      chebyshev_ad;
+
+    chebyshev_ad.preconditioner = precon_my_diag;
+    chebyshev_ad.constraints.copy_from(constraints);
+    chebyshev_ad.degree = chebyshev_degree;
+
+    precon_chebyshev_my_diag.initialize(op, chebyshev_ad);
+  }
 
 
-  const auto evs = precon_chebyshev_fdm.estimate_eigenvalues(src);
+  if (false)
+    {
+      const auto evs = precon_chebyshev_fdm.estimate_eigenvalues(src);
 
-  pcout << evs.min_eigenvalue_estimate << " " << evs.max_eigenvalue_estimate
-        << std::endl;
+      pcout << evs.min_eigenvalue_estimate << " " << evs.max_eigenvalue_estimate
+            << std::endl;
 
-  pcout << 2.0 / (evs.min_eigenvalue_estimate + evs.max_eigenvalue_estimate)
-        << std::endl;
+      pcout << 2.0 / (evs.min_eigenvalue_estimate + evs.max_eigenvalue_estimate)
+            << std::endl;
+    }
 
   const auto run = [](const auto &runnable) {
     double     time_total = 0.0;
@@ -180,23 +274,39 @@ test(const unsigned int fe_degree,
     return time_total;
   };
 
+  // vmult
   const auto time_total_0 = run([&]() { op.vmult(dst, src); });
+
+  // fdm
   const auto time_total_1 = run([&]() { precon_fdm->vmult(dst, src); });
-  const auto time_total_2 = run([&]() { precon_fdm->vmult_rw(dst, src); });
-  const auto time_total_3 =
+  // fdm + chebyshev
+  const auto time_total_2 =
     run([&]() { precon_chebyshev_fdm.vmult(dst, src); });
 
-  const auto time_total_4 = run([&]() { precon_diag->vmult(dst, src); });
-  const auto time_total_5 =
+  // diagonal
+  const auto time_total_3 = run([&]() { precon_diag->vmult(dst, src); });
+  // diagonal + chebyshev
+  const auto time_total_4 =
     run([&]() { precon_chebyshev_diag.vmult(dst, src); });
+  // diagonal + chebyshev (no pre/post)
+  const auto time_total_5 =
+    run([&]() { precon_chebyshev_diag_my_op.vmult(dst, src); });
+  // diagonal + chebyshev (without exploiting the fact that we have a diagonal)
+  const auto time_total_6 =
+    run([&]() { precon_chebyshev_my_diag.vmult(dst, src); });
 
   pcout << dof_handler.n_dofs() << " " << time_total_0 << " " << time_total_1
         << " " << time_total_2 << " " << time_total_3 << " " << time_total_4
-        << " " << time_total_5 << std::endl;
-  pcout << Utilities::MPI::sum(precon_fdm->memory_consumption(), MPI_COMM_WORLD)
-        << std::endl;
-  pcout << Utilities::MPI::sum(src.memory_consumption(), MPI_COMM_WORLD)
-        << std::endl;
+        << " " << time_total_5 << " " << time_total_6 << std::endl;
+
+  if (false)
+    {
+      pcout << Utilities::MPI::sum(precon_fdm->memory_consumption(),
+                                   MPI_COMM_WORLD)
+            << std::endl;
+      pcout << Utilities::MPI::sum(src.memory_consumption(), MPI_COMM_WORLD)
+            << std::endl;
+    }
 }
 
 
@@ -212,10 +322,14 @@ main(int argc, char *argv[])
     (argc >= 4) ? std::atoi(argv[3]) : 6;
   const unsigned int n_overlap = (argc >= 5) ? std::atoi(argv[4]) : 1;
 
-  if (dim == 2)
-    test<2>(fe_degree, n_global_refinements, n_overlap);
-  else if (dim == 3)
-    test<3>(fe_degree, n_global_refinements, n_overlap);
-  else
-    AssertThrow(false, ExcNotImplemented());
+  for (unsigned int chebyshev_degree = 1; chebyshev_degree <= 5;
+       ++chebyshev_degree)
+    {
+      if (dim == 2)
+        test<2>(fe_degree, n_global_refinements, n_overlap, chebyshev_degree);
+      else if (dim == 3)
+        test<3>(fe_degree, n_global_refinements, n_overlap, chebyshev_degree);
+      else
+        AssertThrow(false, ExcNotImplemented());
+    }
 }
