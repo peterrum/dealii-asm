@@ -1,5 +1,7 @@
 #pragma once
 
+#include <deal.II/matrix_free/tools.h>
+
 template <int dim, typename Number, typename VectorizedArrayType>
 class ASPoissonPreconditioner : public Subscriptor
 {
@@ -301,6 +303,12 @@ public:
     dst.scale(weights);
   }
 
+  std::size_t
+  memory_consumption() const
+  {
+    return MemoryConsumption::memory_consumption(fdm);
+  }
+
 private:
   const MatrixFree<dim, Number, VectorizedArrayType> &matrix_free;
   const unsigned int                                  fe_degree;
@@ -327,6 +335,9 @@ class PoissonOperator : public Subscriptor
 {
 public:
   using VectorType = LinearAlgebra::distributed::Vector<Number>;
+
+  using FECellIntegrator =
+    FEEvaluation<dim, -1, 0, 1, Number, VectorizedArrayType>;
 
   PoissonOperator(
     const MatrixFree<dim, Number, VectorizedArrayType> &matrix_free)
@@ -364,6 +375,32 @@ public:
 
 
   void
+  do_cell_integral_local(FECellIntegrator &integrator) const
+  {
+    integrator.evaluate(EvaluationFlags::gradients);
+
+    for (unsigned int q = 0; q < integrator.n_q_points; ++q)
+      integrator.submit_gradient(integrator.get_gradient(q), q);
+
+    integrator.integrate(EvaluationFlags::gradients);
+  }
+
+
+  void
+  do_cell_integral_global(FECellIntegrator &integrator,
+                          VectorType &      dst,
+                          const VectorType &src) const
+  {
+    integrator.gather_evaluate(src, EvaluationFlags::gradients);
+
+    for (unsigned int q = 0; q < integrator.n_q_points; ++q)
+      integrator.submit_gradient(integrator.get_gradient(q), q);
+
+    integrator.integrate_scatter(EvaluationFlags::gradients, dst);
+  }
+
+
+  void
   vmult(VectorType &dst, const VectorType &src) const
   {
     matrix_free.template cell_loop<VectorType, VectorType>(
@@ -373,18 +410,68 @@ public:
         for (unsigned int cell = cells.first; cell < cells.second; ++cell)
           {
             phi.reinit(cell);
-            phi.gather_evaluate(src, EvaluationFlags::gradients);
-
-            for (unsigned int q = 0; q < phi.dofs_per_cell; ++q)
-              phi.submit_gradient(phi.get_gradient(q), q);
-
-            phi.integrate_scatter(EvaluationFlags::gradients, dst);
+            do_cell_integral_global(phi, dst, src);
           }
       },
       dst,
       src,
       true);
   }
+
+
+  void
+  vmult(VectorType &      dst,
+        const VectorType &src,
+        const std::function<void(const unsigned int, const unsigned int)>
+          &operation_before_matrix_vector_product,
+        const std::function<void(const unsigned int, const unsigned int)>
+          &operation_after_matrix_vector_product) const
+  {
+    matrix_free.template cell_loop<VectorType, VectorType>(
+      [&](const auto &, auto &dst, const auto &src, const auto cells) {
+        FEEvaluation<dim, -1, 0, 1, Number, VectorizedArrayType> phi(
+          matrix_free);
+        for (unsigned int cell = cells.first; cell < cells.second; ++cell)
+          {
+            phi.reinit(cell);
+            do_cell_integral_global(phi, dst, src);
+          }
+      },
+      dst,
+      src,
+      operation_before_matrix_vector_product,
+      operation_after_matrix_vector_product);
+  }
+
+
+  void
+  compute_inverse_diagonal(VectorType &diagonal) const
+  {
+    this->matrix_free.initialize_dof_vector(diagonal);
+    MatrixFreeTools::compute_diagonal(matrix_free,
+                                      diagonal,
+                                      &PoissonOperator::do_cell_integral_local,
+                                      this);
+
+    for (auto &i : diagonal)
+      i = (std::abs(i) > 1.0e-10) ? (1.0 / i) : 1.0;
+  }
+
+
+  types::global_dof_index
+  m() const
+  {
+    return matrix_free.get_dof_handler().n_dofs();
+  }
+
+
+  Number
+  el(unsigned int, unsigned int) const
+  {
+    AssertThrow(false, ExcNotImplemented());
+    return 0;
+  }
+
 
 private:
   const MatrixFree<dim, Number, VectorizedArrayType> &matrix_free;

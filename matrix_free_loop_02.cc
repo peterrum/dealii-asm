@@ -48,7 +48,8 @@ test(const unsigned int fe_degree,
   using VectorizedArrayType = VectorizedArray<Number>;
   using VectorType          = LinearAlgebra::distributed::Vector<double>;
 
-  const unsigned int mapping_degree = fe_degree;
+  const unsigned int mapping_degree   = fe_degree;
+  const unsigned int chebyshev_degree = 2;
 
   FE_Q<dim> fe(fe_degree);
   FE_Q<1>   fe_1D(fe_degree);
@@ -112,25 +113,51 @@ test(const unsigned int fe_degree,
 
   op.rhs(src);
 
-  const auto precon = std::make_shared<PreconditionerType>(matrix_free,
-                                                           n_overlap,
-                                                           mapping_q_cache,
-                                                           fe_1D,
-                                                           quadrature_face,
-                                                           quadrature_1D);
+  const auto precon_fdm = std::make_shared<PreconditionerType>(matrix_free,
+                                                               n_overlap,
+                                                               mapping_q_cache,
+                                                               fe_1D,
+                                                               quadrature_face,
+                                                               quadrature_1D);
 
-  PreconditionChebyshev<OperatorType, VectorType, PreconditionerType> chebyshev;
+  const auto precon_diag = std::make_shared<DiagonalMatrix<VectorType>>();
+  op.compute_inverse_diagonal(precon_diag->get_vector());
 
-  typename PreconditionChebyshev<OperatorType, VectorType, PreconditionerType>::
-    AdditionalData chebyshev_ad;
+  PreconditionChebyshev<OperatorType, VectorType, PreconditionerType>
+    precon_chebyshev_fdm;
 
-  chebyshev_ad.preconditioner = precon;
-  chebyshev_ad.constraints.copy_from(constraints);
-  chebyshev_ad.degree = 1;
+  {
+    typename PreconditionChebyshev<OperatorType,
+                                   VectorType,
+                                   PreconditionerType>::AdditionalData
+      chebyshev_ad;
 
-  chebyshev.initialize(op, chebyshev_ad);
+    chebyshev_ad.preconditioner = precon_fdm;
+    chebyshev_ad.constraints.copy_from(constraints);
+    chebyshev_ad.degree = chebyshev_degree;
 
-  const auto evs = chebyshev.estimate_eigenvalues(src);
+    precon_chebyshev_fdm.initialize(op, chebyshev_ad);
+  }
+
+  PreconditionChebyshev<OperatorType, VectorType, DiagonalMatrix<VectorType>>
+    precon_chebyshev_diag;
+
+  {
+    typename PreconditionChebyshev<OperatorType,
+                                   VectorType,
+                                   DiagonalMatrix<VectorType>>::AdditionalData
+      chebyshev_ad;
+
+    chebyshev_ad.preconditioner = precon_diag;
+    chebyshev_ad.constraints.copy_from(constraints);
+    chebyshev_ad.degree = chebyshev_degree;
+
+    precon_chebyshev_diag.initialize(op, chebyshev_ad);
+  }
+
+
+
+  const auto evs = precon_chebyshev_fdm.estimate_eigenvalues(src);
 
   pcout << evs.min_eigenvalue_estimate << " " << evs.max_eigenvalue_estimate
         << std::endl;
@@ -153,13 +180,23 @@ test(const unsigned int fe_degree,
     return time_total;
   };
 
-  const auto time_total_0  = run([&]() { op.vmult(dst, src); });
-  const auto time_total_1  = run([&]() { precon->vmult(dst, src); });
-  const auto time_total_1_ = run([&]() { precon->vmult_rw(dst, src); });
-  const auto time_total_2  = run([&]() { chebyshev.vmult(dst, src); });
+  const auto time_total_0 = run([&]() { op.vmult(dst, src); });
+  const auto time_total_1 = run([&]() { precon_fdm->vmult(dst, src); });
+  const auto time_total_2 = run([&]() { precon_fdm->vmult_rw(dst, src); });
+  const auto time_total_3 =
+    run([&]() { precon_chebyshev_fdm.vmult(dst, src); });
+
+  const auto time_total_4 = run([&]() { precon_diag->vmult(dst, src); });
+  const auto time_total_5 =
+    run([&]() { precon_chebyshev_diag.vmult(dst, src); });
 
   pcout << dof_handler.n_dofs() << " " << time_total_0 << " " << time_total_1
-        << " " << time_total_1_ << " " << time_total_2 << std::endl;
+        << " " << time_total_2 << " " << time_total_3 << " " << time_total_4
+        << " " << time_total_5 << std::endl;
+  pcout << Utilities::MPI::sum(precon_fdm->memory_consumption(), MPI_COMM_WORLD)
+        << std::endl;
+  pcout << Utilities::MPI::sum(src.memory_consumption(), MPI_COMM_WORLD)
+        << std::endl;
 }
 
 
