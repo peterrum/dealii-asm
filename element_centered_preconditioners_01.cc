@@ -459,7 +459,7 @@ private:
 
 
 template <int dim, typename Number>
-class LaplaceOperator : public Subscriptor
+class LaplaceOperatorMatrixBased : public Subscriptor
 {
 public:
   static const int dimension = dim;
@@ -468,10 +468,10 @@ public:
 
   using VectorType = vector_type;
 
-  LaplaceOperator(const Mapping<dim> &      mapping,
-                  const Triangulation<dim> &tria,
-                  const FiniteElement<dim> &fe,
-                  const Quadrature<dim> &   quadrature)
+  LaplaceOperatorMatrixBased(const Mapping<dim> &      mapping,
+                             const Triangulation<dim> &tria,
+                             const FiniteElement<dim> &fe,
+                             const Quadrature<dim> &   quadrature)
     : mapping(mapping)
     , dof_handler(tria)
     , quadrature(quadrature)
@@ -610,7 +610,7 @@ private:
 };
 
 
-template <int dim>
+template <typename OperatorType>
 void
 test(const boost::property_tree::ptree params)
 {
@@ -625,7 +625,8 @@ test(const boost::property_tree::ptree params)
   const auto preconditioner_type =
     preconditioner_parameters.get<std::string>("type", "");
 
-  using Number     = double;
+  const int dim    = OperatorType::dimension;
+  using Number     = typename OperatorType::value_type;
   using VectorType = LinearAlgebra::distributed::Vector<Number>;
 
   ConditionalOStream pcout(std::cout,
@@ -644,7 +645,7 @@ test(const boost::property_tree::ptree params)
   QGauss<dim>    quadrature(fe_degree + 1);
   MappingQ1<dim> mapping;
 
-  LaplaceOperator<dim, Number> op(mapping, tria, fe, quadrature);
+  OperatorType op(mapping, tria, fe, quadrature);
 
   // create vectors
   VectorType solution, rhs;
@@ -691,8 +692,6 @@ test(const boost::property_tree::ptree params)
   else if (preconditioner_type == "Multigrid")
     {
       // note: handle it seperatly, since we need to set up the levels
-
-      using OperatorType = LaplaceOperator<dim, Number>;
 
       MGLevelObject<std::shared_ptr<const DoFHandler<dim>>> mg_dof_handlers;
       MGLevelObject<std::shared_ptr<const AffineConstraints<double>>>
@@ -784,10 +783,13 @@ main(int argc, char *argv[])
   boost::property_tree::ptree params;
   boost::property_tree::read_json(argv[1], params);
 
-  const unsigned int dim = params.get<unsigned int>("dim", 2);
+  const auto dim  = params.get<unsigned int>("dim", 2);
+  const auto type = params.get<std::string>("type", "matrixbased");
 
-  if (dim == 2)
-    test<2>(params);
+  using Number = double;
+
+  if (dim == 2 && type == "matrixbased")
+    test<LaplaceOperatorMatrixBased<2, Number>>(params);
   else
     AssertThrow(false, ExcNotImplemented());
 }
