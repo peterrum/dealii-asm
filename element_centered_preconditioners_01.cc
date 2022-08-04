@@ -192,7 +192,32 @@ create_system_preconditioner(const OperatorType &              op,
 
   const auto type = params.get<std::string>("type", "");
 
-  if (type == "AdditiveSchwarzPreconditioner")
+  if (type == "Chebyshev")
+    {
+      const auto preconditioner_parameters =
+        try_get_child(params, "preconditioner");
+
+      const auto preconditioner_type =
+        preconditioner_parameters.get<std::string>("type", "");
+
+      AssertThrow(preconditioner_type != "", ExcNotImplemented());
+
+      if (preconditioner_type == "Diagonal")
+        {
+          AssertThrow(false, ExcNotImplemented());
+          return {};
+        }
+      else
+        {
+          AssertThrow(false, ExcNotImplemented());
+
+          const auto precon =
+            create_system_preconditioner(op, preconditioner_parameters);
+
+          return {};
+        }
+    }
+  else if (type == "AdditiveSchwarzPreconditioner")
     {
       using RestictorType = Restrictors::ElementCenteredRestrictor<VectorType>;
       using InverseMatrixType = RestrictedMatrixView<Number>;
