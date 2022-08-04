@@ -793,20 +793,17 @@ template <typename VectorType, typename PreconditionerType>
 class PreconditionerAdapter : public PreconditionerBase<VectorType>
 {
 public:
-  PreconditionerAdapter() = default;
-
-  PreconditionerType &
-  get_preconditioner()
-  {
-    return preconditioner;
-  }
+  PreconditionerAdapter(
+    const std::shared_ptr<const PreconditionerType> preconditioner)
+    : preconditioner(preconditioner)
+  {}
 
   void
   vmult(VectorType &dst, const VectorType &src) const override
   {
-    preconditioner.vmult(dst, src);
+    preconditioner->vmult(dst, src);
   }
 
 private:
-  PreconditionerType preconditioner;
+  const std::shared_ptr<const PreconditionerType> preconditioner;
 };

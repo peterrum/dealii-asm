@@ -204,31 +204,28 @@ create_system_preconditioner(const OperatorType &              op,
 
       if (preconditioner_type == "Diagonal")
         {
-          using PreconditionerType =
-            PreconditionChebyshev<OperatorType,
-                                  VectorType,
-                                  DiagonalMatrix<VectorType>>;
+          const auto precon = std::make_shared<DiagonalMatrix<VectorType>>();
+          op.compute_inverse_diagonal(precon->get_vector());
 
-          const auto precon_diag =
-            std::make_shared<DiagonalMatrix<VectorType>>();
-          op.compute_inverse_diagonal(precon_diag->get_vector());
+          using PreconditionerType = PreconditionChebyshev<
+            OperatorType,
+            VectorType,
+            typename std::remove_cv<
+              typename std::remove_reference<decltype(*precon)>::type>::type>;
 
           typename PreconditionerType::AdditionalData additional_data;
 
-          additional_data.preconditioner = precon_diag;
+          additional_data.preconditioner = precon;
           additional_data.constraints.copy_from(op.get_constraints());
           additional_data.degree = params.get<unsigned int>("degree", 3);
 
-          auto preconditioner_wrapper = std::make_shared<
-            PreconditionerAdapter<VectorType, PreconditionerType>>();
-
-          auto &preconditioner = preconditioner_wrapper->get_preconditioner();
-
-          preconditioner.initialize(op, additional_data);
+          auto chebyshev = std::make_shared<PreconditionerType>();
+          chebyshev->initialize(op, additional_data);
 
           // TODO: print eigenvalues
 
-          return preconditioner_wrapper;
+          return std::make_shared<
+            PreconditionerAdapter<VectorType, PreconditionerType>>(chebyshev);
         }
       else
         {
