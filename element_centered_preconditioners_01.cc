@@ -365,6 +365,100 @@ create_system_preconditioner(const OperatorType &              op,
   return {};
 }
 
+template <typename VectorType>
+class WrapperForGMG : public Subscriptor
+{
+public:
+  struct AdditionalData
+  {};
+
+  WrapperForGMG() = default;
+
+  WrapperForGMG(
+    const std::shared_ptr<const PreconditionerBase<VectorType>> &base)
+    : base(base)
+  {}
+
+  virtual void
+  vmult(VectorType &dst, const VectorType &src) const
+  {
+    base->vmult(dst, src);
+  }
+
+  void
+  Tvmult(VectorType &dst, const VectorType &src) const
+  {
+    Assert(false, ExcNotImplemented());
+    (void)dst;
+    (void)src;
+  }
+
+  void
+  clear()
+  {
+    Assert(false, ExcNotImplemented());
+  }
+
+  std::shared_ptr<const PreconditionerBase<VectorType>> base;
+};
+
+template <int dim, typename LevelMatrixType_, typename VectorType>
+class MyMultigrid : public PreconditionerGMG<dim,
+                                             LevelMatrixType_,
+                                             WrapperForGMG<VectorType>,
+                                             VectorType>
+{
+public:
+  using Base = PreconditionerGMG<dim,
+                                 LevelMatrixType_,
+                                 WrapperForGMG<VectorType>,
+                                 VectorType>;
+
+  using LevelMatrixType = typename Base::LevelMatrixType;
+  using SmootherType    = typename Base::SmootherType;
+
+  MyMultigrid(
+    const boost::property_tree::ptree params,
+    const DoFHandler<dim> &           dof_handler,
+    const MGLevelObject<std::shared_ptr<const DoFHandler<dim>>>
+      &mg_dof_handlers,
+    const MGLevelObject<std::shared_ptr<const AffineConstraints<double>>>
+      &                                                    mg_constraints,
+    const MGLevelObject<std::shared_ptr<LevelMatrixType>> &mg_operators)
+    : PreconditionerGMG<dim,
+                        LevelMatrixType_,
+                        WrapperForGMG<VectorType>,
+                        VectorType>(dof_handler,
+                                    mg_dof_handlers,
+                                    mg_constraints,
+                                    mg_operators)
+    , params(params)
+    , pcout(std::cout, Utilities::MPI::this_mpi_process(MPI_COMM_WORLD) == 0)
+  {
+    this->do_update();
+  }
+
+  SmootherType
+  create_mg_level_smoother(unsigned int           level,
+                           const LevelMatrixType &level_matrix) final
+  {
+#ifdef DEBUG
+    pcout << "MyMultigrid::create_mg_level_smoother(" << level << ")"
+          << std::endl;
+#endif
+
+    (void)level;
+
+    return WrapperForGMG<VectorType>(
+      create_system_preconditioner<LevelMatrixType>(
+        level_matrix, try_get_child(params, "smoother")));
+  }
+
+private:
+  const boost::property_tree::ptree params;
+  ConditionalOStream                pcout;
+};
+
 
 template <int dim, typename Number>
 class LaplaceOperator : public Subscriptor
