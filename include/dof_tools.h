@@ -90,7 +90,11 @@ namespace dealii
             numbers::invalid_unsigned_int);
 
           const auto translate =
-            [&](const auto i) -> std::pair<unsigned int, unsigned int> {
+            [&](const auto i,
+                const bool flag) -> std::pair<unsigned int, unsigned int> {
+            if (flag == false)
+              return {0, 0};
+
             if (i < n_overlap - 1)
               return {0, fe_degree + 1 - n_overlap + i};
             else if (i < fe_degree + n_overlap)
@@ -107,9 +111,9 @@ namespace dealii
                  ++j)
               for (unsigned int i = 0; i < n_dofs_with_overlap_1D; ++i, ++c)
                 {
-                  const auto [i0, i1] = translate(i);
-                  const auto [j0, j1] = translate(j);
-                  const auto [k0, k1] = translate(k);
+                  const auto [i0, i1] = translate(i, dim >= 1);
+                  const auto [j0, j1] = translate(j, dim >= 2);
+                  const auto [k0, k1] = translate(k, dim >= 3);
 
                   const auto ii = i0 + 3 * j0 + 9 * k0;
                   const auto jj =
