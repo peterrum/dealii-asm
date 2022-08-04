@@ -478,11 +478,6 @@ public:
   {
     dof_handler.distribute_dofs(fe);
 
-    // pcout << "System statistics:" << std::endl;
-    // pcout << " - n cells: " << tria.n_global_active_cells() << std::endl;
-    // pcout << " - n dofs:  " << dof_handler.n_dofs() << std::endl;
-    // pcout << std::endl;
-
     DoFTools::make_zero_boundary_constraints(dof_handler, 1, constraints);
     constraints.close();
 
@@ -507,13 +502,11 @@ public:
       dof_handler.get_communicator());
   }
 
-
   types::global_dof_index
   m() const
   {
     return dof_handler.n_dofs();
   }
-
 
   Number
   el(unsigned int, unsigned int) const
@@ -607,6 +600,137 @@ private:
   Quadrature<dim>                   quadrature;
 
   std::shared_ptr<const Utilities::MPI::Partitioner> partitioner;
+};
+
+
+template <int dim, typename Number>
+class LaplaceOperatorMatrixFree : public Subscriptor
+{
+public:
+  static const int dimension = dim;
+  using value_type           = Number;
+  using vector_type          = LinearAlgebra::distributed::Vector<double>;
+
+  using VectorType = vector_type;
+
+  LaplaceOperatorMatrixFree(const Mapping<dim> &      mapping,
+                            const Triangulation<dim> &tria,
+                            const FiniteElement<dim> &fe,
+                            const Quadrature<dim> &   quadrature)
+    : mapping(mapping)
+    , dof_handler(tria)
+    , quadrature(quadrature)
+  {
+    dof_handler.distribute_dofs(fe);
+
+    DoFTools::make_zero_boundary_constraints(dof_handler, 1, constraints);
+    constraints.close();
+
+    AssertThrow(false, ExcNotImplemented());
+  }
+
+  types::global_dof_index
+  m() const
+  {
+    return dof_handler.n_dofs();
+  }
+
+  Number
+  el(unsigned int, unsigned int) const
+  {
+    AssertThrow(false, ExcNotImplemented());
+    return 0;
+  }
+
+  void
+  vmult(VectorType &dst, const VectorType &src) const
+  {
+    AssertThrow(false, ExcNotImplemented());
+    (void)dst;
+    (void)src;
+  }
+
+  void
+  Tvmult(VectorType &dst, const VectorType &src) const
+  {
+    AssertThrow(false, ExcNotImplemented());
+    (void)dst;
+    (void)src;
+  }
+
+  const Mapping<dim> &
+  get_mapping() const
+  {
+    return mapping;
+  }
+
+  const FiniteElement<dim> &
+  get_fe() const
+  {
+    return dof_handler.get_fe();
+  }
+
+  const Triangulation<dim> &
+  get_triangulation() const
+  {
+    return dof_handler.get_triangulation();
+  }
+
+  const DoFHandler<dim> &
+  get_dof_handler() const
+  {
+    return dof_handler;
+  }
+
+  const TrilinosWrappers::SparseMatrix &
+  get_sparse_matrix() const
+  {
+    AssertThrow(false, ExcNotImplemented());
+    return sparse_matrix;
+  }
+
+  const TrilinosWrappers::SparsityPattern &
+  get_sparsity_pattern() const
+  {
+    AssertThrow(false, ExcNotImplemented());
+    return sparsity_pattern;
+  }
+
+  void
+  initialize_dof_vector(VectorType &vec) const
+  {
+    AssertThrow(false, ExcNotImplemented());
+    (void)vec;
+  }
+
+  const AffineConstraints<Number> &
+  get_constraints() const
+  {
+    return constraints;
+  }
+
+  const Quadrature<dim> &
+  get_quadrature() const
+  {
+    return quadrature;
+  }
+
+  void
+  compute_inverse_diagonal(VectorType &vec) const
+  {
+    AssertThrow(false, ExcNotImplemented());
+    (void)vec;
+  }
+
+private:
+  const Mapping<dim> &      mapping;
+  DoFHandler<dim>           dof_handler;
+  AffineConstraints<Number> constraints;
+  Quadrature<dim>           quadrature;
+
+  // only set up if required
+  TrilinosWrappers::SparseMatrix    sparse_matrix;
+  TrilinosWrappers::SparsityPattern sparsity_pattern;
 };
 
 
@@ -790,6 +914,8 @@ main(int argc, char *argv[])
 
   if (dim == 2 && type == "matrixbased")
     test<LaplaceOperatorMatrixBased<2, Number>>(params);
+  else if (dim == 2 && type == "matrixfree")
+    test<LaplaceOperatorMatrixFree<2, Number>>(params);
   else
     AssertThrow(false, ExcNotImplemented());
 }
