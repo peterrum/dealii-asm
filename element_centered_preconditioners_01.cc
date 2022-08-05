@@ -117,6 +117,8 @@ solve(const MatrixType &                              A,
 
   x = 0;
 
+  const auto timer = std::chrono::system_clock::now();
+
   if (type == "CG")
     {
       SolverCG<VectorType> solver(*reduction_control);
@@ -135,8 +137,14 @@ solve(const MatrixType &                              A,
       AssertThrow(false, ExcMessage("Solver <" + type + "> is not known!"))
     }
 
+  const double time = std::chrono::duration_cast<std::chrono::nanoseconds>(
+                        std::chrono::system_clock::now() - timer)
+                        .count() /
+                      1e9;
+
   pcout << "   - n iterations:   " << reduction_control->last_step()
         << std::endl;
+  pcout << "   - time:           " << time << " #" << std::endl;
 
   return reduction_control;
 }

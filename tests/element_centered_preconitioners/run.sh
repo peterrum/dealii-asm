@@ -11,7 +11,8 @@ do
   ./element_centered_preconditioners_01 $f > __temp__
 
   # create diff of output
-  grep -v -x -F "DEBUG!" __temp__ > __filtered__
+  grep -v -x -F "DEBUG!" __temp__ > _filtered_
+  grep -v -F "#" _filtered_ > __filtered__
   diff ${f::-5}.output __filtered__ > __diff__
 
   # if diff is empty everything is fine
@@ -21,5 +22,5 @@ do
     printf ": \033[0;32msuccess\033[0m\n"
   fi
 
-  cp __filtered__ ${f::-5}.output
+  #cp __filtered__ ${f::-5}.output
 done
