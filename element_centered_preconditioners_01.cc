@@ -38,8 +38,11 @@ using namespace dealii;
 #include "include/preconditioners.h"
 #include "include/restrictors.h"
 
-constexpr int MAX_N_ROWS_FDM = 6;
-
+#define COMPILE_MB 1
+#define COMPILE_MF 1
+#define COMPILE_2D 1
+#define COMPILE_3D 1
+#define MAX_N_ROWS_FDM 6
 
 #define EXPAND_OPERATIONS(OPERATION)                     \
   switch (n_rows)                                        \
@@ -1286,21 +1289,35 @@ main(int argc, char *argv[])
 
   if (type == "matrixbased")
     {
+#if COMPILE_MB > 0
+#  if COMPILE_2D > 0
       if (dim == 2)
         test<LaplaceOperatorMatrixBasedTrait<2>>(params);
-      else if (dim == 3)
+      else
+#  endif
+#  if COMPILE_3D > 0
+        if (dim == 3)
         test<LaplaceOperatorMatrixBasedTrait<3>>(params);
       else
+#  endif
+#endif
         AssertThrow(false, ExcNotImplemented());
     }
   else if (type == "matrixfree")
     {
+#if COMPILE_MF > 0
+#  if COMPILE_2D > 0
       if (dim == 2)
         test<LaplaceOperatorMatrixFreeTrait<2>>(params);
-      else if (dim == 3)
+      else
+#  endif
+#  if COMPILE_3D > 0
+        if (dim == 3)
         test<LaplaceOperatorMatrixFreeTrait<3>>(params);
       else
         AssertThrow(false, ExcNotImplemented());
+#  endif
+#endif
     }
   else
     AssertThrow(false, ExcNotImplemented());
