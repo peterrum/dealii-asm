@@ -91,53 +91,6 @@ MGCoarseGridApplyPreconditioner<VectorType, PreconditionerType>::clear()
 }
 
 
-namespace internal
-{
-  namespace MGCoarseGridApplyPreconditioner
-  {
-    template <class VectorType,
-              class PreconditionerType,
-              typename std::enable_if<
-                std::is_same<typename VectorType::value_type, double>::value,
-                VectorType>::type * = nullptr>
-    void
-    solve(const PreconditionerType preconditioner,
-          VectorType &             dst,
-          const VectorType &       src)
-    {
-      // to allow the case that the preconditioner was only set up on a
-      // subset of processes
-      if (preconditioner != nullptr)
-        preconditioner->vmult(dst, src);
-    }
-
-    template <class VectorType,
-              class PreconditionerType,
-              typename std::enable_if<
-                !std::is_same<typename VectorType::value_type, double>::value,
-                VectorType>::type * = nullptr>
-    void
-    solve(const PreconditionerType preconditioner,
-          VectorType &             dst,
-          const VectorType &       src)
-    {
-      LinearAlgebra::distributed::Vector<double> src_;
-      LinearAlgebra::distributed::Vector<double> dst_;
-
-      src_ = src;
-      dst_ = dst;
-
-      // to allow the case that the preconditioner was only set up on a
-      // subset of processes
-      if (preconditioner != nullptr)
-        preconditioner->vmult(dst_, src_);
-
-      dst = dst_;
-    }
-  } // namespace MGCoarseGridApplyPreconditioner
-} // namespace internal
-
-
 template <class VectorType, class PreconditionerType>
 void
 MGCoarseGridApplyPreconditioner<VectorType, PreconditionerType>::operator()(
@@ -145,13 +98,15 @@ MGCoarseGridApplyPreconditioner<VectorType, PreconditionerType>::operator()(
   VectorType &      dst,
   const VectorType &src) const
 {
-  internal::MGCoarseGridApplyPreconditioner::solve(preconditioner, dst, src);
+  // internal::MGCoarseGridApplyPreconditioner::solve(preconditioner, dst, src);
+  preconditioner->vmult(dst, src);
 }
 
 template <int dim_,
           typename LevelMatrixType_,
           typename SmootherType_,
-          typename VectorType_>
+          typename VectorType_,
+          typename VectorTypeOuter>
 class PreconditionerGMG
 {
 public:
@@ -168,7 +123,8 @@ public:
     const DoFHandler<dim> &dof_handler,
     const MGLevelObject<std::shared_ptr<const DoFHandler<dim>>>
       &mg_dof_handlers,
-    const MGLevelObject<std::shared_ptr<const AffineConstraints<double>>>
+    const MGLevelObject<std::shared_ptr<
+      const AffineConstraints<typename VectorType_::value_type>>>
       &                                                    mg_constraints,
     const MGLevelObject<std::shared_ptr<LevelMatrixType>> &mg_operators)
     : dof_handler(dof_handler)
@@ -238,7 +194,7 @@ public:
   }
 
   virtual void
-  vmult(VectorType &dst, const VectorType &src) const
+  vmult(VectorTypeOuter &dst, const VectorTypeOuter &src) const
   {
     preconditioner->vmult(dst, src);
   }
@@ -247,7 +203,8 @@ protected:
   const DoFHandler<dim> &dof_handler;
 
   const MGLevelObject<std::shared_ptr<const DoFHandler<dim>>> mg_dof_handlers;
-  const MGLevelObject<std::shared_ptr<const AffineConstraints<double>>>
+  const MGLevelObject<
+    std::shared_ptr<const AffineConstraints<typename VectorType::value_type>>>
                                                         mg_constraints;
   const MGLevelObject<std::shared_ptr<LevelMatrixType>> mg_operators;
 

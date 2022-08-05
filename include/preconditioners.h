@@ -789,7 +789,60 @@ private:
   std::shared_ptr<const RestrictorType>    restrictor;
 };
 
-template <typename VectorType, typename PreconditionerType>
+
+namespace internal_
+{
+  namespace PreconditionerAdapter
+  {
+    template <
+      class PreconditionerNumer,
+      class VectorType,
+      class PreconditionerType,
+      typename std::enable_if<std::is_same<typename VectorType::value_type,
+                                           PreconditionerNumer>::value,
+                              VectorType>::type * = nullptr>
+    void
+    solve(const PreconditionerType preconditioner,
+          VectorType &             dst,
+          const VectorType &       src)
+    {
+      // to allow the case that the preconditioner was only set up on a
+      // subset of processes
+      if (preconditioner != nullptr)
+        preconditioner->vmult(dst, src);
+    }
+
+    template <
+      class PreconditionerNumer,
+      class VectorType,
+      class PreconditionerType,
+      typename std::enable_if<!std::is_same<typename VectorType::value_type,
+                                            PreconditionerNumer>::value,
+                              VectorType>::type * = nullptr>
+    void
+    solve(const PreconditionerType preconditioner,
+          VectorType &             dst,
+          const VectorType &       src)
+    {
+      LinearAlgebra::distributed::Vector<PreconditionerNumer> src_;
+      LinearAlgebra::distributed::Vector<PreconditionerNumer> dst_;
+
+      src_ = src;
+      dst_ = dst;
+
+      // to allow the case that the preconditioner was only set up on a
+      // subset of processes
+      if (preconditioner != nullptr)
+        preconditioner->vmult(dst_, src_);
+
+      dst = dst_;
+    }
+  } // namespace PreconditionerAdapter
+} // namespace internal_
+
+template <typename VectorType,
+          typename PreconditionerType,
+          typename PreconditionerNumer = typename VectorType::value_type>
 class PreconditionerAdapter : public PreconditionerBase<VectorType>
 {
 public:
@@ -801,7 +854,9 @@ public:
   void
   vmult(VectorType &dst, const VectorType &src) const override
   {
-    preconditioner->vmult(dst, src);
+    internal_::PreconditionerAdapter::solve<PreconditionerNumer>(preconditioner,
+                                                                 dst,
+                                                                 src);
   }
 
 private:

@@ -342,7 +342,8 @@ create_system_preconditioner(const OperatorType &              op,
       preconitioner->initialize(op.get_sparse_matrix(), additional_data);
 
       return std::make_shared<
-        PreconditionerAdapter<VectorType, PreconditionerType>>(preconitioner);
+        PreconditionerAdapter<VectorType, PreconditionerType, double>>(
+        preconitioner);
     }
   else if (type == "AdditiveSchwarzPreconditioner")
     {
@@ -493,7 +494,7 @@ public:
     : base(base)
   {}
 
-  virtual void
+  void
   vmult(VectorType &dst, const VectorType &src) const
   {
     base->vmult(dst, src);
@@ -516,17 +517,22 @@ public:
   std::shared_ptr<const PreconditionerBase<VectorType>> base;
 };
 
-template <int dim, typename LevelMatrixType_, typename VectorType>
+template <int dim,
+          typename LevelMatrixType_,
+          typename VectorType,
+          typename VectorTypeOuter>
 class MyMultigrid : public PreconditionerGMG<dim,
                                              LevelMatrixType_,
                                              WrapperForGMG<VectorType>,
-                                             VectorType>
+                                             VectorType,
+                                             VectorTypeOuter>
 {
 public:
   using Base = PreconditionerGMG<dim,
                                  LevelMatrixType_,
                                  WrapperForGMG<VectorType>,
-                                 VectorType>;
+                                 VectorType,
+                                 VectorTypeOuter>;
 
   using LevelMatrixType = typename Base::LevelMatrixType;
   using SmootherType    = typename Base::SmootherType;
@@ -536,16 +542,18 @@ public:
     const DoFHandler<dim> &           dof_handler,
     const MGLevelObject<std::shared_ptr<const DoFHandler<dim>>>
       &mg_dof_handlers,
-    const MGLevelObject<std::shared_ptr<const AffineConstraints<double>>>
+    const MGLevelObject<
+      std::shared_ptr<const AffineConstraints<typename VectorType::value_type>>>
       &                                                    mg_constraints,
     const MGLevelObject<std::shared_ptr<LevelMatrixType>> &mg_operators)
     : PreconditionerGMG<dim,
                         LevelMatrixType_,
                         WrapperForGMG<VectorType>,
-                        VectorType>(dof_handler,
-                                    mg_dof_handlers,
-                                    mg_constraints,
-                                    mg_operators)
+                        VectorType,
+                        VectorTypeOuter>(dof_handler,
+                                         mg_dof_handlers,
+                                         mg_constraints,
+                                         mg_operators)
     , params(params)
     , pcout(std::cout, Utilities::MPI::this_mpi_process(MPI_COMM_WORLD) == 0)
   {
@@ -1176,7 +1184,7 @@ test(const boost::property_tree::ptree params)
         }
 
       const auto preconditioner = std::make_shared<
-        const MyMultigrid<dim, LevelOperatorType, LevelVectorType>>(
+        const MyMultigrid<dim, LevelOperatorType, LevelVectorType, VectorType>>(
         preconditioner_parameters,
         op.get_dof_handler(),
         mg_dof_handlers,
@@ -1209,7 +1217,7 @@ template <int dim>
 struct LaplaceOperatorMatrixFreeTrait
 {
   using OperatorType      = LaplaceOperatorMatrixFree<dim, double>;
-  using LevelOperatorType = LaplaceOperatorMatrixFree<dim, double>;
+  using LevelOperatorType = LaplaceOperatorMatrixFree<dim, float>;
 };
 
 int
