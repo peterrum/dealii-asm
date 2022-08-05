@@ -201,6 +201,8 @@ public:
             FEEvaluation<dim, -1, 0, 1, Number, VectorizedArrayType> phi_dst(
               matrix_free);
 
+            AlignedVector<VectorizedArrayType> tmp;
+
             for (unsigned int cell = cells.first; cell < cells.second; ++cell)
               {
                 phi_src.reinit(cell);
@@ -214,7 +216,8 @@ public:
                       ArrayView<VectorizedArrayType>(phi_dst.begin_dof_values(),
                                                      phi_dst.dofs_per_cell),
                       ArrayView<const VectorizedArrayType>(
-                        phi_src.begin_dof_values(), phi_src.dofs_per_cell));
+                        phi_src.begin_dof_values(), phi_src.dofs_per_cell),
+                      tmp);
                   }
                 else
                   {
