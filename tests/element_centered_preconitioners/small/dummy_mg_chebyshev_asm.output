@@ -5,6 +5,7 @@
 - Create system preconditioner: AdditiveSchwarzPreconditioner
 
 - Create system preconditioner: Chebyshev
+    - degree: 3
     - min ev: 1
     - max ev: 1
     - omega:  1
@@ -14,6 +15,7 @@
 - Create system preconditioner: AdditiveSchwarzPreconditioner
 
 - Create system preconditioner: Chebyshev
+    - degree: 3
     - min ev: 1
     - max ev: 1
     - omega:  1
@@ -23,6 +25,7 @@
 - Create system preconditioner: AdditiveSchwarzPreconditioner
 
 - Create system preconditioner: Chebyshev
+    - degree: 3
     - min ev: 0.377352
     - max ev: 4.27066
     - omega:  0.430292
@@ -32,6 +35,7 @@
 - Create system preconditioner: AdditiveSchwarzPreconditioner
 
 - Create system preconditioner: Chebyshev
+    - degree: 3
     - min ev: 0.280217
     - max ev: 4.86293
     - omega:  0.388867

@@ -233,6 +233,7 @@ create_system_preconditioner(const OperatorType &              op,
 
         pcout << "- Create system preconditioner: Chebyshev" << std::endl;
 
+        pcout << "    - degree: " << additional_data.degree << std::endl;
         pcout << "    - min ev: " << evs.min_eigenvalue_estimate << std::endl;
         pcout << "    - max ev: " << evs.max_eigenvalue_estimate << std::endl;
         pcout << "    - omega:  "
@@ -269,8 +270,7 @@ create_system_preconditioner(const OperatorType &              op,
     {
       if constexpr (OperatorType::is_matrix_free())
         {
-          pcout << "- Create system preconditioner: Diagonal" << std::endl
-                << std::endl;
+          pcout << "- Create system preconditioner: FDM" << std::endl;
 
           const int dim = OperatorType::dimension;
           using VectorizedArrayType =
@@ -287,6 +287,9 @@ create_system_preconditioner(const OperatorType &              op,
 
           const unsigned int n_overlap =
             params.get<unsigned int>("n overlap", 1);
+
+          pcout << "    - n overlap: " << n_overlap << std::endl;
+          pcout << std::endl;
 
           return std::make_shared<
             const ASPoissonPreconditioner<dim, Number, VectorizedArrayType>>(

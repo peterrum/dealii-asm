@@ -2,36 +2,44 @@
 
 - Setting up smoother on level 0
 
-- Create system preconditioner: Diagonal
+- Create system preconditioner: FDM
+    - n overlap: 1
 
 - Create system preconditioner: Chebyshev
+    - degree: 1
     - min ev: 1
     - max ev: 1
     - omega:  1
 
 - Setting up smoother on level 1
 
-- Create system preconditioner: Diagonal
+- Create system preconditioner: FDM
+    - n overlap: 1
 
 - Create system preconditioner: Chebyshev
+    - degree: 1
     - min ev: 0.27926
     - max ev: 2.46303
     - omega:  0.729316
 
 - Setting up smoother on level 2
 
-- Create system preconditioner: Diagonal
+- Create system preconditioner: FDM
+    - n overlap: 1
 
 - Create system preconditioner: Chebyshev
+    - degree: 1
     - min ev: 0.188992
     - max ev: 2.46324
     - omega:  0.754081
 
 - Setting up smoother on level 3
 
-- Create system preconditioner: Diagonal
+- Create system preconditioner: FDM
+    - n overlap: 1
 
 - Create system preconditioner: Chebyshev
+    - degree: 1
     - min ev: 0.151706
     - max ev: 2.64548
     - omega:  0.715005
