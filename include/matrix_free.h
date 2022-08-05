@@ -1,29 +1,39 @@
 #pragma once
 
+#include <deal.II/matrix_free/constraint_info.h>
+#include <deal.II/matrix_free/fe_evaluation.h>
+#include <deal.II/matrix_free/matrix_free.h>
 #include <deal.II/matrix_free/tools.h>
+#include <deal.II/matrix_free/vector_access_internal.h>
+
+#include "dof_tools.h"
+#include "grid_tools.h"
+#include "preconditioners.h"
+#include "tensor_product_matrix.h"
 
 template <int dim,
           typename Number,
           typename VectorizedArrayType,
           int n_rows_1d = -1>
-class ASPoissonPreconditioner : public Subscriptor
+class ASPoissonPreconditioner
+  : public PreconditionerBase<LinearAlgebra::distributed::Vector<Number>>
 {
 public:
-  using VectorType = LinearAlgebra::distributed::Vector<double>;
+  using VectorType = LinearAlgebra::distributed::Vector<Number>;
 
   ASPoissonPreconditioner(
     const MatrixFree<dim, Number, VectorizedArrayType> &matrix_free,
     const unsigned int                                  n_overlap,
     const Mapping<dim> &                                mapping,
     const FiniteElement<1> &                            fe_1D,
-    const QGauss<dim - 1> &                             quadrature_face,
+    const Quadrature<dim - 1> &                         quadrature_face,
     const Quadrature<1> &                               quadrature_1D)
     : matrix_free(matrix_free)
     , fe_degree(matrix_free.get_dof_handler().get_fe().tensor_degree())
     , n_overlap(n_overlap)
   {
-    AssertThrow((n_rows_1d == -1) ||
-                  (n_rows_1d == fe_1D.degree + 2 * n_overlap - 1),
+    AssertThrow((n_rows_1d == -1) || (static_cast<unsigned int>(n_rows_1d) ==
+                                      fe_1D.degree + 2 * n_overlap - 1),
                 ExcNotImplemented());
 
     const auto &dof_handler = matrix_free.get_dof_handler();
@@ -168,7 +178,7 @@ public:
   void
   vmult(VectorType &dst, const VectorType &src) const
   {
-    if (src.get_partitioner().get() ==
+    if (src_.get_partitioner().get() ==
         matrix_free.get_vector_partitioner().get())
       {
         matrix_free.template cell_loop<VectorType, VectorType>(
