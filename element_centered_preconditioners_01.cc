@@ -307,6 +307,7 @@ create_system_preconditioner(const OperatorType &              op,
 
           const unsigned int n_overlap =
             params.get<unsigned int>("n overlap", 1);
+          const auto weight_type = get_weighting_type(params);
 
           pcout << "    - n overlap: " << n_overlap << std::endl;
           pcout << std::endl;
@@ -318,7 +319,8 @@ create_system_preconditioner(const OperatorType &              op,
             mapping,
             fe_1D,
             quadrature_face,
-            quadrature_1D);
+            quadrature_1D,
+            weight_type);
         }
       else
         {

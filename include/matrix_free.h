@@ -9,6 +9,7 @@
 #include "dof_tools.h"
 #include "grid_tools.h"
 #include "preconditioners.h"
+#include "restrictors.h"
 #include "tensor_product_matrix.h"
 
 template <int dim,
@@ -27,13 +28,19 @@ public:
     const Mapping<dim> &                                mapping,
     const FiniteElement<1> &                            fe_1D,
     const Quadrature<dim - 1> &                         quadrature_face,
-    const Quadrature<1> &                               quadrature_1D)
+    const Quadrature<1> &                               quadrature_1D,
+    const Restrictors::WeightingType                    weight_type =
+      Restrictors::WeightingType::post)
     : matrix_free(matrix_free)
     , fe_degree(matrix_free.get_dof_handler().get_fe().tensor_degree())
     , n_overlap(n_overlap)
   {
     AssertThrow((n_rows_1d == -1) || (static_cast<unsigned int>(n_rows_1d) ==
                                       fe_1D.degree + 2 * n_overlap - 1),
+                ExcNotImplemented());
+
+    AssertThrow(weight_type == Restrictors::WeightingType::post ||
+                  weight_type == Restrictors::WeightingType::none,
                 ExcNotImplemented());
 
     const auto &dof_handler = matrix_free.get_dof_handler();
@@ -173,6 +180,9 @@ public:
       for (auto &i : weights)
         i = (i == 0.0) ? 1.0 : (1.0 / i);
     }
+
+    if (weight_type == Restrictors::WeightingType::none)
+      weights.reinit(0);
   }
 
   void
@@ -269,7 +279,9 @@ public:
         dst_.compress(VectorOperation::add);
         dst.copy_locally_owned_data_from(dst_);
       }
-    dst.scale(weights);
+
+    if (weights.size() > 0)
+      dst.scale(weights);
   }
 
   std::size_t
