@@ -1,0 +1,6 @@
+MyMultigrid::create_mg_level_smoother(0)
+MyMultigrid::create_mg_level_smoother(1)
+MyMultigrid::create_mg_level_smoother(2)
+MyMultigrid::create_mg_level_smoother(3)
+Running with different preconditioners:
+ - ASM on cell level:               4
