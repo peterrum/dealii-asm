@@ -8,20 +8,145 @@
 
 DEAL_II_NAMESPACE_OPEN
 
-struct PreconditionerGMGAdditionalData
+/**
+ * Coarse grid solver using a preconditioner only. This is a little wrapper,
+ * transforming a preconditioner into a coarse grid solver.
+ */
+template <class VectorType, class PreconditionerType>
+class MGCoarseGridApplyPreconditioner : public MGCoarseGridBase<VectorType>
 {
-  double       smoothing_range               = 20;
-  unsigned int smoothing_degree              = 5;
-  unsigned int smoothing_eig_cg_n_iterations = 20;
+public:
+  /**
+   * Default constructor.
+   */
+  MGCoarseGridApplyPreconditioner();
 
-  unsigned int coarse_grid_smoother_sweeps = 1;
-  unsigned int coarse_grid_n_cycles        = 1;
-  std::string  coarse_grid_smoother_type   = "ILU";
+  /**
+   * Constructor. Store a pointer to the preconditioner for later use.
+   */
+  MGCoarseGridApplyPreconditioner(const PreconditionerType &precondition);
 
-  unsigned int coarse_grid_maxiter = 1000;
-  double       coarse_grid_abstol  = 1e-20;
-  double       coarse_grid_reltol  = 1e-4;
+  /**
+   * Clear the pointer.
+   */
+  void
+  clear();
+
+  /**
+   * Initialize new data.
+   */
+  void
+  initialize(const PreconditionerType &precondition);
+
+  /**
+   * Implementation of the abstract function.
+   */
+  virtual void
+  operator()(const unsigned int level,
+             VectorType &       dst,
+             const VectorType & src) const override;
+
+private:
+  /**
+   * Reference to the preconditioner.
+   */
+  SmartPointer<const PreconditionerType,
+               MGCoarseGridApplyPreconditioner<VectorType, PreconditionerType>>
+    preconditioner;
 };
+
+
+
+template <class VectorType, class PreconditionerType>
+MGCoarseGridApplyPreconditioner<VectorType, PreconditionerType>::
+  MGCoarseGridApplyPreconditioner()
+  : preconditioner(0, typeid(*this).name())
+{}
+
+
+
+template <class VectorType, class PreconditionerType>
+MGCoarseGridApplyPreconditioner<VectorType, PreconditionerType>::
+  MGCoarseGridApplyPreconditioner(const PreconditionerType &preconditioner)
+  : preconditioner(&preconditioner, typeid(*this).name())
+{}
+
+
+
+template <class VectorType, class PreconditionerType>
+void
+MGCoarseGridApplyPreconditioner<VectorType, PreconditionerType>::initialize(
+  const PreconditionerType &preconditioner_)
+{
+  preconditioner = &preconditioner_;
+}
+
+
+
+template <class VectorType, class PreconditionerType>
+void
+MGCoarseGridApplyPreconditioner<VectorType, PreconditionerType>::clear()
+{
+  preconditioner = 0;
+}
+
+
+namespace internal
+{
+  namespace MGCoarseGridApplyPreconditioner
+  {
+    template <class VectorType,
+              class PreconditionerType,
+              typename std::enable_if<
+                std::is_same<typename VectorType::value_type, double>::value,
+                VectorType>::type * = nullptr>
+    void
+    solve(const PreconditionerType preconditioner,
+          VectorType &             dst,
+          const VectorType &       src)
+    {
+      // to allow the case that the preconditioner was only set up on a
+      // subset of processes
+      if (preconditioner != nullptr)
+        preconditioner->vmult(dst, src);
+    }
+
+    template <class VectorType,
+              class PreconditionerType,
+              typename std::enable_if<
+                !std::is_same<typename VectorType::value_type, double>::value,
+                VectorType>::type * = nullptr>
+    void
+    solve(const PreconditionerType preconditioner,
+          VectorType &             dst,
+          const VectorType &       src)
+    {
+      LinearAlgebra::distributed::Vector<double> src_;
+      LinearAlgebra::distributed::Vector<double> dst_;
+
+      src_ = src;
+      dst_ = dst;
+
+      // to allow the case that the preconditioner was only set up on a
+      // subset of processes
+      if (preconditioner != nullptr)
+        preconditioner->vmult(dst_, src_);
+
+      dst = dst_;
+    }
+  } // namespace MGCoarseGridApplyPreconditioner
+} // namespace internal
+
+
+template <class VectorType, class PreconditionerType>
+void
+MGCoarseGridApplyPreconditioner<VectorType, PreconditionerType>::operator()(
+  const unsigned int /*level*/,
+  VectorType &      dst,
+  const VectorType &src) const
+{
+  internal::MGCoarseGridApplyPreconditioner::solve(preconditioner, dst, src);
+}
 
 template <int dim_,
           typename LevelMatrixType_,
@@ -78,30 +203,16 @@ public:
   void
   do_update()
   {
-    PreconditionerGMGAdditionalData additional_data;
-
     // wrap level operators
     mg_matrix = std::make_unique<mg::Matrix<VectorType>>(mg_operators);
 
     // setup coarse-grid solver
-    coarse_grid_solver_temp =
+    coarse_grid_solver =
       this->create_mg_coarse_grid_solver(min_level, *mg_operators[min_level]);
 
-    coarse_grid_solver_control =
-      std::make_unique<ReductionControl>(additional_data.coarse_grid_maxiter,
-                                         additional_data.coarse_grid_abstol,
-                                         additional_data.coarse_grid_reltol,
-                                         false,
-                                         false);
-    coarse_grid_solver =
-      std::make_unique<SolverCG<VectorType>>(*coarse_grid_solver_control);
-
-    mg_coarse =
-      std::make_unique<MGCoarseGridIterativeSolver<VectorType,
-                                                   SolverCG<VectorType>,
-                                                   LevelMatrixType,
-                                                   SmootherType>>(
-        *coarse_grid_solver, *mg_operators[min_level], coarse_grid_solver_temp);
+    mg_coarse = std::make_unique<
+      MGCoarseGridApplyPreconditioner<VectorType, SmootherType>>(
+      coarse_grid_solver);
 
     // setup smoothers on each level
     mg_smoother.initialize_matrices(mg_operators);
@@ -148,18 +259,14 @@ protected:
 
   mutable std::unique_ptr<mg::Matrix<VectorType>> mg_matrix;
 
-  mutable SmootherType coarse_grid_solver_temp;
+  mutable SmootherType coarse_grid_solver;
+
+  mutable std::unique_ptr<MGCoarseGridBase<VectorType>> mg_coarse;
 
   mutable MGSmootherPrecondition<LevelMatrixType, SmootherType, VectorType>
     mg_smoother;
 
-  mutable std::unique_ptr<ReductionControl> coarse_grid_solver_control;
-
-  mutable std::unique_ptr<SolverCG<VectorType>> coarse_grid_solver;
-
   mutable std::unique_ptr<TrilinosWrappers::PreconditionAMG> precondition_amg;
-
-  mutable std::unique_ptr<MGCoarseGridBase<VectorType>> mg_coarse;
 
   mutable std::unique_ptr<Multigrid<VectorType>> mg;
 
