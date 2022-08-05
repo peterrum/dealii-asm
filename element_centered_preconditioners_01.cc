@@ -315,7 +315,7 @@ create_system_preconditioner(const OperatorType &              op,
           pcout << "    - n overlap: " << n_overlap << std::endl;
           pcout << std::endl;
 
-          unsigned int n_rows = fe_degree + 2 * n_overlap - 1;
+          const unsigned int n_rows = fe_degree + 2 * n_overlap - 1;
 
           if (n_rows == 2)
             return std::make_shared<
@@ -329,7 +329,7 @@ create_system_preconditioner(const OperatorType &              op,
                                                 quadrature_face,
                                                 quadrature_1D,
                                                 weight_type);
-          if (n_rows == 3)
+          else if (n_rows == 3)
             return std::make_shared<
               const ASPoissonPreconditioner<dim,
                                             Number,
@@ -341,7 +341,7 @@ create_system_preconditioner(const OperatorType &              op,
                                                 quadrature_face,
                                                 quadrature_1D,
                                                 weight_type);
-          if (n_rows == 4)
+          else if (n_rows == 4)
             return std::make_shared<
               const ASPoissonPreconditioner<dim,
                                             Number,
@@ -365,7 +365,7 @@ create_system_preconditioner(const OperatorType &              op,
                                                 quadrature_face,
                                                 quadrature_1D,
                                                 weight_type);
-          if (n_rows == 6)
+          else if (n_rows == 6)
             return std::make_shared<
               const ASPoissonPreconditioner<dim,
                                             Number,
@@ -378,11 +378,21 @@ create_system_preconditioner(const OperatorType &              op,
                                                 quadrature_1D,
                                                 weight_type);
 
-          AssertThrow(false,
-                      ExcMessage("FDM with <" + std::to_string(n_rows) +
-                                 "> is not precompiled!"));
+          pcout << "Warning: FDM with <" + std::to_string(n_rows) +
+                     "> is not precompiled!"
+                << std::endl;
 
-          return {};
+          return std::make_shared<
+            const ASPoissonPreconditioner<dim,
+                                          Number,
+                                          VectorizedArrayType,
+                                          -1>>(matrix_free,
+                                               n_overlap,
+                                               mapping,
+                                               fe_1D,
+                                               quadrature_face,
+                                               quadrature_1D,
+                                               weight_type);
         }
       else
         {
@@ -1301,14 +1311,24 @@ main(int argc, char *argv[])
   const auto dim  = params.get<unsigned int>("dim", 2);
   const auto type = params.get<std::string>("type", "matrixbased");
 
-  if (dim == 2 && type == "matrixbased")
-    test<LaplaceOperatorMatrixBasedTrait<2>>(params);
-  else if (dim == 2 && type == "matrixfree")
-    test<LaplaceOperatorMatrixFreeTrait<2>>(params);
-  else if (dim == 3 && type == "matrixbased")
-    test<LaplaceOperatorMatrixBasedTrait<3>>(params);
-  else if (dim == 3 && type == "matrixfree")
-    test<LaplaceOperatorMatrixFreeTrait<3>>(params);
+  if (type == "matrixbased")
+    {
+      if (dim == 2)
+        test<LaplaceOperatorMatrixBasedTrait<2>>(params);
+      else if (dim == 3)
+        test<LaplaceOperatorMatrixBasedTrait<3>>(params);
+      else
+        AssertThrow(false, ExcNotImplemented());
+    }
+  else if (type == "matrixfree")
+    {
+      if (dim == 2)
+        test<LaplaceOperatorMatrixFreeTrait<2>>(params);
+      else if (dim == 3)
+        test<LaplaceOperatorMatrixFreeTrait<3>>(params);
+      else
+        AssertThrow(false, ExcNotImplemented());
+    }
   else
     AssertThrow(false, ExcNotImplemented());
 }

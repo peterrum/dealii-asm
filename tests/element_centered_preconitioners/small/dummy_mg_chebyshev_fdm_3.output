@@ -7,6 +7,7 @@
 - Create system preconditioner: FDM
     - n overlap: 3
 
+Warning: FDM with <8> is not precompiled!
 - Create system preconditioner: Chebyshev
     - degree: 1
     - min ev: 1
@@ -18,6 +19,7 @@
 - Create system preconditioner: FDM
     - n overlap: 3
 
+Warning: FDM with <8> is not precompiled!
 - Create system preconditioner: Chebyshev
     - degree: 1
     - min ev: 1
@@ -29,6 +31,7 @@
 - Create system preconditioner: FDM
     - n overlap: 3
 
+Warning: FDM with <8> is not precompiled!
 - Create system preconditioner: Chebyshev
     - degree: 1
     - min ev: 0.377353
@@ -40,6 +43,7 @@
 - Create system preconditioner: FDM
     - n overlap: 3
 
+Warning: FDM with <8> is not precompiled!
 - Create system preconditioner: Chebyshev
     - degree: 1
     - min ev: 0.280219
