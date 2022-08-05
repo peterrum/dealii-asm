@@ -8,7 +8,16 @@
     },
     "preconditioner" : {
         "type" : "Multigrid",
-        "smoother" : {
+        "mg smoother" : {
+            "type" : "Chebyshev",
+            "degree" : 1,
+            "preconditioner" : {
+                "type" : "FDM", 
+                "n overlap" : 3, 
+                "weighting type" : "post"
+            }
+        },
+        "mg coarse grid solver" : {
             "type" : "Chebyshev",
             "degree" : 1,
             "preconditioner" : {

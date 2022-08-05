@@ -7,7 +7,17 @@
     },
     "preconditioner" : {
         "type" : "Multigrid",
-        "smoother" : {
+        "mg smoother" : {
+            "type" : "Chebyshev",
+            "preconditioner" : {
+                "type" : "AdditiveSchwarzPreconditioner", 
+                "n overlap" : 3, 
+                "weighting type" : "post", 
+                "matrix approximation" : "none",
+                "sub mesh approximation" : 2
+            }
+        },
+        "mg coarse grid solver" : {
             "type" : "Chebyshev",
             "preconditioner" : {
                 "type" : "AdditiveSchwarzPreconditioner", 

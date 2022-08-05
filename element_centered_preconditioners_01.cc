@@ -541,7 +541,7 @@ public:
 
     return WrapperForGMG<VectorType>(
       create_system_preconditioner<LevelMatrixType>(
-        level_matrix, try_get_child(params, "smoother")));
+        level_matrix, try_get_child(params, "mg smoother")));
   }
 
   SmootherType
@@ -556,7 +556,7 @@ public:
 
     return WrapperForGMG<VectorType>(
       create_system_preconditioner<LevelMatrixType>(
-        level_matrix, try_get_child(params, "smoother")));
+        level_matrix, try_get_child(params, "mg coarse grid solver")));
   }
 
 private:
@@ -1059,15 +1059,60 @@ test(const boost::property_tree::ptree params)
       MGLevelObject<MGTwoLevelTransfer<dim, VectorType>>           transfers;
       std::unique_ptr<MGTransferGlobalCoarsening<dim, VectorType>> transfer;
 
-      const auto mg_degress = create_polynomial_coarsening_sequence(
-        fe_degree,
-        MGTransferGlobalCoarseningTools::PolynomialCoarseningSequenceType::
-          bisect);
+      bool use_pmg = false;
+
+      const auto mg_type =
+        preconditioner_parameters.get<std::string>("mg type", "h");
+
+      if (mg_type == "h")
+        {
+          use_pmg = false;
+        }
+      else if (mg_type == "p")
+        {
+          use_pmg = true;
+        }
+      else
+        {
+          AssertThrow(false,
+                      ExcMessage("Multigrid variant <" + mg_type +
+                                 "> is not known!"));
+        }
+
+      const auto mg_p_sequence_string =
+        preconditioner_parameters.get<std::string>("mg p sequence", "bisect");
+
+      MGTransferGlobalCoarseningTools::PolynomialCoarseningSequenceType
+        mg_p_sequence = MGTransferGlobalCoarseningTools::
+          PolynomialCoarseningSequenceType::bisect;
+
+      if (mg_p_sequence_string == "bisect")
+        {
+          mg_p_sequence = MGTransferGlobalCoarseningTools::
+            PolynomialCoarseningSequenceType::bisect;
+        }
+      else if (mg_p_sequence_string == "decrease by one")
+        {
+          mg_p_sequence = MGTransferGlobalCoarseningTools::
+            PolynomialCoarseningSequenceType::decrease_by_one;
+        }
+      else if (mg_p_sequence_string == "go to one")
+        {
+          mg_p_sequence = MGTransferGlobalCoarseningTools::
+            PolynomialCoarseningSequenceType::go_to_one;
+        }
+      else
+        {
+          AssertThrow(false,
+                      ExcMessage("Multigrid p sequence <" +
+                                 mg_p_sequence_string + "> is not known!"));
+        }
+
+      const auto mg_degress =
+        create_polynomial_coarsening_sequence(fe_degree, mg_p_sequence);
       const auto mg_triangulations =
         MGTransferGlobalCoarseningTools::create_geometric_coarsening_sequence(
           tria);
-
-      const bool use_pmg = false;
 
       const unsigned int min_level = 0;
       const unsigned int max_level =

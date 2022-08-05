@@ -1,0 +1,19 @@
+- Create system preconditioner: Multigrid
+
+- Setting up coarse-grid solver on level 0
+
+- Create system preconditioner: AMG
+
+- Setting up smoother on level 1
+
+- Create system preconditioner: FDM
+    - n overlap: 1
+
+- Create system preconditioner: Chebyshev
+    - degree: 1
+    - min ev: 0.151706
+    - max ev: 2.64548
+    - omega:  0.715005
+
+Running with different preconditioners:
+ - ASM on cell level:               3
