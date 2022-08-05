@@ -1048,8 +1048,7 @@ test(const boost::property_tree::ptree params)
     {
       // note: handle it seperatly, since we need to set up the levels
 
-      pcout << "- Create system preconditioner: Multigrid" << std::endl
-            << std::endl;
+      pcout << "- Create system preconditioner: Multigrid" << std::endl;
 
       MGLevelObject<std::shared_ptr<const DoFHandler<dim>>> mg_dof_handlers;
       MGLevelObject<std::shared_ptr<const AffineConstraints<double>>>
@@ -1107,6 +1106,10 @@ test(const boost::property_tree::ptree params)
                       ExcMessage("Multigrid p sequence <" +
                                  mg_p_sequence_string + "> is not known!"));
         }
+
+      pcout << " - type:       " << mg_type << std::endl;
+      pcout << " - p sequence: " << mg_p_sequence_string << std::endl;
+      pcout << std::endl;
 
       const auto mg_degress =
         create_polynomial_coarsening_sequence(fe_degree, mg_p_sequence);

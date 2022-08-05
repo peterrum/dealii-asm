@@ -1,4 +1,6 @@
 - Create system preconditioner: Multigrid
+ - type:       h
+ - p sequence: bisect
 
 - Setting up coarse-grid solver on level 0
 
