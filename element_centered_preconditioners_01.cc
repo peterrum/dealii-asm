@@ -33,6 +33,7 @@
 
 using namespace dealii;
 
+#include "include/matrix_free.h"
 #include "include/multigrid.h"
 #include "include/preconditioners.h"
 #include "include/restrictors.h"
@@ -196,6 +197,10 @@ create_system_preconditioner(const OperatorType &              op,
 
   const auto type = params.get<std::string>("type", "");
 
+  ConditionalOStream pcout(std::cout,
+                           Utilities::MPI::this_mpi_process(MPI_COMM_WORLD) ==
+                             0);
+
   if (type == "Chebyshev")
     {
       const auto preconditioner_parameters =
@@ -222,7 +227,19 @@ create_system_preconditioner(const OperatorType &              op,
         auto chebyshev = std::make_shared<PreconditionerType>();
         chebyshev->initialize(op, additional_data);
 
-        // TODO: print eigenvalues
+        VectorType vec;
+        op.initialize_dof_vector(vec);
+        const auto evs = chebyshev->estimate_eigenvalues(vec);
+
+        pcout << "- Create system preconditioner: Chebyshev" << std::endl;
+
+        pcout << "    - min ev: " << evs.min_eigenvalue_estimate << std::endl;
+        pcout << "    - max ev: " << evs.max_eigenvalue_estimate << std::endl;
+        pcout << "    - omega:  "
+              << 2.0 /
+                   (evs.min_eigenvalue_estimate + evs.max_eigenvalue_estimate)
+              << std::endl;
+        pcout << std::endl;
 
         return std::make_shared<
           PreconditionerAdapter<VectorType, PreconditionerType>>(chebyshev);
@@ -230,6 +247,9 @@ create_system_preconditioner(const OperatorType &              op,
 
       if (preconditioner_type == "Diagonal")
         {
+          pcout << "- Create system preconditioner: Diagonal" << std::endl
+                << std::endl;
+
           const auto precon = std::make_shared<DiagonalMatrix<VectorType>>();
           op.compute_inverse_diagonal(precon->get_vector());
 
@@ -245,8 +265,51 @@ create_system_preconditioner(const OperatorType &              op,
               PreconditionerBase<typename OperatorType::vector_type>>(precon));
         }
     }
+  else if (type == "FDM")
+    {
+      if constexpr (OperatorType::is_matrix_free())
+        {
+          pcout << "- Create system preconditioner: Diagonal" << std::endl
+                << std::endl;
+
+          const int dim = OperatorType::dimension;
+          using VectorizedArrayType =
+            typename OperatorType::vectorized_array_type;
+
+          const auto &matrix_free = op.get_matrix_free();
+          const auto &mapping     = op.get_mapping();
+          const auto &quadrature  = op.get_quadrature();
+
+          FE_Q<1> fe_1D(matrix_free.get_dof_handler().get_fe().degree);
+
+          const auto quadrature_1D = quadrature.get_tensor_basis()[0];
+          const Quadrature<dim - 1> quadrature_face(quadrature_1D);
+
+          const unsigned int n_overlap =
+            params.get<unsigned int>("n overlap", 1);
+
+          return std::make_shared<
+            const ASPoissonPreconditioner<dim, Number, VectorizedArrayType>>(
+            matrix_free,
+            n_overlap,
+            mapping,
+            fe_1D,
+            quadrature_face,
+            quadrature_1D);
+        }
+      else
+        {
+          AssertThrow(
+            false, ExcMessage("FDM can only used with matrix-free operator!"));
+          return {};
+        }
+    }
   else if (type == "AdditiveSchwarzPreconditioner")
     {
+      pcout << "- Create system preconditioner: AdditiveSchwarzPreconditioner"
+            << std::endl
+            << std::endl;
+
       using RestictorType = Restrictors::ElementCenteredRestrictor<VectorType>;
       using InverseMatrixType = RestrictedMatrixView<Number>;
       using PreconditionerType =
@@ -278,6 +341,10 @@ create_system_preconditioner(const OperatorType &              op,
     }
   else if (type == "SubMeshPreconditioner")
     {
+      pcout << "- Create system preconditioner: SubMeshPreconditioner"
+            << std::endl
+            << std::endl;
+
       using RestictorType = Restrictors::ElementCenteredRestrictor<VectorType>;
       using InverseMatrixType = SubMeshMatrixView<Number>;
       using PreconditionerType =
@@ -320,6 +387,9 @@ create_system_preconditioner(const OperatorType &              op,
     }
   else if (type == "CGPreconditioner")
     {
+      pcout << "- Create system preconditioner: CGPreconditioner" << std::endl
+            << std::endl;
+
       using RestictorType = Restrictors::ElementCenteredRestrictor<VectorType>;
       using MatrixType0   = SubMeshMatrixView<Number>;
       using MatrixType1   = DiagonalMatrixView<Number>;
@@ -446,7 +516,7 @@ public:
   create_mg_level_smoother(unsigned int           level,
                            const LevelMatrixType &level_matrix) final
   {
-    pcout << "MyMultigrid::create_mg_level_smoother(" << level << ")"
+    pcout << "- Setting up smoother on level " << level << "" << std::endl
           << std::endl;
 
     (void)level;
@@ -504,6 +574,12 @@ public:
       dof_handler.locally_owned_dofs(),
       DoFTools::extract_locally_relevant_dofs(dof_handler),
       dof_handler.get_communicator());
+  }
+
+  static constexpr bool
+  is_matrix_free()
+  {
+    return false;
   }
 
   types::global_dof_index
@@ -613,9 +689,10 @@ template <int dim,
 class LaplaceOperatorMatrixFree : public Subscriptor
 {
 public:
-  static const int dimension = dim;
-  using value_type           = Number;
-  using vector_type          = LinearAlgebra::distributed::Vector<double>;
+  static const int dimension  = dim;
+  using value_type            = Number;
+  using vectorized_array_type = VectorizedArrayType;
+  using vector_type           = LinearAlgebra::distributed::Vector<double>;
 
   using VectorType = vector_type;
 
@@ -636,6 +713,18 @@ public:
     constraints.close();
 
     matrix_free.reinit(mapping, dof_handler, constraints, quadrature);
+  }
+
+  static constexpr bool
+  is_matrix_free()
+  {
+    return true;
+  }
+
+  const MatrixFree<dim, Number, VectorizedArrayType> &
+  get_matrix_free() const
+  {
+    return matrix_free;
   }
 
   types::global_dof_index
@@ -894,6 +983,9 @@ test(const boost::property_tree::ptree params)
       // note: handle it seperatly to exploit template specialization available
       // for SoverCG + PreconditionIdentity
 
+      pcout << "- Create system preconditioner: Identity" << std::endl
+            << std::endl;
+
       const auto preconditioner =
         std::make_shared<const PreconditionIdentity>();
 
@@ -904,6 +996,9 @@ test(const boost::property_tree::ptree params)
     {
       // note: handle it seperatly to exploit template specialization available
       // for SoverCG + DiagonalMatrix
+
+      pcout << "- Create system preconditioner: Diagonal" << std::endl
+            << std::endl;
 
       auto preconditioner = std::make_shared<DiagonalMatrix<VectorType>>();
       op.compute_inverse_diagonal(preconditioner->get_vector());
@@ -919,6 +1014,9 @@ test(const boost::property_tree::ptree params)
   else if (preconditioner_type == "Multigrid")
     {
       // note: handle it seperatly, since we need to set up the levels
+
+      pcout << "- Create system preconditioner: Multigrid" << std::endl
+            << std::endl;
 
       MGLevelObject<std::shared_ptr<const DoFHandler<dim>>> mg_dof_handlers;
       MGLevelObject<std::shared_ptr<const AffineConstraints<double>>>
@@ -1011,7 +1109,7 @@ main(int argc, char *argv[])
   boost::property_tree::read_json(argv[1], params);
 
   const auto dim  = params.get<unsigned int>("dim", 2);
-  const auto type = params.get<std::string>("type", "matrixfree");
+  const auto type = params.get<std::string>("type", "matrixbased");
 
   using Number = double;
 

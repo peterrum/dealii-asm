@@ -1,6 +1,40 @@
-MyMultigrid::create_mg_level_smoother(0)
-MyMultigrid::create_mg_level_smoother(1)
-MyMultigrid::create_mg_level_smoother(2)
-MyMultigrid::create_mg_level_smoother(3)
+- Create system preconditioner: Multigrid
+
+- Setting up smoother on level 0
+
+- Create system preconditioner: Diagonal
+
+- Create system preconditioner: Chebyshev
+    - min ev: 1
+    - max ev: 1
+    - omega:  1
+
+- Setting up smoother on level 1
+
+- Create system preconditioner: Diagonal
+
+- Create system preconditioner: Chebyshev
+    - min ev: 0.27926
+    - max ev: 2.46303
+    - omega:  0.729316
+
+- Setting up smoother on level 2
+
+- Create system preconditioner: Diagonal
+
+- Create system preconditioner: Chebyshev
+    - min ev: 0.188992
+    - max ev: 2.46324
+    - omega:  0.754081
+
+- Setting up smoother on level 3
+
+- Create system preconditioner: Diagonal
+
+- Create system preconditioner: Chebyshev
+    - min ev: 0.151706
+    - max ev: 2.64548
+    - omega:  0.715005
+
 Running with different preconditioners:
  - ASM on cell level:               3

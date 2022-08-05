@@ -1,2 +1,9 @@
+- Create system preconditioner: Diagonal
+
+- Create system preconditioner: Chebyshev
+    - min ev: 0.0819958
+    - max ev: 2.00342
+    - omega:  0.95904
+
 Running with different preconditioners:
  - ASM on cell level:               9

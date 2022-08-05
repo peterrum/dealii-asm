@@ -1,2 +1,9 @@
+- Create system preconditioner: AdditiveSchwarzPreconditioner
+
+- Create system preconditioner: Chebyshev
+    - min ev: 0.280217
+    - max ev: 4.86293
+    - omega:  0.388867
+
 Running with different preconditioners:
  - ASM on cell level:               5
