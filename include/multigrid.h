@@ -203,9 +203,6 @@ public:
   void
   do_update()
   {
-    // wrap level operators
-    mg_matrix = std::make_unique<mg::Matrix<VectorType>>(mg_operators);
-
     // setup coarse-grid solver
     coarse_grid_solver =
       this->create_mg_coarse_grid_solver(min_level, *mg_operators[min_level]);
@@ -220,6 +217,9 @@ public:
     for (unsigned int level = min_level + 1; level <= max_level; ++level)
       mg_smoother.smoothers[level] =
         this->create_mg_level_smoother(level, *mg_operators[level]);
+
+    // wrap level operators
+    mg_matrix = std::make_unique<mg::Matrix<VectorType>>(mg_operators);
 
     // create multigrid algorithm (put level operators, smoothers, transfer
     // operators and smoothers together)
@@ -254,22 +254,21 @@ protected:
   const unsigned int min_level;
   const unsigned int max_level;
 
+  // transfer
   MGLevelObject<MGTwoLevelTransfer<dim, VectorType>> transfers;
   std::shared_ptr<MGTransferType>                    transfer;
 
-  mutable std::unique_ptr<mg::Matrix<VectorType>> mg_matrix;
-
-  mutable SmootherType coarse_grid_solver;
-
+  // coarse-grid solver
+  mutable SmootherType                                  coarse_grid_solver;
   mutable std::unique_ptr<MGCoarseGridBase<VectorType>> mg_coarse;
 
+  // smoothers
   mutable MGSmootherPrecondition<LevelMatrixType, SmootherType, VectorType>
     mg_smoother;
 
-  mutable std::unique_ptr<TrilinosWrappers::PreconditionAMG> precondition_amg;
-
-  mutable std::unique_ptr<Multigrid<VectorType>> mg;
-
+  // multigrid
+  mutable std::unique_ptr<mg::Matrix<VectorType>> mg_matrix;
+  mutable std::unique_ptr<Multigrid<VectorType>>  mg;
   mutable std::unique_ptr<PreconditionMG<dim, VectorType, MGTransferType>>
     preconditioner;
 };
