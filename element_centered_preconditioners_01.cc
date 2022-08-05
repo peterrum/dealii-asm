@@ -307,6 +307,21 @@ create_system_preconditioner(const OperatorType &              op,
           return {};
         }
     }
+  else if (type == "AMG")
+    {
+      pcout << "- Create system preconditioner: AMG" << std::endl << std::endl;
+
+      using PreconditionerType = TrilinosWrappers::PreconditionAMG;
+
+      typename PreconditionerType::AdditionalData additional_data;
+
+      const auto preconitioner = std::make_shared<PreconditionerType>();
+
+      preconitioner->initialize(op.get_sparse_matrix(), additional_data);
+
+      return std::make_shared<
+        PreconditionerAdapter<VectorType, PreconditionerType>>(preconitioner);
+    }
   else if (type == "AdditiveSchwarzPreconditioner")
     {
       pcout << "- Create system preconditioner: AdditiveSchwarzPreconditioner"
