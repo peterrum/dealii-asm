@@ -1,6 +1,6 @@
 - Create system preconditioner: Multigrid
 
-- Setting up smoother on level 0
+- Setting up coarse-grid solver on level 0
 
 - Create system preconditioner: FDM
     - n overlap: 1

@@ -71,6 +71,10 @@ public:
   create_mg_level_smoother(unsigned int           level,
                            const LevelMatrixType &level_matrix) = 0;
 
+  virtual SmootherType
+  create_mg_coarse_grid_solver(unsigned int           level,
+                               const LevelMatrixType &level_matrix) = 0;
+
   void
   do_update()
   {
@@ -79,14 +83,10 @@ public:
     // wrap level operators
     mg_matrix = std::make_unique<mg::Matrix<VectorType>>(mg_operators);
 
-    // setup smoothers on each level
-    mg_smoother.initialize_matrices(mg_operators);
-
-    for (unsigned int level = min_level; level <= max_level; ++level)
-      mg_smoother.smoothers[level] =
-        this->create_mg_level_smoother(level, *mg_operators[level]);
-
     // setup coarse-grid solver
+    coarse_grid_solver_temp =
+      this->create_mg_coarse_grid_solver(min_level, *mg_operators[min_level]);
+
     coarse_grid_solver_control =
       std::make_unique<ReductionControl>(additional_data.coarse_grid_maxiter,
                                          additional_data.coarse_grid_abstol,
@@ -101,9 +101,14 @@ public:
                                                    SolverCG<VectorType>,
                                                    LevelMatrixType,
                                                    SmootherType>>(
-        *coarse_grid_solver,
-        *mg_operators[min_level],
-        mg_smoother.smoothers[min_level]);
+        *coarse_grid_solver, *mg_operators[min_level], coarse_grid_solver_temp);
+
+    // setup smoothers on each level
+    mg_smoother.initialize_matrices(mg_operators);
+
+    for (unsigned int level = min_level + 1; level <= max_level; ++level)
+      mg_smoother.smoothers[level] =
+        this->create_mg_level_smoother(level, *mg_operators[level]);
 
     // create multigrid algorithm (put level operators, smoothers, transfer
     // operators and smoothers together)
@@ -142,6 +147,8 @@ protected:
   std::shared_ptr<MGTransferType>                    transfer;
 
   mutable std::unique_ptr<mg::Matrix<VectorType>> mg_matrix;
+
+  mutable SmootherType coarse_grid_solver_temp;
 
   mutable MGSmootherPrecondition<LevelMatrixType, SmootherType, VectorType>
     mg_smoother;

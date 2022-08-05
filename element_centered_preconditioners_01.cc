@@ -544,6 +544,21 @@ public:
         level_matrix, try_get_child(params, "smoother")));
   }
 
+  SmootherType
+  create_mg_coarse_grid_solver(unsigned int           level,
+                               const LevelMatrixType &level_matrix) final
+  {
+    pcout << "- Setting up coarse-grid solver on level " << level << ""
+          << std::endl
+          << std::endl;
+
+    (void)level;
+
+    return WrapperForGMG<VectorType>(
+      create_system_preconditioner<LevelMatrixType>(
+        level_matrix, try_get_child(params, "smoother")));
+  }
+
 private:
   const boost::property_tree::ptree params;
   ConditionalOStream                pcout;
