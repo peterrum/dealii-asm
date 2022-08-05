@@ -21,6 +21,10 @@
 #include <deal.II/lac/trilinos_sparse_matrix.h>
 #include <deal.II/lac/trilinos_sparsity_pattern.h>
 
+#include <deal.II/matrix_free/fe_evaluation.h>
+#include <deal.II/matrix_free/matrix_free.h>
+#include <deal.II/matrix_free/tools.h>
+
 #include <deal.II/numerics/matrix_creator.h>
 #include <deal.II/numerics/vector_tools.h>
 
@@ -603,7 +607,9 @@ private:
 };
 
 
-template <int dim, typename Number>
+template <int dim,
+          typename Number,
+          typename VectorizedArrayType = VectorizedArray<Number>>
 class LaplaceOperatorMatrixFree : public Subscriptor
 {
 public:
@@ -612,6 +618,9 @@ public:
   using vector_type          = LinearAlgebra::distributed::Vector<double>;
 
   using VectorType = vector_type;
+
+  using FECellIntegrator =
+    FEEvaluation<dim, -1, 0, 1, Number, VectorizedArrayType>;
 
   LaplaceOperatorMatrixFree(const Mapping<dim> &      mapping,
                             const Triangulation<dim> &tria,
@@ -626,7 +635,7 @@ public:
     DoFTools::make_zero_boundary_constraints(dof_handler, 1, constraints);
     constraints.close();
 
-    AssertThrow(false, ExcNotImplemented());
+    matrix_free.reinit(mapping, dof_handler, constraints, quadrature);
   }
 
   types::global_dof_index
@@ -643,11 +652,69 @@ public:
   }
 
   void
+  do_cell_integral_local(FECellIntegrator &integrator) const
+  {
+    integrator.evaluate(EvaluationFlags::gradients);
+
+    for (unsigned int q = 0; q < integrator.n_q_points; ++q)
+      integrator.submit_gradient(integrator.get_gradient(q), q);
+
+    integrator.integrate(EvaluationFlags::gradients);
+  }
+
+  void
+  do_cell_integral_global(FECellIntegrator &integrator,
+                          VectorType &      dst,
+                          const VectorType &src) const
+  {
+    integrator.gather_evaluate(src, EvaluationFlags::gradients);
+
+    for (unsigned int q = 0; q < integrator.n_q_points; ++q)
+      integrator.submit_gradient(integrator.get_gradient(q), q);
+
+    integrator.integrate_scatter(EvaluationFlags::gradients, dst);
+  }
+
+  void
   vmult(VectorType &dst, const VectorType &src) const
   {
-    AssertThrow(false, ExcNotImplemented());
-    (void)dst;
-    (void)src;
+    matrix_free.template cell_loop<VectorType, VectorType>(
+      [&](const auto &, auto &dst, const auto &src, const auto cells) {
+        FEEvaluation<dim, -1, 0, 1, Number, VectorizedArrayType> phi(
+          matrix_free);
+        for (unsigned int cell = cells.first; cell < cells.second; ++cell)
+          {
+            phi.reinit(cell);
+            do_cell_integral_global(phi, dst, src);
+          }
+      },
+      dst,
+      src,
+      true);
+  }
+
+  void
+  vmult(VectorType &      dst,
+        const VectorType &src,
+        const std::function<void(const unsigned int, const unsigned int)>
+          &operation_before_matrix_vector_product,
+        const std::function<void(const unsigned int, const unsigned int)>
+          &operation_after_matrix_vector_product) const
+  {
+    matrix_free.template cell_loop<VectorType, VectorType>(
+      [&](const auto &, auto &dst, const auto &src, const auto cells) {
+        FEEvaluation<dim, -1, 0, 1, Number, VectorizedArrayType> phi(
+          matrix_free);
+        for (unsigned int cell = cells.first; cell < cells.second; ++cell)
+          {
+            phi.reinit(cell);
+            do_cell_integral_global(phi, dst, src);
+          }
+      },
+      dst,
+      src,
+      operation_before_matrix_vector_product,
+      operation_after_matrix_vector_product);
   }
 
   void
@@ -685,22 +752,25 @@ public:
   const TrilinosWrappers::SparseMatrix &
   get_sparse_matrix() const
   {
-    AssertThrow(false, ExcNotImplemented());
+    if (sparse_matrix.m() == 0 && sparse_matrix.n() == 0)
+      compute_system_matrix();
+
     return sparse_matrix;
   }
 
   const TrilinosWrappers::SparsityPattern &
   get_sparsity_pattern() const
   {
-    AssertThrow(false, ExcNotImplemented());
+    if (sparse_matrix.m() == 0 && sparse_matrix.n() == 0)
+      compute_system_matrix();
+
     return sparsity_pattern;
   }
 
   void
   initialize_dof_vector(VectorType &vec) const
   {
-    AssertThrow(false, ExcNotImplemented());
-    (void)vec;
+    matrix_free.initialize_dof_vector(vec);
   }
 
   const AffineConstraints<Number> &
@@ -716,21 +786,54 @@ public:
   }
 
   void
-  compute_inverse_diagonal(VectorType &vec) const
+  compute_inverse_diagonal(VectorType &diagonal) const
   {
-    AssertThrow(false, ExcNotImplemented());
-    (void)vec;
+    this->matrix_free.initialize_dof_vector(diagonal);
+    MatrixFreeTools::compute_diagonal(
+      matrix_free,
+      diagonal,
+      &LaplaceOperatorMatrixFree::do_cell_integral_local,
+      this);
+
+    for (auto &i : diagonal)
+      i = (std::abs(i) > 1.0e-10) ? (1.0 / i) : 1.0;
   }
 
 private:
+  void
+  compute_system_matrix() const
+  {
+    Assert((sparse_matrix.m() == 0 && sparse_matrix.n() == 0),
+           ExcNotImplemented());
+
+    sparsity_pattern.reinit(dof_handler.locally_owned_dofs(),
+                            dof_handler.get_triangulation().get_communicator());
+
+    DoFTools::make_sparsity_pattern(dof_handler,
+                                    sparsity_pattern,
+                                    this->constraints);
+
+    sparsity_pattern.compress();
+    sparse_matrix.reinit(sparsity_pattern);
+
+    MatrixFreeTools::compute_matrix(
+      matrix_free,
+      constraints,
+      sparse_matrix,
+      &LaplaceOperatorMatrixFree::do_cell_integral_local,
+      this);
+  }
+
   const Mapping<dim> &      mapping;
   DoFHandler<dim>           dof_handler;
   AffineConstraints<Number> constraints;
   Quadrature<dim>           quadrature;
 
+  MatrixFree<dim, Number, VectorizedArrayType> matrix_free;
+
   // only set up if required
-  TrilinosWrappers::SparseMatrix    sparse_matrix;
-  TrilinosWrappers::SparsityPattern sparsity_pattern;
+  mutable TrilinosWrappers::SparsityPattern sparsity_pattern;
+  mutable TrilinosWrappers::SparseMatrix    sparse_matrix;
 };
 
 
@@ -908,7 +1011,7 @@ main(int argc, char *argv[])
   boost::property_tree::read_json(argv[1], params);
 
   const auto dim  = params.get<unsigned int>("dim", 2);
-  const auto type = params.get<std::string>("type", "matrixbased");
+  const auto type = params.get<std::string>("type", "matrixfree");
 
   using Number = double;
 
