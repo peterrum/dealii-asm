@@ -593,7 +593,7 @@ class LaplaceOperatorMatrixBased : public Subscriptor
 public:
   static const int dimension = dim;
   using value_type           = Number;
-  using vector_type          = LinearAlgebra::distributed::Vector<double>;
+  using vector_type          = LinearAlgebra::distributed::Vector<Number>;
 
   using VectorType = vector_type;
 
@@ -747,7 +747,7 @@ public:
   static const int dimension  = dim;
   using value_type            = Number;
   using vectorized_array_type = VectorizedArrayType;
-  using vector_type           = LinearAlgebra::distributed::Vector<double>;
+  using vector_type           = LinearAlgebra::distributed::Vector<Number>;
 
   using VectorType = vector_type;
 
@@ -981,7 +981,7 @@ private:
 };
 
 
-template <typename OperatorType>
+template <typename OperatorTrait>
 void
 test(const boost::property_tree::ptree params)
 {
@@ -996,9 +996,12 @@ test(const boost::property_tree::ptree params)
   const auto preconditioner_type =
     preconditioner_parameters.get<std::string>("type", "");
 
-  const int dim    = OperatorType::dimension;
-  using Number     = typename OperatorType::value_type;
-  using VectorType = LinearAlgebra::distributed::Vector<Number>;
+  using OperatorType      = typename OperatorTrait::OperatorType;
+  using LevelOperatorType = typename OperatorTrait::LevelOperatorType;
+  const int dim           = OperatorType::dimension;
+  using VectorType        = typename OperatorType::vector_type;
+  using LevelNumber       = typename LevelOperatorType::value_type;
+  using LevelVectorType   = typename LevelOperatorType::vector_type;
 
   ConditionalOStream pcout(std::cout,
                            Utilities::MPI::this_mpi_process(MPI_COMM_WORLD) ==
@@ -1073,12 +1076,13 @@ test(const boost::property_tree::ptree params)
       pcout << "- Create system preconditioner: Multigrid" << std::endl;
 
       MGLevelObject<std::shared_ptr<const DoFHandler<dim>>> mg_dof_handlers;
-      MGLevelObject<std::shared_ptr<const AffineConstraints<double>>>
-                                                   mg_constraints;
-      MGLevelObject<std::shared_ptr<OperatorType>> mg_operators;
+      MGLevelObject<std::shared_ptr<const AffineConstraints<LevelNumber>>>
+                                                        mg_constraints;
+      MGLevelObject<std::shared_ptr<LevelOperatorType>> mg_operators;
 
-      MGLevelObject<MGTwoLevelTransfer<dim, VectorType>>           transfers;
-      std::unique_ptr<MGTransferGlobalCoarsening<dim, VectorType>> transfer;
+      MGLevelObject<MGTwoLevelTransfer<dim, LevelVectorType>> transfers;
+      std::unique_ptr<MGTransferGlobalCoarsening<dim, LevelVectorType>>
+        transfer;
 
       bool use_pmg = false;
 
@@ -1154,8 +1158,10 @@ test(const boost::property_tree::ptree params)
                                       static_cast<Triangulation<dim> &>(tria) :
                                       *mg_triangulations[l];
 
-          mg_operators[l] =
-            std::make_shared<OperatorType>(mapping, mg_tria, mg_fe, quadrature);
+          mg_operators[l] = std::make_shared<LevelOperatorType>(mapping,
+                                                                mg_tria,
+                                                                mg_fe,
+                                                                quadrature);
         }
 
       for (auto l = min_level; l <= max_level; ++l)
@@ -1163,18 +1169,19 @@ test(const boost::property_tree::ptree params)
           mg_dof_handlers[l] = std::shared_ptr<const DoFHandler<dim>>(
             &mg_operators[l]->get_dof_handler(),
             [](auto *) { /*nothing to do*/ });
-          mg_constraints[l] = std::shared_ptr<const AffineConstraints<double>>(
-            &mg_operators[l]->get_constraints(),
-            [](auto *) { /*nothing to do*/ });
+          mg_constraints[l] =
+            std::shared_ptr<const AffineConstraints<LevelNumber>>(
+              &mg_operators[l]->get_constraints(),
+              [](auto *) { /*nothing to do*/ });
         }
 
-      const auto preconditioner =
-        std::make_shared<const MyMultigrid<dim, OperatorType, VectorType>>(
-          preconditioner_parameters,
-          op.get_dof_handler(),
-          mg_dof_handlers,
-          mg_constraints,
-          mg_operators);
+      const auto preconditioner = std::make_shared<
+        const MyMultigrid<dim, LevelOperatorType, LevelVectorType>>(
+        preconditioner_parameters,
+        op.get_dof_handler(),
+        mg_dof_handlers,
+        mg_constraints,
+        mg_operators);
 
       reduction_control =
         solve(op, solution, rhs, preconditioner, solver_parameters);
@@ -1190,6 +1197,20 @@ test(const boost::property_tree::ptree params)
         solve(op, solution, rhs, preconditioner, solver_parameters);
     }
 }
+
+template <int dim>
+struct LaplaceOperatorMatrixBasedTrait
+{
+  using OperatorType      = LaplaceOperatorMatrixBased<dim, double>;
+  using LevelOperatorType = LaplaceOperatorMatrixBased<dim, double>;
+};
+
+template <int dim>
+struct LaplaceOperatorMatrixFreeTrait
+{
+  using OperatorType      = LaplaceOperatorMatrixFree<dim, double>;
+  using LevelOperatorType = LaplaceOperatorMatrixFree<dim, double>;
+};
 
 int
 main(int argc, char *argv[])
@@ -1210,16 +1231,14 @@ main(int argc, char *argv[])
   const auto dim  = params.get<unsigned int>("dim", 2);
   const auto type = params.get<std::string>("type", "matrixbased");
 
-  using Number = double;
-
   if (dim == 2 && type == "matrixbased")
-    test<LaplaceOperatorMatrixBased<2, Number>>(params);
+    test<LaplaceOperatorMatrixBasedTrait<2>>(params);
   else if (dim == 2 && type == "matrixfree")
-    test<LaplaceOperatorMatrixFree<2, Number>>(params);
+    test<LaplaceOperatorMatrixFreeTrait<2>>(params);
   else if (dim == 3 && type == "matrixbased")
-    test<LaplaceOperatorMatrixBased<3, Number>>(params);
+    test<LaplaceOperatorMatrixBasedTrait<3>>(params);
   else if (dim == 3 && type == "matrixfree")
-    test<LaplaceOperatorMatrixFree<3, Number>>(params);
+    test<LaplaceOperatorMatrixFreeTrait<3>>(params);
   else
     AssertThrow(false, ExcNotImplemented());
 }
