@@ -1,4 +1,7 @@
 - Create system preconditioner: AdditiveSchwarzPreconditioner
 
-Running with different preconditioners:
- - ASM on cell level:               6
+ - Solving with GMRES
+   - max iterations: 1000
+   - abs tolerance:  1e-10
+   - rel tolrance:   0.01
+   - n iterations:   6

@@ -6,5 +6,8 @@
     - max ev: 2.00342
     - omega:  0.95904
 
-Running with different preconditioners:
- - ASM on cell level:               9
+ - Solving with GMRES
+   - max iterations: 1000
+   - abs tolerance:  1e-10
+   - rel tolrance:   0.01
+   - n iterations:   9

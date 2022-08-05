@@ -102,6 +102,15 @@ solve(const MatrixType &                              A,
   const auto rel_tolerance  = params.get<double>("rel tolerance", 1e-2);
   const auto type           = params.get<std::string>("type", "");
 
+  ConditionalOStream pcout(std::cout,
+                           Utilities::MPI::this_mpi_process(MPI_COMM_WORLD) ==
+                             0);
+
+  pcout << " - Solving with " << type << std::endl;
+  pcout << "   - max iterations: " << max_iterations << std::endl;
+  pcout << "   - abs tolerance:  " << abs_tolerance << std::endl;
+  pcout << "   - rel tolrance:   " << rel_tolerance << std::endl;
+
   auto reduction_control = std::make_shared<ReductionControl>(max_iterations,
                                                               abs_tolerance,
                                                               rel_tolerance);
@@ -125,6 +134,9 @@ solve(const MatrixType &                              A,
     {
       AssertThrow(false, ExcMessage("Solver <" + type + "> is not known!"))
     }
+
+  pcout << "   - n iterations:   " << reduction_control->last_step()
+        << std::endl;
 
   return reduction_control;
 }
@@ -1167,10 +1179,6 @@ test(const boost::property_tree::ptree params)
       reduction_control =
         solve(op, solution, rhs, preconditioner, solver_parameters);
     }
-
-  pcout << "Running with different preconditioners:" << std::endl;
-  pcout << " - ASM on cell level:               "
-        << reduction_control->last_step() << std::endl;
 }
 
 int
@@ -1198,6 +1206,10 @@ main(int argc, char *argv[])
     test<LaplaceOperatorMatrixBased<2, Number>>(params);
   else if (dim == 2 && type == "matrixfree")
     test<LaplaceOperatorMatrixFree<2, Number>>(params);
+  else if (dim == 3 && type == "matrixbased")
+    test<LaplaceOperatorMatrixBased<3, Number>>(params);
+  else if (dim == 3 && type == "matrixfree")
+    test<LaplaceOperatorMatrixFree<3, Number>>(params);
   else
     AssertThrow(false, ExcNotImplemented());
 }
