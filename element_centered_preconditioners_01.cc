@@ -300,7 +300,10 @@ create_system_preconditioner(const OperatorType &              op,
           const auto &mapping     = op.get_mapping();
           const auto &quadrature  = op.get_quadrature();
 
-          FE_Q<1> fe_1D(matrix_free.get_dof_handler().get_fe().degree);
+          const unsigned int fe_degree =
+            matrix_free.get_dof_handler().get_fe().degree;
+
+          FE_Q<1> fe_1D(fe_degree);
 
           const auto quadrature_1D = quadrature.get_tensor_basis()[0];
           const Quadrature<dim - 1> quadrature_face(quadrature_1D);
@@ -312,15 +315,74 @@ create_system_preconditioner(const OperatorType &              op,
           pcout << "    - n overlap: " << n_overlap << std::endl;
           pcout << std::endl;
 
-          return std::make_shared<
-            const ASPoissonPreconditioner<dim, Number, VectorizedArrayType>>(
-            matrix_free,
-            n_overlap,
-            mapping,
-            fe_1D,
-            quadrature_face,
-            quadrature_1D,
-            weight_type);
+          unsigned int n_rows = fe_degree + 2 * n_overlap - 1;
+
+          if (n_rows == 2)
+            return std::make_shared<
+              const ASPoissonPreconditioner<dim,
+                                            Number,
+                                            VectorizedArrayType,
+                                            2>>(matrix_free,
+                                                n_overlap,
+                                                mapping,
+                                                fe_1D,
+                                                quadrature_face,
+                                                quadrature_1D,
+                                                weight_type);
+          if (n_rows == 3)
+            return std::make_shared<
+              const ASPoissonPreconditioner<dim,
+                                            Number,
+                                            VectorizedArrayType,
+                                            3>>(matrix_free,
+                                                n_overlap,
+                                                mapping,
+                                                fe_1D,
+                                                quadrature_face,
+                                                quadrature_1D,
+                                                weight_type);
+          if (n_rows == 4)
+            return std::make_shared<
+              const ASPoissonPreconditioner<dim,
+                                            Number,
+                                            VectorizedArrayType,
+                                            4>>(matrix_free,
+                                                n_overlap,
+                                                mapping,
+                                                fe_1D,
+                                                quadrature_face,
+                                                quadrature_1D,
+                                                weight_type);
+          if (n_rows == 5)
+            return std::make_shared<
+              const ASPoissonPreconditioner<dim,
+                                            Number,
+                                            VectorizedArrayType,
+                                            5>>(matrix_free,
+                                                n_overlap,
+                                                mapping,
+                                                fe_1D,
+                                                quadrature_face,
+                                                quadrature_1D,
+                                                weight_type);
+          if (n_rows == 6)
+            return std::make_shared<
+              const ASPoissonPreconditioner<dim,
+                                            Number,
+                                            VectorizedArrayType,
+                                            6>>(matrix_free,
+                                                n_overlap,
+                                                mapping,
+                                                fe_1D,
+                                                quadrature_face,
+                                                quadrature_1D,
+                                                weight_type);
+
+          AssertThrow(false,
+                      ExcMessage("FDM with <" + std::to_string(n_rows) +
+                                 "> is not precompiled!"));
+
+          return {};
         }
       else
         {
