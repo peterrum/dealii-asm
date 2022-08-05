@@ -38,6 +38,37 @@ using namespace dealii;
 #include "include/preconditioners.h"
 #include "include/restrictors.h"
 
+constexpr int MAX_N_ROWS_FDM = 6;
+
+
+#define EXPAND_OPERATIONS(OPERATION)                     \
+  switch (n_rows)                                        \
+    {                                                    \
+      case 2:                                            \
+        OPERATION(((2 <= MAX_N_ROWS_FDM) ? 2 : -1), -1); \
+        break;                                           \
+      case 3:                                            \
+        OPERATION(((3 <= MAX_N_ROWS_FDM) ? 3 : -1), -1); \
+        break;                                           \
+      case 4:                                            \
+        OPERATION(((4 <= MAX_N_ROWS_FDM) ? 4 : -1), -1); \
+        break;                                           \
+      case 5:                                            \
+        OPERATION(((5 <= MAX_N_ROWS_FDM) ? 5 : -1), -1); \
+        break;                                           \
+      case 6:                                            \
+        OPERATION(((6 <= MAX_N_ROWS_FDM) ? 6 : -1), -1); \
+        break;                                           \
+      case 7:                                            \
+        OPERATION(((7 <= MAX_N_ROWS_FDM) ? 7 : -1), -1); \
+        break;                                           \
+      case 8:                                            \
+        OPERATION(((8 <= MAX_N_ROWS_FDM) ? 7 : -1), -1); \
+        break;                                           \
+      default:                                           \
+        OPERATION(-1, -1);                               \
+    }
+
 template <int dim>
 class RightHandSide : public Function<dim>
 {
@@ -317,82 +348,24 @@ create_system_preconditioner(const OperatorType &              op,
 
           const unsigned int n_rows = fe_degree + 2 * n_overlap - 1;
 
-          if (n_rows == 2)
-            return std::make_shared<
-              const ASPoissonPreconditioner<dim,
-                                            Number,
-                                            VectorizedArrayType,
-                                            2>>(matrix_free,
-                                                n_overlap,
-                                                mapping,
-                                                fe_1D,
-                                                quadrature_face,
-                                                quadrature_1D,
-                                                weight_type);
-          else if (n_rows == 3)
-            return std::make_shared<
-              const ASPoissonPreconditioner<dim,
-                                            Number,
-                                            VectorizedArrayType,
-                                            3>>(matrix_free,
-                                                n_overlap,
-                                                mapping,
-                                                fe_1D,
-                                                quadrature_face,
-                                                quadrature_1D,
-                                                weight_type);
-          else if (n_rows == 4)
-            return std::make_shared<
-              const ASPoissonPreconditioner<dim,
-                                            Number,
-                                            VectorizedArrayType,
-                                            4>>(matrix_free,
-                                                n_overlap,
-                                                mapping,
-                                                fe_1D,
-                                                quadrature_face,
-                                                quadrature_1D,
-                                                weight_type);
-          if (n_rows == 5)
-            return std::make_shared<
-              const ASPoissonPreconditioner<dim,
-                                            Number,
-                                            VectorizedArrayType,
-                                            5>>(matrix_free,
-                                                n_overlap,
-                                                mapping,
-                                                fe_1D,
-                                                quadrature_face,
-                                                quadrature_1D,
-                                                weight_type);
-          else if (n_rows == 6)
-            return std::make_shared<
-              const ASPoissonPreconditioner<dim,
-                                            Number,
-                                            VectorizedArrayType,
-                                            6>>(matrix_free,
-                                                n_overlap,
-                                                mapping,
-                                                fe_1D,
-                                                quadrature_face,
-                                                quadrature_1D,
-                                                weight_type);
+#define OPERATION(c, d)                                                  \
+  if (c == -1)                                                           \
+    pcout << "Warning: FDM with <" + std::to_string(n_rows) +            \
+               "> is not precompiled!"                                   \
+          << std::endl;                                                  \
+                                                                         \
+  return std::make_shared<                                               \
+    const ASPoissonPreconditioner<dim, Number, VectorizedArrayType, c>>( \
+    matrix_free,                                                         \
+    n_overlap,                                                           \
+    mapping,                                                             \
+    fe_1D,                                                               \
+    quadrature_face,                                                     \
+    quadrature_1D,                                                       \
+    weight_type);
 
-          pcout << "Warning: FDM with <" + std::to_string(n_rows) +
-                     "> is not precompiled!"
-                << std::endl;
-
-          return std::make_shared<
-            const ASPoissonPreconditioner<dim,
-                                          Number,
-                                          VectorizedArrayType,
-                                          -1>>(matrix_free,
-                                               n_overlap,
-                                               mapping,
-                                               fe_1D,
-                                               quadrature_face,
-                                               quadrature_1D,
-                                               weight_type);
+          EXPAND_OPERATIONS(OPERATION);
+#undef OPERATION
         }
       else
         {
