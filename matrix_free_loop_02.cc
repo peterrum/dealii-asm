@@ -97,7 +97,9 @@ void
 test(const unsigned int fe_degree,
      const unsigned int n_global_refinements,
      const unsigned int n_overlap,
-     const unsigned int chebyshev_degree)
+     const unsigned int chebyshev_degree,
+     const bool         do_vmult,
+     const bool         use_cartesian_mesh)
 {
   using Number              = double;
   using VectorizedArrayType = VectorizedArray<Number>;
@@ -136,10 +138,11 @@ test(const unsigned int fe_degree,
   mapping_q_cache.initialize(
     mapping,
     tria,
-    [](const auto &, const auto &point) {
+    [use_cartesian_mesh](const auto &, const auto &point) {
       Point<dim> result;
 
-      return result;
+      if (use_cartesian_mesh)
+        return result;
 
       for (unsigned int d = 0; d < dim; ++d)
         result[d] = std::sin(2 * numbers::PI * point[(d + 1) % dim]) *
@@ -282,20 +285,36 @@ test(const unsigned int fe_degree,
   // fdm
   const auto time_total_1 = run([&]() { precon_fdm->vmult(dst, src); });
   // fdm + chebyshev
-  const auto time_total_2 =
-    run([&]() { precon_chebyshev_fdm.vmult(dst, src); });
+  const auto time_total_2 = run([&]() {
+    if (do_vmult)
+      precon_chebyshev_fdm.vmult(dst, src);
+    else
+      precon_chebyshev_fdm.step(dst, src);
+  });
 
   // diagonal
   const auto time_total_3 = run([&]() { precon_diag->vmult(dst, src); });
   // diagonal + chebyshev
-  const auto time_total_4 =
-    run([&]() { precon_chebyshev_diag.vmult(dst, src); });
+  const auto time_total_4 = run([&]() {
+    if (do_vmult)
+      precon_chebyshev_diag.vmult(dst, src);
+    else
+      precon_chebyshev_diag.step(dst, src);
+  });
   // diagonal + chebyshev (no pre/post)
-  const auto time_total_5 =
-    run([&]() { precon_chebyshev_diag_my_op.vmult(dst, src); });
+  const auto time_total_5 = run([&]() {
+    if (do_vmult)
+      precon_chebyshev_diag_my_op.vmult(dst, src);
+    else
+      precon_chebyshev_diag_my_op.step(dst, src);
+  });
   // diagonal + chebyshev (without exploiting the fact that we have a diagonal)
-  const auto time_total_6 =
-    run([&]() { precon_chebyshev_my_diag.vmult(dst, src); });
+  const auto time_total_6 = run([&]() {
+    if (do_vmult)
+      precon_chebyshev_my_diag.vmult(dst, src);
+    else
+      precon_chebyshev_my_diag.step(dst, src);
+  });
 
   pcout << dof_handler.n_dofs() << " " << time_total_0 << " " << time_total_1
         << " " << time_total_2 << " " << time_total_3 << " " << time_total_4
@@ -312,7 +331,12 @@ test(const unsigned int fe_degree,
 }
 
 
-
+/**
+ * mpirun -np 40 ./matrix_free_loop_02 3 4 6 1 1 1
+ * mpirun -np 40 ./matrix_free_loop_02 3 4 6 1 1 0
+ * mpirun -np 40 ./matrix_free_loop_02 3 4 6 1 0 1
+ * mpirun -np 40 ./matrix_free_loop_02 3 4 6 1 0 0
+ */
 int
 main(int argc, char *argv[])
 {
@@ -322,15 +346,27 @@ main(int argc, char *argv[])
   const unsigned int fe_degree = (argc >= 3) ? std::atoi(argv[2]) : 1;
   const unsigned int n_global_refinements =
     (argc >= 4) ? std::atoi(argv[3]) : 6;
-  const unsigned int n_overlap = (argc >= 5) ? std::atoi(argv[4]) : 1;
+  const unsigned int n_overlap          = (argc >= 5) ? std::atoi(argv[4]) : 1;
+  const bool         do_vmult           = (argc >= 6) ? std::atoi(argv[5]) : 1;
+  const bool         use_cartesian_mesh = (argc >= 7) ? std::atoi(argv[6]) : 1;
 
   for (unsigned int chebyshev_degree = 1; chebyshev_degree <= 5;
        ++chebyshev_degree)
     {
       if (dim == 2)
-        test<2>(fe_degree, n_global_refinements, n_overlap, chebyshev_degree);
+        test<2>(fe_degree,
+                n_global_refinements,
+                n_overlap,
+                chebyshev_degree,
+                do_vmult,
+                use_cartesian_mesh);
       else if (dim == 3)
-        test<3>(fe_degree, n_global_refinements, n_overlap, chebyshev_degree);
+        test<3>(fe_degree,
+                n_global_refinements,
+                n_overlap,
+                chebyshev_degree,
+                do_vmult,
+                use_cartesian_mesh);
       else
         AssertThrow(false, ExcNotImplemented());
     }
