@@ -146,12 +146,22 @@ solve(const MatrixType &                              A,
       SolverCG<VectorType> solver(*reduction_control);
       solver.solve(A, x, b, *preconditioner);
     }
+  else if (type == "FCG")
+    {
+      SolverFlexibleCG<VectorType> solver(*reduction_control);
+      solver.solve(A, x, b, *preconditioner);
+    }
   else if (type == "GMRES")
     {
       typename SolverGMRES<VectorType>::AdditionalData additional_data;
       additional_data.right_preconditioning = true;
 
       SolverGMRES<VectorType> solver(*reduction_control, additional_data);
+      solver.solve(A, x, b, *preconditioner);
+    }
+  else if (type == "FGMRES")
+    {
+      SolverFGMRES<VectorType> solver(*reduction_control);
       solver.solve(A, x, b, *preconditioner);
     }
   else
