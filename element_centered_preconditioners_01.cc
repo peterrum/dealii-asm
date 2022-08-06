@@ -1069,9 +1069,9 @@ test(const boost::property_tree::ptree params)
 
   tria.refine_global(n_global_refinements);
 
-  FE_Q<dim>      fe(fe_degree);
-  QGauss<dim>    quadrature(fe_degree + 1);
-  MappingQ1<dim> mapping;
+  const FE_Q<dim>      fe(fe_degree);
+  const QGauss<dim>    quadrature(fe_degree + 1);
+  const MappingQ1<dim> mapping;
 
   OperatorType op(mapping, tria, fe, quadrature);
 
@@ -1207,15 +1207,18 @@ test(const boost::property_tree::ptree params)
 
       for (unsigned int l = min_level; l <= max_level; ++l)
         {
-          const FE_Q<dim> mg_fe(use_pmg ? mg_degress[l] : fe_degree);
-          const auto &    mg_tria = use_pmg ?
-                                      static_cast<Triangulation<dim> &>(tria) :
-                                      *mg_triangulations[l];
+          const unsigned int mg_fe_degree = use_pmg ? mg_degress[l] : fe_degree;
+          const FE_Q<dim>    mg_fe(mg_fe_degree);
+          const auto &       mg_tria = use_pmg ?
+                                         static_cast<Triangulation<dim> &>(tria) :
+                                         *mg_triangulations[l];
+
+          const QGauss<dim> mg_quadrature(mg_fe_degree + 1);
 
           mg_operators[l] = std::make_shared<LevelOperatorType>(mapping,
                                                                 mg_tria,
                                                                 mg_fe,
-                                                                quadrature);
+                                                                mg_quadrature);
         }
 
       for (auto l = min_level; l <= max_level; ++l)
