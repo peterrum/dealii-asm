@@ -1,3 +1,5 @@
+- Create mesh: hypercube
+
 - Create system preconditioner: Diagonal
 
 - Create system preconditioner: Chebyshev

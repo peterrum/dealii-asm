@@ -1,3 +1,5 @@
+- Create mesh: hypercube
+
 - Create system preconditioner: Multigrid
  - type:       h
  - p sequence: bisect

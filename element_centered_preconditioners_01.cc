@@ -1064,8 +1064,11 @@ test(const boost::property_tree::ptree params)
 
   parallel::distributed::Triangulation<dim> tria(MPI_COMM_WORLD);
 
-  const std::string geometry_name  = "hypercube";
-  unsigned int      mapping_degree = 1;
+  const auto mesh_parameters = try_get_child(params, "mesh");
+
+  const std::string geometry_name =
+    mesh_parameters.get<std::string>("name", "hypercube");
+  unsigned int mapping_degree = 1;
 
   std::function<Point<dim>(const typename Triangulation<dim>::cell_iterator &,
                            const Point<dim> &)>
@@ -1073,12 +1076,29 @@ test(const boost::property_tree::ptree params)
 
   if (geometry_name == "hypercube")
     {
+      pcout << "- Create mesh: hypercube" << std::endl;
+      pcout << std::endl;
+
       GridGenerator::hyper_cube(tria);
       mapping_degree = 1;
     }
   else if (geometry_name == "anisotropy")
     {
-      AssertThrow(false, ExcNotImplemented());
+      const auto stratch = mesh_parameters.get<double>("stratch", 1.0);
+
+      pcout << "- Create mesh: anisotropy" << std::endl;
+      pcout << "  - stratch: " << stratch << std::endl;
+      pcout << std::endl;
+
+      GridGenerator::hyper_cube(tria);
+      mapping_degree          = 1;
+      transformation_function = [stratch](const auto &, const auto &old_point) {
+        auto new_point = old_point;
+
+        new_point[dim - 1] *= stratch;
+
+        return new_point;
+      };
     }
   else if (geometry_name == "kershaw")
     {
