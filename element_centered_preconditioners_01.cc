@@ -34,6 +34,7 @@
 
 using namespace dealii;
 
+#include "include/kershaw.h"
 #include "include/matrix_free.h"
 #include "include/multigrid.h"
 #include "include/preconditioners.h"
@@ -342,7 +343,7 @@ create_system_preconditioner(const OperatorType &              op,
           const Quadrature<dim - 1> quadrature_face(quadrature_1D);
 
           const unsigned int n_overlap =
-            params.get<unsigned int>("n overlap", 1);
+            std::min(params.get<unsigned int>("n overlap", 1), fe_degree);
           const auto weight_type = get_weighting_type(params);
 
           pcout << "    - n overlap: " << n_overlap << std::endl;
@@ -409,18 +410,25 @@ create_system_preconditioner(const OperatorType &              op,
       // restrictor
       typename RestictorType::AdditionalData restrictor_ad;
 
-      restrictor_ad.n_overlap      = params.get<unsigned int>("n overlap", 1);
+      const unsigned int fe_degree = op.get_dof_handler().get_fe().degree;
+
+      restrictor_ad.n_overlap =
+        std::min(params.get<unsigned int>("n overlap", 1), fe_degree + 1);
       restrictor_ad.weighting_type = get_weighting_type(params);
 
       const auto restrictor =
         std::make_shared<const RestictorType>(op_approx->get_dof_handler(),
                                               restrictor_ad);
 
+      const auto &sparse_matrix    = op_approx->get_sparse_matrix();
+      const auto &sparsity_pattern = op_approx->get_sparsity_pattern();
+
       // inverse matrix
       const auto inverse_matrix =
         std::make_shared<InverseMatrixType>(restrictor,
-                                            op_approx->get_sparse_matrix(),
-                                            op_approx->get_sparsity_pattern());
+                                            sparse_matrix,
+                                            sparsity_pattern);
+
       inverse_matrix->invert();
 
       // preconditioner
@@ -816,6 +824,9 @@ public:
     : mapping(mapping)
     , dof_handler(tria)
     , quadrature(quadrature)
+    , pcout(std::cout,
+            Utilities::MPI::this_mpi_process(dof_handler.get_communicator()) ==
+              0)
   {
     dof_handler.distribute_dofs(fe);
 
@@ -823,6 +834,13 @@ public:
     constraints.close();
 
     matrix_free.reinit(mapping, dof_handler, constraints, quadrature);
+
+    pcout << "- Create operator:" << std::endl;
+    pcout << "  - n cells: "
+          << dof_handler.get_triangulation().n_global_active_cells()
+          << std::endl;
+    pcout << "  - n dofs:  " << dof_handler.n_dofs() << std::endl;
+    pcout << std::endl;
   }
 
   static constexpr bool
@@ -1030,6 +1048,8 @@ private:
 
   MatrixFree<dim, Number, VectorizedArrayType> matrix_free;
 
+  ConditionalOStream pcout;
+
   // only set up if required
   mutable TrilinosWrappers::SparsityPattern sparsity_pattern;
   mutable TrilinosWrappers::SparseMatrix    sparse_matrix;
@@ -1102,7 +1122,35 @@ test(const boost::property_tree::ptree params)
     }
   else if (geometry_name == "kershaw")
     {
-      AssertThrow(false, ExcNotImplemented());
+      auto epsy = mesh_parameters.get<double>("epsy", 0.0);
+      auto epsz = mesh_parameters.get<double>("epsz", 0.0);
+
+      if (epsy == 0.0 || epsz == 0.0)
+        {
+          auto eps = mesh_parameters.get<double>("eps", 1.0);
+
+          epsy = eps;
+          epsz = eps;
+        }
+
+      pcout << "- Create mesh: kershaw" << std::endl;
+      pcout << "  - epsx: " << 1.0 << std::endl;
+      pcout << "  - epsy: " << epsy << std::endl;
+      pcout << "  - epsz: " << epsz << std::endl;
+      pcout << std::endl;
+
+      GridGenerator::subdivided_hyper_cube(tria, 6);
+      mapping_degree = 3; // TODO
+
+      transformation_function = [epsy, epsz](const auto &,
+                                             const auto &in_point) {
+        Point<dim> out_point;
+        // clang-format off
+        kershaw(epsy, epsz, in_point[0], in_point[1], in_point[2], out_point[0], out_point[1], out_point[2]);
+        // clang-format on
+
+        return out_point;
+      };
     }
   else if (geometry_name == "hyperball")
     {
@@ -1118,7 +1166,8 @@ test(const boost::property_tree::ptree params)
 
 
   for (const auto &face : tria.active_face_iterators())
-    face->set_boundary_id(1);
+    if (face->at_boundary())
+      face->set_boundary_id(1);
 
   tria.refine_global(n_global_refinements);
 
