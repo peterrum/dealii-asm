@@ -162,7 +162,7 @@ namespace Restrictors
     }
 
     const std::shared_ptr<dealii::Utilities::MPI::Partitioner> &
-    get_partitioner()
+    get_partitioner() const
     {
       return this->partitioner;
     }

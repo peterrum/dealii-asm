@@ -760,8 +760,14 @@ public:
   {
     dealii::Vector<Number> src_, dst_;
 
-    dst = 0.0;
-    src.update_ghost_values();
+    VectorType src__, dst__;
+
+    src__.reinit(restrictor->get_partitioner());
+    dst__.reinit(restrictor->get_partitioner());
+
+    src__.copy_locally_owned_data_from(src);
+
+    src__.update_ghost_values();
 
     for (unsigned int c = 0; c < restrictor->n_blocks(); ++c)
       {
@@ -773,15 +779,15 @@ public:
         src_.reinit(n_entries);
         dst_.reinit(n_entries);
 
-        restrictor->read_dof_values(c, src, src_);
+        restrictor->read_dof_values(c, src__, src_);
 
         inverse_matrix->vmult(c, dst_, src_);
 
-        restrictor->distribute_dof_values(c, dst_, dst);
+        restrictor->distribute_dof_values(c, dst_, dst__);
       }
 
-    dst.compress(dealii::VectorOperation::add);
-    src.zero_out_ghost_values();
+    dst__.compress(dealii::VectorOperation::add);
+    dst.copy_locally_owned_data_from(dst__);
   }
 
 private:
