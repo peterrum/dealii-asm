@@ -8,6 +8,7 @@
 
 #include <deal.II/fe/fe_q.h>
 #include <deal.II/fe/fe_q_iso_q1.h>
+#include <deal.II/fe/mapping_q_cache.h>
 
 #include <deal.II/grid/grid_generator.h>
 
@@ -1062,16 +1063,56 @@ test(const boost::property_tree::ptree params)
                              0);
 
   parallel::distributed::Triangulation<dim> tria(MPI_COMM_WORLD);
-  GridGenerator::hyper_cube(tria);
+
+  const std::string geometry_name  = "hypercube";
+  unsigned int      mapping_degree = 1;
+
+  std::function<Point<dim>(const typename Triangulation<dim>::cell_iterator &,
+                           const Point<dim> &)>
+    transformation_function;
+
+  if (geometry_name == "hypercube")
+    {
+      GridGenerator::hyper_cube(tria);
+      mapping_degree = 1;
+    }
+  else if (geometry_name == "anisotropy")
+    {
+      AssertThrow(false, ExcNotImplemented());
+    }
+  else if (geometry_name == "kershaw")
+    {
+      AssertThrow(false, ExcNotImplemented());
+    }
+  else if (geometry_name == "hyperball")
+    {
+      GridGenerator::hyper_ball_balanced(tria);
+      mapping_degree = 2;
+    }
+  else
+    {
+      AssertThrow(false,
+                  ExcMessage("Geometry with the name <" + geometry_name +
+                             "> is not known!"));
+    }
+
 
   for (const auto &face : tria.active_face_iterators())
     face->set_boundary_id(1);
 
   tria.refine_global(n_global_refinements);
 
-  const FE_Q<dim>      fe(fe_degree);
-  const QGauss<dim>    quadrature(fe_degree + 1);
-  const MappingQ1<dim> mapping;
+  const MappingQ1<dim> mapping_q1;
+
+  MappingQCache<dim> mapping(mapping_degree);
+
+  if (transformation_function)
+    mapping.initialize(mapping_q1, tria, transformation_function, false);
+  else
+    mapping.initialize(mapping_q1, tria);
+
+  const FE_Q<dim>   fe(fe_degree);
+  const QGauss<dim> quadrature(fe_degree + 1);
 
   OperatorType op(mapping, tria, fe, quadrature);
 
@@ -1131,8 +1172,9 @@ test(const boost::property_tree::ptree params)
 
       MGLevelObject<std::shared_ptr<const DoFHandler<dim>>> mg_dof_handlers;
       MGLevelObject<std::shared_ptr<const AffineConstraints<LevelNumber>>>
-                                                        mg_constraints;
-      MGLevelObject<std::shared_ptr<LevelOperatorType>> mg_operators;
+                                                         mg_constraints;
+      MGLevelObject<std::shared_ptr<LevelOperatorType>>  mg_operators;
+      MGLevelObject<std::shared_ptr<MappingQCache<dim>>> mg_mapping;
 
       MGLevelObject<MGTwoLevelTransfer<dim, LevelVectorType>> transfers;
       std::unique_ptr<MGTransferGlobalCoarsening<dim, LevelVectorType>>
@@ -1204,6 +1246,7 @@ test(const boost::property_tree::ptree params)
       mg_dof_handlers.resize(min_level, max_level);
       mg_constraints.resize(min_level, max_level);
       mg_operators.resize(min_level, max_level);
+      mg_mapping.resize(min_level, max_level);
 
       for (unsigned int l = min_level; l <= max_level; ++l)
         {
@@ -1215,7 +1258,18 @@ test(const boost::property_tree::ptree params)
 
           const QGauss<dim> mg_quadrature(mg_fe_degree + 1);
 
-          mg_operators[l] = std::make_shared<LevelOperatorType>(mapping,
+
+          mg_mapping[l] = std::make_shared<MappingQCache<dim>>(mapping_degree);
+
+          if (transformation_function)
+            mg_mapping[l]->initialize(mapping_q1,
+                                      tria,
+                                      transformation_function,
+                                      false);
+          else
+            mg_mapping[l]->initialize(mapping_q1, tria);
+
+          mg_operators[l] = std::make_shared<LevelOperatorType>(*mg_mapping[l],
                                                                 mg_tria,
                                                                 mg_fe,
                                                                 mg_quadrature);
