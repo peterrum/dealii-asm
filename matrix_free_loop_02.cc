@@ -4,6 +4,7 @@
 #include <deal.II/distributed/tria.h>
 
 #include <deal.II/dofs/dof_handler.h>
+#include <deal.II/dofs/dof_renumbering.h>
 #include <deal.II/dofs/dof_tools.h>
 
 #include <deal.II/fe/fe_q.h>
@@ -99,7 +100,8 @@ test(const unsigned int fe_degree,
      const unsigned int n_overlap,
      const unsigned int chebyshev_degree,
      const bool         do_vmult,
-     const bool         use_cartesian_mesh)
+     const bool         use_cartesian_mesh,
+     const bool         use_renumbering)
 {
   using Number              = double;
   using VectorizedArrayType = VectorizedArray<Number>;
@@ -156,8 +158,17 @@ test(const unsigned int fe_degree,
   DoFTools::make_zero_boundary_constraints(dof_handler, 1, constraints);
   constraints.close();
 
+  typename MatrixFree<dim, Number, VectorizedArrayType>::AdditionalData
+    additional_data;
+
+  if (use_renumbering)
+    DoFRenumbering::matrix_free_data_locality(dof_handler,
+                                              constraints,
+                                              additional_data);
+
   MatrixFree<dim, Number, VectorizedArrayType> matrix_free;
-  matrix_free.reinit(mapping_q_cache, dof_handler, constraints, quadrature);
+  matrix_free.reinit(
+    mapping_q_cache, dof_handler, constraints, quadrature, additional_data);
 
   using OperatorType = PoissonOperator<dim, Number, VectorizedArrayType>;
   using MyOperatorType =
@@ -349,6 +360,7 @@ main(int argc, char *argv[])
   const unsigned int n_overlap          = (argc >= 5) ? std::atoi(argv[4]) : 1;
   const bool         do_vmult           = (argc >= 6) ? std::atoi(argv[5]) : 1;
   const bool         use_cartesian_mesh = (argc >= 7) ? std::atoi(argv[6]) : 1;
+  const bool         use_renumbering    = (argc >= 8) ? std::atoi(argv[7]) : 1;
 
   for (unsigned int chebyshev_degree = 1; chebyshev_degree <= 5;
        ++chebyshev_degree)
@@ -359,14 +371,16 @@ main(int argc, char *argv[])
                 n_overlap,
                 chebyshev_degree,
                 do_vmult,
-                use_cartesian_mesh);
+                use_cartesian_mesh,
+                use_renumbering);
       else if (dim == 3)
         test<3>(fe_degree,
                 n_global_refinements,
                 n_overlap,
                 chebyshev_degree,
                 do_vmult,
-                use_cartesian_mesh);
+                use_cartesian_mesh,
+                use_renumbering);
       else
         AssertThrow(false, ExcNotImplemented());
     }
