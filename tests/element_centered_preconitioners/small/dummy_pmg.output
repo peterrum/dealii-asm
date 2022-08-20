@@ -1,8 +1,20 @@
 - Create mesh: hypercube
 
+- Create operator:
+  - n cells: 64
+  - n dofs:  625
+
 - Create system preconditioner: Multigrid
  - type:       p
  - p sequence: go to one
+
+- Create operator:
+  - n cells: 64
+  - n dofs:  81
+
+- Create operator:
+  - n cells: 64
+  - n dofs:  625
 
 - Setting up coarse-grid solver on level 0
 
@@ -24,3 +36,7 @@
    - abs tolerance:  1e-10
    - rel tolrance:   0.01
    - n iterations:   3
+
+| name | n_cells | L | n_dofs | it | 
+| ---  | 64      | 4 | 625    | 3  | 
+

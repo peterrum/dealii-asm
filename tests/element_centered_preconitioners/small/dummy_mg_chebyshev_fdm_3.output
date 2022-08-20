@@ -1,8 +1,28 @@
 - Create mesh: hypercube
 
+- Create operator:
+  - n cells: 64
+  - n dofs:  625
+
 - Create system preconditioner: Multigrid
  - type:       h
  - p sequence: bisect
+
+- Create operator:
+  - n cells: 1
+  - n dofs:  16
+
+- Create operator:
+  - n cells: 4
+  - n dofs:  49
+
+- Create operator:
+  - n cells: 16
+  - n dofs:  169
+
+- Create operator:
+  - n cells: 64
+  - n dofs:  625
 
 - Setting up coarse-grid solver on level 0
 
@@ -57,3 +77,7 @@ Warning: FDM with <8> is not precompiled!
    - abs tolerance:  1e-10
    - rel tolrance:   0.01
    - n iterations:   4
+
+| name | n_cells | L | n_dofs | it | 
+| ---  | 64      | 4 | 625    | 4  | 
+

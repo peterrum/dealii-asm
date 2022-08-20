@@ -1,4 +1,5 @@
 #include <deal.II/base/conditional_ostream.h>
+#include <deal.II/base/convergence_table.h>
 #include <deal.II/base/quadrature_lib.h>
 
 #include <deal.II/distributed/tria.h>
@@ -45,6 +46,8 @@ using namespace dealii;
 #define COMPILE_2D 1
 #define COMPILE_3D 1
 #define MAX_N_ROWS_FDM 6
+
+static bool print_timings;
 
 // clang-format off
 #define EXPAND_OPERATIONS(OPERATION)                                  \
@@ -119,7 +122,8 @@ solve(const MatrixType &                              A,
       VectorType &                                    x,
       const VectorType &                              b,
       const std::shared_ptr<const PreconditionerType> preconditioner,
-      const boost::property_tree::ptree               params)
+      const boost::property_tree::ptree               params,
+      ConvergenceTable &                              table)
 {
   const auto max_iterations = params.get<unsigned int>("max iterations", 1000);
   const auto abs_tolerance  = params.get<double>("abs tolerance", 1e-10);
@@ -179,6 +183,13 @@ solve(const MatrixType &                              A,
   pcout << "   - n iterations:   " << reduction_control->last_step()
         << std::endl;
   pcout << "   - time:           " << time << " #" << std::endl;
+  pcout << std::endl;
+
+
+  table.add_value("it", reduction_control->last_step());
+
+  if (print_timings)
+    table.add_value("time", time);
 
   return reduction_control;
 }
@@ -1058,7 +1069,7 @@ private:
 
 template <typename OperatorTrait>
 void
-test(const boost::property_tree::ptree params)
+test(const boost::property_tree::ptree params, ConvergenceTable &table)
 {
   const unsigned int fe_degree = params.get<unsigned int>("degree", 1);
   const unsigned int n_global_refinements =
@@ -1185,6 +1196,10 @@ test(const boost::property_tree::ptree params)
 
   OperatorType op(mapping, tria, fe, quadrature);
 
+  table.add_value("n_cells", tria.n_global_active_cells());
+  table.add_value("L", tria.n_global_levels());
+  table.add_value("n_dofs", op.get_dof_handler().n_dofs());
+
   // create vectors
   VectorType solution, rhs;
 
@@ -1212,7 +1227,7 @@ test(const boost::property_tree::ptree params)
         std::make_shared<const PreconditionIdentity>();
 
       reduction_control =
-        solve(op, solution, rhs, preconditioner, solver_parameters);
+        solve(op, solution, rhs, preconditioner, solver_parameters, table);
     }
   else if (preconditioner_type == "Diagonal")
     {
@@ -1231,7 +1246,8 @@ test(const boost::property_tree::ptree params)
               rhs,
               std::const_pointer_cast<const DiagonalMatrix<VectorType>>(
                 preconditioner),
-              solver_parameters);
+              solver_parameters,
+              table);
     }
   else if (preconditioner_type == "Multigrid")
     {
@@ -1364,7 +1380,7 @@ test(const boost::property_tree::ptree params)
         mg_operators);
 
       reduction_control =
-        solve(op, solution, rhs, preconditioner, solver_parameters);
+        solve(op, solution, rhs, preconditioner, solver_parameters, table);
     }
   else
     {
@@ -1374,7 +1390,7 @@ test(const boost::property_tree::ptree params)
         create_system_preconditioner(op, preconditioner_parameters);
 
       reduction_control =
-        solve(op, solution, rhs, preconditioner, solver_parameters);
+        solve(op, solution, rhs, preconditioner, solver_parameters, table);
     }
 }
 
@@ -1392,6 +1408,52 @@ struct LaplaceOperatorMatrixFreeTrait
   using LevelOperatorType = LaplaceOperatorMatrixFree<dim, float>;
 };
 
+void
+run(const std::string file_name, ConvergenceTable &table)
+{
+  // get parameters
+  boost::property_tree::ptree params;
+  boost::property_tree::read_json(file_name, params);
+
+  const auto dim  = params.get<unsigned int>("dim", 2);
+  const auto type = params.get<std::string>("type", "matrixbased");
+
+  if (type == "matrixbased")
+    {
+#if COMPILE_MB > 0
+#  if COMPILE_2D > 0
+      if (dim == 2)
+        test<LaplaceOperatorMatrixBasedTrait<2>>(params, table);
+      else
+#  endif
+#  if COMPILE_3D > 0
+        if (dim == 3)
+        test<LaplaceOperatorMatrixBasedTrait<3>>(params, table);
+      else
+#  endif
+#endif
+        AssertThrow(false, ExcNotImplemented());
+    }
+  else if (type == "matrixfree")
+    {
+#if COMPILE_MF > 0
+#  if COMPILE_2D > 0
+      if (dim == 2)
+        test<LaplaceOperatorMatrixFreeTrait<2>>(params, table);
+      else
+#  endif
+#  if COMPILE_3D > 0
+        if (dim == 3)
+        test<LaplaceOperatorMatrixFreeTrait<3>>(params, table);
+      else
+        AssertThrow(false, ExcNotImplemented());
+#  endif
+#endif
+    }
+  else
+    AssertThrow(false, ExcNotImplemented());
+}
+
 int
 main(int argc, char *argv[])
 {
@@ -1404,45 +1466,31 @@ main(int argc, char *argv[])
 
   AssertThrow(argc == 2, ExcMessage("You need to provide a JSON file!"));
 
-  // get parameters
-  boost::property_tree::ptree params;
-  boost::property_tree::read_json(argv[1], params);
+  const bool is_root = Utilities::MPI::this_mpi_process(MPI_COMM_WORLD) == 0;
+  const bool verbose = true;
 
-  const auto dim  = params.get<unsigned int>("dim", 2);
-  const auto type = params.get<std::string>("type", "matrixbased");
+  ConvergenceTable table;
 
-  if (type == "matrixbased")
+  for (int i = 1; i < argc; ++i)
     {
-#if COMPILE_MB > 0
-#  if COMPILE_2D > 0
-      if (dim == 2)
-        test<LaplaceOperatorMatrixBasedTrait<2>>(params);
-      else
-#  endif
-#  if COMPILE_3D > 0
-        if (dim == 3)
-        test<LaplaceOperatorMatrixBasedTrait<3>>(params);
-      else
-#  endif
-#endif
-        AssertThrow(false, ExcNotImplemented());
+      boost::property_tree::ptree params;
+      boost::property_tree::read_json(std::string(argv[i]), params);
+
+      const auto print_timings_ = params.get<bool>("print timing", false);
+
+      if (i == 1)
+        print_timings = print_timings_;
+
+      AssertThrow(print_timings == print_timings_, ExcNotImplemented());
+
+      table.add_value("name", params.get<std::string>("name", "---"));
+
+      run(std::string(argv[i]), table);
+
+      if (is_root && (verbose || ((i + 1) == argc)))
+        {
+          table.write_text(std::cout, ConvergenceTable::org_mode_table);
+          std::cout << std::endl;
+        }
     }
-  else if (type == "matrixfree")
-    {
-#if COMPILE_MF > 0
-#  if COMPILE_2D > 0
-      if (dim == 2)
-        test<LaplaceOperatorMatrixFreeTrait<2>>(params);
-      else
-#  endif
-#  if COMPILE_3D > 0
-        if (dim == 3)
-        test<LaplaceOperatorMatrixFreeTrait<3>>(params);
-      else
-        AssertThrow(false, ExcNotImplemented());
-#  endif
-#endif
-    }
-  else
-    AssertThrow(false, ExcNotImplemented());
 }

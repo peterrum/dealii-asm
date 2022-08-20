@@ -13,3 +13,7 @@
    - abs tolerance:  1e-10
    - rel tolrance:   0.01
    - n iterations:   5
+
+| name | n_cells | L | n_dofs | it | 
+| ---  | 64      | 4 | 625    | 5  | 
+

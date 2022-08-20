@@ -385,7 +385,6 @@ main(int argc, char *argv[])
   const bool         verbose            = true;
 
   const bool is_root = Utilities::MPI::this_mpi_process(MPI_COMM_WORLD) == 0;
-  ;
 
   ConvergenceTable table;
 
