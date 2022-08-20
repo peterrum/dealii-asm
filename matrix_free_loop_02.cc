@@ -1,4 +1,5 @@
 #include <deal.II/base/conditional_ostream.h>
+#include <deal.II/base/convergence_table.h>
 #include <deal.II/base/quadrature_lib.h>
 
 #include <deal.II/distributed/tria.h>
@@ -101,7 +102,8 @@ test(const unsigned int fe_degree,
      const unsigned int chebyshev_degree,
      const bool         do_vmult,
      const bool         use_cartesian_mesh,
-     const bool         use_renumbering)
+     const bool         use_renumbering,
+     ConvergenceTable & table)
 {
   using Number              = double;
   using VectorizedArrayType = VectorizedArray<Number>;
@@ -327,9 +329,28 @@ test(const unsigned int fe_degree,
       precon_chebyshev_my_diag.step(dst, src);
   });
 
-  pcout << dof_handler.n_dofs() << " " << time_total_0 << " " << time_total_1
-        << " " << time_total_2 << " " << time_total_3 << " " << time_total_4
-        << " " << time_total_5 << " " << time_total_6 << std::endl;
+  table.add_value("ch_degree", chebyshev_degree);
+  table.add_value("degree", fe_degree);
+  table.add_value("L", tria.n_global_levels());
+  table.add_value("do_vmult", do_vmult);
+  table.add_value("do_renumbering", use_renumbering);
+  table.add_value("do_cartesian", use_cartesian_mesh);
+
+  table.add_value("n_dofs", dof_handler.n_dofs());
+
+  table.add_value("t_vmult",
+                  time_total_0 *
+                    (do_vmult ? (chebyshev_degree - 1) : (chebyshev_degree)));
+  table.add_value("t_fdm", time_total_1 * chebyshev_degree);
+  table.add_value("t_fdm_ch", time_total_2);
+  table.add_value("t_diag", time_total_3 * chebyshev_degree);
+  table.add_value("t_diag_ch", time_total_4);
+  table.add_value("t_diag_ch_no_pre_post", time_total_5);
+  table.add_value("t_diag_ch_black_box", time_total_6);
+
+  // pcout << dof_handler.n_dofs() << " " << time_total_0 << " " << time_total_1
+  //      << " " << time_total_2 << " " << time_total_3 << " " << time_total_4
+  //      << " " << time_total_5 << " " << time_total_6 << std::endl;
 
   if (false)
     {
@@ -361,6 +382,12 @@ main(int argc, char *argv[])
   const bool         do_vmult           = (argc >= 6) ? std::atoi(argv[5]) : 1;
   const bool         use_cartesian_mesh = (argc >= 7) ? std::atoi(argv[6]) : 1;
   const bool         use_renumbering    = (argc >= 8) ? std::atoi(argv[7]) : 1;
+  const bool         verbose            = true;
+
+  const bool is_root = Utilities::MPI::this_mpi_process(MPI_COMM_WORLD) == 0;
+  ;
+
+  ConvergenceTable table;
 
   for (unsigned int chebyshev_degree = 1; chebyshev_degree <= 5;
        ++chebyshev_degree)
@@ -372,7 +399,8 @@ main(int argc, char *argv[])
                 chebyshev_degree,
                 do_vmult,
                 use_cartesian_mesh,
-                use_renumbering);
+                use_renumbering,
+                table);
       else if (dim == 3)
         test<3>(fe_degree,
                 n_global_refinements,
@@ -380,8 +408,21 @@ main(int argc, char *argv[])
                 chebyshev_degree,
                 do_vmult,
                 use_cartesian_mesh,
-                use_renumbering);
+                use_renumbering,
+                table);
       else
         AssertThrow(false, ExcNotImplemented());
+
+      if (is_root && verbose)
+        {
+          table.write_text(std::cout, ConvergenceTable::org_mode_table);
+          std::cout << std::endl;
+        }
+    }
+
+  if (is_root)
+    {
+      table.write_text(std::cout, ConvergenceTable::org_mode_table);
+      std::cout << std::endl;
     }
 }
