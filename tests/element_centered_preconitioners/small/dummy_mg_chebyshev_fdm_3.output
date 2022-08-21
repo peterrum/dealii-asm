@@ -27,9 +27,9 @@
 - Setting up coarse-grid solver on level 0
 
 - Create system preconditioner: FDM
-    - n overlap: 3
+    - n overlap:              3
+    - sub mesh approximation: 2
 
-Warning: FDM with <8> is not precompiled!
 - Create system preconditioner: Chebyshev
     - degree: 1
     - min ev: 1
@@ -39,9 +39,9 @@ Warning: FDM with <8> is not precompiled!
 - Setting up smoother on level 1
 
 - Create system preconditioner: FDM
-    - n overlap: 3
+    - n overlap:              3
+    - sub mesh approximation: 2
 
-Warning: FDM with <8> is not precompiled!
 - Create system preconditioner: Chebyshev
     - degree: 1
     - min ev: 1
@@ -51,9 +51,9 @@ Warning: FDM with <8> is not precompiled!
 - Setting up smoother on level 2
 
 - Create system preconditioner: FDM
-    - n overlap: 3
+    - n overlap:              3
+    - sub mesh approximation: 2
 
-Warning: FDM with <8> is not precompiled!
 - Create system preconditioner: Chebyshev
     - degree: 1
     - min ev: 0.377353
@@ -63,9 +63,9 @@ Warning: FDM with <8> is not precompiled!
 - Setting up smoother on level 3
 
 - Create system preconditioner: FDM
-    - n overlap: 3
+    - n overlap:              3
+    - sub mesh approximation: 2
 
-Warning: FDM with <8> is not precompiled!
 - Create system preconditioner: Chebyshev
     - degree: 1
     - min ev: 0.280219

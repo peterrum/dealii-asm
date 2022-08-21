@@ -23,7 +23,8 @@
 - Setting up smoother on level 1
 
 - Create system preconditioner: FDM
-    - n overlap: 1
+    - n overlap:              1
+    - sub mesh approximation: 2
 
 - Create system preconditioner: Chebyshev
     - degree: 1
