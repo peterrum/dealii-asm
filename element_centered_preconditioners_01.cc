@@ -291,9 +291,29 @@ create_system_preconditioner(const OperatorType &              op,
 
         additional_data.preconditioner = precon;
         additional_data.constraints.copy_from(op.get_constraints());
-        additional_data.degree          = params.get<unsigned int>("degree", 3);
-        additional_data.smoothing_range = 20;
-        additional_data.eig_cg_n_iterations = 20;
+        additional_data.degree = params.get<unsigned int>("degree", 3);
+        // additional_data.smoothing_range = 20;
+        // additional_data.eig_cg_n_iterations = 20;
+
+        const auto ev_algorithm =
+          params.get<std::string>("ev algorithm", "lanczos");
+
+        if (ev_algorithm == "lanczos")
+          {
+            additional_data.eigenvalue_algorithm =
+              PreconditionerType::AdditionalData::EigenvalueAlgorithm::lanczos;
+          }
+        else if (ev_algorithm == "power iteration")
+          {
+            additional_data.eigenvalue_algorithm = PreconditionerType::
+              AdditionalData::EigenvalueAlgorithm::power_iteration;
+          }
+        else
+          {
+            AssertThrow(false,
+                        ExcMessage("Eigen-value algorithm <" + ev_algorithm +
+                                   "> is not known!"))
+          }
 
         auto chebyshev = std::make_shared<PreconditionerType>();
         chebyshev->initialize(op, additional_data);
@@ -1487,9 +1507,6 @@ main(int argc, char *argv[])
     {
       const std::string file_name = std::string(argv[i]);
 
-      if (is_root)
-        std::cout << "Processing " << file_name << std::endl << std::endl;
-
       boost::property_tree::ptree params;
       boost::property_tree::read_json(file_name, params);
 
@@ -1499,6 +1516,9 @@ main(int argc, char *argv[])
         print_timings = print_timings_;
 
       AssertThrow(print_timings == print_timings_, ExcNotImplemented());
+
+      if (is_root && print_timings)
+        std::cout << "Processing " << file_name << std::endl << std::endl;
 
       table.add_value("name", params.get<std::string>("name", "---"));
 
