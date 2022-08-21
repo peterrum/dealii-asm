@@ -22,5 +22,5 @@ do
     printf ": \033[0;32msuccess\033[0m\n"
   fi
 
-  cp __filtered__ ${f::-5}.output
+  #cp __filtered__ ${f::-5}.output
 done

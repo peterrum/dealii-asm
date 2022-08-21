@@ -4,16 +4,16 @@
 
 - Create system preconditioner: Chebyshev
     - degree: 3
-    - min ev: 0.128642
-    - max ev: 24.0596
-    - omega:  0.0826848
+    - min ev: 1.16311
+    - max ev: 1.39573
+    - omega:  0.781606
 
  - Solving with GMRES
    - max iterations: 1000
    - abs tolerance:  1e-10
    - rel tolrance:   0.01
-   - n iterations:   6
+   - n iterations:   5
 
 | name | n_cells | L | n_dofs | it | 
-| ---  | 64      | 4 | 625    | 6  | 
+| ---  | 64      | 4 | 625    | 5  | 
 

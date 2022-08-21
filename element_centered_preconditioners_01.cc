@@ -296,7 +296,7 @@ create_system_preconditioner(const OperatorType &              op,
         additional_data.eig_cg_n_iterations = 20;
 
         const auto ev_algorithm =
-          params.get<std::string>("ev algorithm", "lanczos");
+          params.get<std::string>("ev algorithm", "power iteration");
 
         if (ev_algorithm == "lanczos")
           {
