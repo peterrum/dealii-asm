@@ -25,6 +25,7 @@ public:
   ASPoissonPreconditioner(
     const MatrixFree<dim, Number, VectorizedArrayType> &matrix_free,
     const unsigned int                                  n_overlap,
+    const unsigned int                                  sub_mesh_approximation,
     const Mapping<dim> &                                mapping,
     const FiniteElement<1> &                            fe_1D,
     const Quadrature<dim - 1> &                         quadrature_face,
@@ -68,7 +69,7 @@ public:
                 const auto cells =
                   dealii::GridTools::extract_all_surrounding_cells_cartesian<
                     dim>(matrix_free.get_cell_iterator(cell, v),
-                         n_overlap <= 1 ? 0 : dim);
+                         n_overlap <= 1 ? 0 : sub_mesh_approximation);
 
                 const auto local_dofs =
                   dealii::DoFTools::get_dof_indices_cell_with_overlap(
@@ -119,7 +120,7 @@ public:
 
             const auto cells =
               dealii::GridTools::extract_all_surrounding_cells_cartesian<dim>(
-                cell_iterator, n_overlap <= 1 ? 0 : dim);
+                cell_iterator, n_overlap <= 1 ? 0 : sub_mesh_approximation);
 
             constraint_info.read_dof_indices(
               cell_counter,

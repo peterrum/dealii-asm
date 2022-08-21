@@ -190,6 +190,7 @@ test(const unsigned int fe_degree,
 
   const auto precon_fdm = std::make_shared<PreconditionerType>(matrix_free,
                                                                n_overlap,
+                                                               dim,
                                                                mapping_q_cache,
                                                                fe_1D,
                                                                quadrature_face,

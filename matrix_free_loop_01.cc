@@ -88,7 +88,13 @@ test(const unsigned int fe_degree,
   op.rhs(b);
 
   ASPoissonPreconditioner<dim, Number, VectorizedArrayType> precon(
-    matrix_free, n_overlap, mapping, fe_1D, quadrature_face, quadrature_1D);
+    matrix_free,
+    n_overlap,
+    dim,
+    mapping,
+    fe_1D,
+    quadrature_face,
+    quadrature_1D);
 
   ReductionControl reduction_control(100);
 

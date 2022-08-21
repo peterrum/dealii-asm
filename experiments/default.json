@@ -1,0 +1,30 @@
+{
+    "type" : "matrixfree",
+    "dim" : 3,
+    "degree" : 4,
+    "n refinements" : 2,
+    "print timing" : true,
+    "solver" : {
+        "type" : "GMRES",
+        "rel tolerance" : 1e-5
+    },
+    "mesh": {"name" : "kershaw", "eps" : 0.2 , "stratch" : 1.0},
+    "preconditioner" : {
+        "type" : "Multigrid",
+        "mg type" : "p",
+        "mg p sequence" : "bisect",
+        "mg smoother" : {
+            "type" : "Chebyshev",
+            "weighting type" : "post",
+            "degree" : 1,
+            "preconditioner" : {
+                "type" : "FDM",
+                "n overlap" : 1,
+                "weighting type" : "post"
+            }
+        },
+        "mg coarse grid solver" : {
+            "type" : "AMG"
+        }
+    }
+}

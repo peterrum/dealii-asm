@@ -45,7 +45,7 @@ using namespace dealii;
 #define COMPILE_MF 1
 #define COMPILE_2D 1
 #define COMPILE_3D 1
-#define MAX_N_ROWS_FDM 6
+#define MAX_N_ROWS_FDM 8
 
 static bool print_timings;
 
@@ -287,7 +287,9 @@ create_system_preconditioner(const OperatorType &              op,
 
         additional_data.preconditioner = precon;
         additional_data.constraints.copy_from(op.get_constraints());
-        additional_data.degree = params.get<unsigned int>("degree", 3);
+        additional_data.degree          = params.get<unsigned int>("degree", 3);
+        additional_data.smoothing_range = 20;
+        additional_data.eig_cg_n_iterations = 20;
 
         auto chebyshev = std::make_shared<PreconditionerType>();
         chebyshev->initialize(op, additional_data);
@@ -357,7 +359,14 @@ create_system_preconditioner(const OperatorType &              op,
             std::min(params.get<unsigned int>("n overlap", 1), fe_degree);
           const auto weight_type = get_weighting_type(params);
 
-          pcout << "    - n overlap: " << n_overlap << std::endl;
+
+          const unsigned int sub_mesh_approximation =
+            params.get<unsigned int>("sub mesh approximation",
+                                     OperatorType::dimension);
+
+          pcout << "    - n overlap:              " << n_overlap << std::endl;
+          pcout << "    - sub mesh approximation: " << sub_mesh_approximation
+                << std::endl;
           pcout << std::endl;
 
           const unsigned int n_rows = fe_degree + 2 * n_overlap - 1;
@@ -372,6 +381,7 @@ create_system_preconditioner(const OperatorType &              op,
     const ASPoissonPreconditioner<dim, Number, VectorizedArrayType, c>>( \
     matrix_free,                                                         \
     n_overlap,                                                           \
+    sub_mesh_approximation,                                              \
     mapping,                                                             \
     fe_1D,                                                               \
     quadrature_face,                                                     \
@@ -1464,8 +1474,6 @@ main(int argc, char *argv[])
     std::cout << "DEBUG!" << std::endl;
 #endif
 
-  AssertThrow(argc == 2, ExcMessage("You need to provide a JSON file!"));
-
   const bool is_root = Utilities::MPI::this_mpi_process(MPI_COMM_WORLD) == 0;
   const bool verbose = true;
 
@@ -1473,8 +1481,13 @@ main(int argc, char *argv[])
 
   for (int i = 1; i < argc; ++i)
     {
+      const std::string file_name = std::string(argv[i]);
+
+      if (is_root)
+        std::cout << "Processing " << file_name << std::endl << std::endl;
+
       boost::property_tree::ptree params;
-      boost::property_tree::read_json(std::string(argv[i]), params);
+      boost::property_tree::read_json(file_name, params);
 
       const auto print_timings_ = params.get<bool>("print timing", false);
 
@@ -1485,7 +1498,7 @@ main(int argc, char *argv[])
 
       table.add_value("name", params.get<std::string>("name", "---"));
 
-      run(std::string(argv[i]), table);
+      run(file_name, table);
 
       if (is_root && (verbose || ((i + 1) == argc)))
         {
