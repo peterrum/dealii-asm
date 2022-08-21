@@ -35,13 +35,10 @@ public:
     : matrix_free(matrix_free)
     , fe_degree(matrix_free.get_dof_handler().get_fe().tensor_degree())
     , n_overlap(n_overlap)
+    , weight_type(weight_type)
   {
     AssertThrow((n_rows_1d == -1) || (static_cast<unsigned int>(n_rows_1d) ==
                                       fe_1D.degree + 2 * n_overlap - 1),
-                ExcNotImplemented());
-
-    AssertThrow(weight_type == Restrictors::WeightingType::post ||
-                  weight_type == Restrictors::WeightingType::none,
                 ExcNotImplemented());
 
     const auto &dof_handler = matrix_free.get_dof_handler();
@@ -179,7 +176,11 @@ public:
       weights.copy_locally_owned_data_from(dst_);
 
       for (auto &i : weights)
-        i = (i == 0.0) ? 1.0 : (1.0 / i);
+        i = (i == 0.0) ?
+              1.0 :
+              (1.0 / ((weight_type == Restrictors::WeightingType::symm) ?
+                        std::sqrt(i) :
+                        i));
     }
 
     if (weight_type == Restrictors::WeightingType::none)
@@ -189,6 +190,21 @@ public:
   void
   vmult(VectorType &dst, const VectorType &src) const
   {
+    const VectorType *src_ptr = &src;
+
+    VectorType src_copy;
+
+    if (weight_type == Restrictors::WeightingType::pre ||
+        weight_type == Restrictors::WeightingType::symm)
+      {
+        src_copy.reinit(src);
+        src_copy.copy_locally_owned_data_from(src);
+
+        src_copy.scale(weights);
+
+        src_ptr = &src_copy;
+      }
+
     if (src_.get_partitioner().get() ==
         matrix_free.get_vector_partitioner().get())
       {
@@ -221,7 +237,7 @@ public:
               }
           },
           dst,
-          src,
+          *src_ptr,
           true);
       }
     else
@@ -232,7 +248,7 @@ public:
           Utilities::pow(fe_degree + 2 * n_overlap - 1, dim));
 
         // update ghost values
-        src_.copy_locally_owned_data_from(src);
+        src_.copy_locally_owned_data_from(*src_ptr);
         src_.update_ghost_values();
 
         dst_ = 0.0;
@@ -276,7 +292,8 @@ public:
         dst.copy_locally_owned_data_from(dst_);
       }
 
-    if (weights.size() > 0)
+    if (weight_type == Restrictors::WeightingType::post ||
+        weight_type == Restrictors::WeightingType::symm)
       dst.scale(weights);
   }
 
@@ -290,6 +307,7 @@ private:
   const MatrixFree<dim, Number, VectorizedArrayType> &matrix_free;
   const unsigned int                                  fe_degree;
   const unsigned int                                  n_overlap;
+  const Restrictors::WeightingType                    weight_type;
 
   internal::MatrixFreeFunctions::ConstraintInfo<dim, VectorizedArrayType>
                             constraint_info;
