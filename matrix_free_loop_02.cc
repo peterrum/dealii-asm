@@ -264,6 +264,36 @@ test(const unsigned int fe_degree,
     precon_chebyshev_diag.initialize(op, chebyshev_ad);
   }
 
+  PreconditionRelaxation<OperatorType, DiagonalMatrix<VectorType>>
+    precon_relaxation_o_diag;
+
+  {
+    typename PreconditionRelaxation<OperatorType,
+                                    DiagonalMatrix<VectorType>>::AdditionalData
+      chebyshev_ad;
+
+    chebyshev_ad.preconditioner = precon_diag;
+    chebyshev_ad.n_iterations   = chebyshev_degree;
+    chebyshev_ad.relaxation     = 1.0;
+
+    precon_relaxation_o_diag.initialize(op, chebyshev_ad);
+  }
+
+  PreconditionRelaxation<OperatorType, DiagonalMatrix<VectorType>>
+    precon_relaxation_n_diag;
+
+  {
+    typename PreconditionRelaxation<OperatorType,
+                                    DiagonalMatrix<VectorType>>::AdditionalData
+      chebyshev_ad;
+
+    chebyshev_ad.preconditioner = precon_diag;
+    chebyshev_ad.n_iterations   = chebyshev_degree;
+    chebyshev_ad.relaxation     = 1.1;
+
+    precon_relaxation_n_diag.initialize(op, chebyshev_ad);
+  }
+
   PreconditionChebyshev<MyOperatorType, VectorType, DiagonalMatrix<VectorType>>
     precon_chebyshev_diag_my_op;
 
@@ -359,6 +389,20 @@ test(const unsigned int fe_degree,
     else
       precon_chebyshev_diag.step(dst, src);
   });
+  // diagonal + relaxation (1.0)
+  const auto t_diag_re_o = run([&]() {
+    if (do_vmult)
+      precon_relaxation_o_diag.vmult(dst, src);
+    else
+      precon_relaxation_o_diag.step(dst, src);
+  });
+  // diagonal + relaxation (1.1)
+  const auto t_diag_re_n = run([&]() {
+    if (do_vmult)
+      precon_relaxation_n_diag.vmult(dst, src);
+    else
+      precon_relaxation_n_diag.step(dst, src);
+  });
   // diagonal + chebyshev (no pre/post)
   const auto t_diag_ch_no_pre_post = run([&]() {
     if (do_vmult)
@@ -394,6 +438,8 @@ test(const unsigned int fe_degree,
 
   table.add_value("t_diag", t_diag * chebyshev_degree);
   table.add_value("t_diag_ch", t_diag_ch);
+  table.add_value("t_diag_re_o", t_diag_re_o);
+  table.add_value("t_diag_re_n", t_diag_re_n);
   table.add_value("t_diag_ch_no_pre_post", t_diag_ch_no_pre_post);
   table.add_value("t_diag_ch_black_box", t_diag_ch_black_box);
 
