@@ -291,9 +291,9 @@ create_system_preconditioner(const OperatorType &              op,
 
         additional_data.preconditioner = precon;
         additional_data.constraints.copy_from(op.get_constraints());
-        additional_data.degree = params.get<unsigned int>("degree", 3);
-        // additional_data.smoothing_range = 20;
-        // additional_data.eig_cg_n_iterations = 20;
+        additional_data.degree          = params.get<unsigned int>("degree", 3);
+        additional_data.smoothing_range = 20;
+        additional_data.eig_cg_n_iterations = 20;
 
         const auto ev_algorithm =
           params.get<std::string>("ev algorithm", "lanczos");

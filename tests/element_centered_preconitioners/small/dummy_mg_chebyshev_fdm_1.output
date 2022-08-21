@@ -44,9 +44,9 @@
 
 - Create system preconditioner: Chebyshev
     - degree: 1
-    - min ev: 0.279261
-    - max ev: 2.46303
-    - omega:  0.729316
+    - min ev: 0.243856
+    - max ev: 5.2448
+    - omega:  0.364388
 
 - Setting up smoother on level 2
 
@@ -56,9 +56,9 @@
 
 - Create system preconditioner: Chebyshev
     - degree: 1
-    - min ev: 0.188992
-    - max ev: 2.46324
-    - omega:  0.754081
+    - min ev: 0.120378
+    - max ev: 7.27257
+    - omega:  0.270528
 
 - Setting up smoother on level 3
 
@@ -68,16 +68,16 @@
 
 - Create system preconditioner: Chebyshev
     - degree: 1
-    - min ev: 0.151706
-    - max ev: 2.64548
-    - omega:  0.715005
+    - min ev: 0.0737431
+    - max ev: 11.1321
+    - omega:  0.178479
 
  - Solving with GMRES
    - max iterations: 1000
    - abs tolerance:  1e-10
    - rel tolrance:   0.01
-   - n iterations:   3
+   - n iterations:   4
 
 | name | n_cells | L | n_dofs | it | 
-| ---  | 64      | 4 | 625    | 3  | 
+| ---  | 64      | 4 | 625    | 4  | 
 

@@ -4,9 +4,9 @@
 
 - Create system preconditioner: Chebyshev
     - degree: 3
-    - min ev: 0.0819958
-    - max ev: 2.00342
-    - omega:  0.95904
+    - min ev: 0.0192906
+    - max ev: 2.03619
+    - omega:  0.973007
 
  - Solving with GMRES
    - max iterations: 1000
