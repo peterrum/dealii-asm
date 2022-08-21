@@ -218,6 +218,36 @@ test(const unsigned int fe_degree,
     precon_chebyshev_fdm.initialize(op, chebyshev_ad);
   }
 
+  PreconditionRelaxation<OperatorType, PreconditionerType>
+    precon_relaxation_o_fdm;
+
+  {
+    typename PreconditionRelaxation<OperatorType,
+                                    PreconditionerType>::AdditionalData
+      chebyshev_ad;
+
+    chebyshev_ad.preconditioner = precon_fdm;
+    chebyshev_ad.n_iterations   = chebyshev_degree;
+    chebyshev_ad.relaxation     = 1.0;
+
+    precon_relaxation_o_fdm.initialize(op, chebyshev_ad);
+  }
+
+  PreconditionRelaxation<OperatorType, PreconditionerType>
+    precon_relaxation_n_fdm;
+
+  {
+    typename PreconditionRelaxation<OperatorType,
+                                    PreconditionerType>::AdditionalData
+      chebyshev_ad;
+
+    chebyshev_ad.preconditioner = precon_fdm;
+    chebyshev_ad.n_iterations   = chebyshev_degree;
+    chebyshev_ad.relaxation     = 1.1;
+
+    precon_relaxation_n_fdm.initialize(op, chebyshev_ad);
+  }
+
   PreconditionChebyshev<OperatorType, VectorType, DiagonalMatrix<VectorType>>
     precon_chebyshev_diag;
 
@@ -294,36 +324,50 @@ test(const unsigned int fe_degree,
   };
 
   // vmult
-  const auto time_total_0 = run([&]() { op.vmult(dst, src); });
+  const auto t_vmult = run([&]() { op.vmult(dst, src); });
 
   // fdm
-  const auto time_total_1 = run([&]() { precon_fdm->vmult(dst, src); });
+  const auto t_fdm = run([&]() { precon_fdm->vmult(dst, src); });
   // fdm + chebyshev
-  const auto time_total_2 = run([&]() {
+  const auto t_fdm_ch = run([&]() {
     if (do_vmult)
       precon_chebyshev_fdm.vmult(dst, src);
     else
       precon_chebyshev_fdm.step(dst, src);
   });
+  // fdm + relaxation (1.0)
+  const auto t_fdm_re_o = run([&]() {
+    if (do_vmult)
+      precon_relaxation_o_fdm.vmult(dst, src);
+    else
+      precon_relaxation_o_fdm.step(dst, src);
+  });
+  // fdm + relaxation (1.1)
+  const auto t_fdm_re_n = run([&]() {
+    if (do_vmult)
+      precon_relaxation_n_fdm.vmult(dst, src);
+    else
+      precon_relaxation_n_fdm.step(dst, src);
+  });
 
   // diagonal
-  const auto time_total_3 = run([&]() { precon_diag->vmult(dst, src); });
+  const auto t_diag = run([&]() { precon_diag->vmult(dst, src); });
   // diagonal + chebyshev
-  const auto time_total_4 = run([&]() {
+  const auto t_diag_ch = run([&]() {
     if (do_vmult)
       precon_chebyshev_diag.vmult(dst, src);
     else
       precon_chebyshev_diag.step(dst, src);
   });
   // diagonal + chebyshev (no pre/post)
-  const auto time_total_5 = run([&]() {
+  const auto t_diag_ch_no_pre_post = run([&]() {
     if (do_vmult)
       precon_chebyshev_diag_my_op.vmult(dst, src);
     else
       precon_chebyshev_diag_my_op.step(dst, src);
   });
   // diagonal + chebyshev (without exploiting the fact that we have a diagonal)
-  const auto time_total_6 = run([&]() {
+  const auto t_diag_ch_black_box = run([&]() {
     if (do_vmult)
       precon_chebyshev_my_diag.vmult(dst, src);
     else
@@ -340,18 +384,18 @@ test(const unsigned int fe_degree,
   table.add_value("n_dofs", dof_handler.n_dofs());
 
   table.add_value("t_vmult",
-                  time_total_0 *
+                  t_vmult *
                     (do_vmult ? (chebyshev_degree - 1) : (chebyshev_degree)));
-  table.add_value("t_fdm", time_total_1 * chebyshev_degree);
-  table.add_value("t_fdm_ch", time_total_2);
-  table.add_value("t_diag", time_total_3 * chebyshev_degree);
-  table.add_value("t_diag_ch", time_total_4);
-  table.add_value("t_diag_ch_no_pre_post", time_total_5);
-  table.add_value("t_diag_ch_black_box", time_total_6);
 
-  // pcout << dof_handler.n_dofs() << " " << time_total_0 << " " << time_total_1
-  //      << " " << time_total_2 << " " << time_total_3 << " " << time_total_4
-  //      << " " << time_total_5 << " " << time_total_6 << std::endl;
+  table.add_value("t_fdm", t_fdm * chebyshev_degree);
+  table.add_value("t_fdm_ch", t_fdm_ch);
+  table.add_value("t_fdm_re_o", t_fdm_re_o);
+  table.add_value("t_fdm_re_n", t_fdm_re_n);
+
+  table.add_value("t_diag", t_diag * chebyshev_degree);
+  table.add_value("t_diag_ch", t_diag_ch);
+  table.add_value("t_diag_ch_no_pre_post", t_diag_ch_no_pre_post);
+  table.add_value("t_diag_ch_black_box", t_diag_ch_black_box);
 
   if (false)
     {
