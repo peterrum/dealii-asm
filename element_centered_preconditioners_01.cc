@@ -143,38 +143,42 @@ solve(const MatrixType &                              A,
                                                               abs_tolerance,
                                                               rel_tolerance);
 
-  x = 0;
+  const auto dispatch = [&]() {
+    x = 0;
+
+    if (type == "CG")
+      {
+        SolverCG<VectorType> solver(*reduction_control);
+        solver.solve(A, x, b, *preconditioner);
+      }
+    else if (type == "FCG")
+      {
+        SolverFlexibleCG<VectorType> solver(*reduction_control);
+        solver.solve(A, x, b, *preconditioner);
+      }
+    else if (type == "GMRES")
+      {
+        typename SolverGMRES<VectorType>::AdditionalData additional_data;
+        additional_data.right_preconditioning = true;
+
+        SolverGMRES<VectorType> solver(*reduction_control, additional_data);
+        solver.solve(A, x, b, *preconditioner);
+      }
+    else if (type == "FGMRES")
+      {
+        SolverFGMRES<VectorType> solver(*reduction_control);
+        solver.solve(A, x, b, *preconditioner);
+      }
+    else
+      {
+        AssertThrow(false, ExcMessage("Solver <" + type + "> is not known!"))
+      }
+  };
+
+  dispatch(); // warm up
 
   const auto timer = std::chrono::system_clock::now();
-
-  if (type == "CG")
-    {
-      SolverCG<VectorType> solver(*reduction_control);
-      solver.solve(A, x, b, *preconditioner);
-    }
-  else if (type == "FCG")
-    {
-      SolverFlexibleCG<VectorType> solver(*reduction_control);
-      solver.solve(A, x, b, *preconditioner);
-    }
-  else if (type == "GMRES")
-    {
-      typename SolverGMRES<VectorType>::AdditionalData additional_data;
-      additional_data.right_preconditioning = true;
-
-      SolverGMRES<VectorType> solver(*reduction_control, additional_data);
-      solver.solve(A, x, b, *preconditioner);
-    }
-  else if (type == "FGMRES")
-    {
-      SolverFGMRES<VectorType> solver(*reduction_control);
-      solver.solve(A, x, b, *preconditioner);
-    }
-  else
-    {
-      AssertThrow(false, ExcMessage("Solver <" + type + "> is not known!"))
-    }
-
+  dispatch();
   const double time = std::chrono::duration_cast<std::chrono::nanoseconds>(
                         std::chrono::system_clock::now() - timer)
                         .count() /
