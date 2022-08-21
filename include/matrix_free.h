@@ -210,22 +210,12 @@ public:
                 phi_dst.reinit(cell);
 
                 phi_src.read_dof_values(src);
-
-                if (true)
-                  {
-                    fdm[cell].apply_inverse(
-                      ArrayView<VectorizedArrayType>(phi_dst.begin_dof_values(),
-                                                     phi_dst.dofs_per_cell),
-                      ArrayView<const VectorizedArrayType>(
-                        phi_src.begin_dof_values(), phi_src.dofs_per_cell),
-                      tmp);
-                  }
-                else
-                  {
-                    for (unsigned int i = 0; i < phi_src.dofs_per_cell; ++i)
-                      phi_dst.begin_dof_values()[i] =
-                        phi_src.begin_dof_values()[i];
-                  }
+                fdm[cell].apply_inverse(
+                  ArrayView<VectorizedArrayType>(phi_dst.begin_dof_values(),
+                                                 phi_dst.dofs_per_cell),
+                  ArrayView<const VectorizedArrayType>(
+                    phi_src.begin_dof_values(), phi_src.dofs_per_cell),
+                  tmp);
 
                 phi_dst.distribute_local_to_global(dst);
               }
@@ -247,6 +237,8 @@ public:
 
         dst_ = 0.0;
 
+        AlignedVector<VectorizedArrayType> tmp;
+
         for (unsigned int cell = 0; cell < matrix_free.n_cell_batches(); ++cell)
           {
             // 1) gather
@@ -262,8 +254,8 @@ public:
 
             // 2) cell operation: fast diagonalization method
             fdm[cell].apply_inverse(make_array_view(dst__.begin(), dst__.end()),
-                                    make_array_view(src__.begin(),
-                                                    src__.end()));
+                                    make_array_view(src__.begin(), src__.end()),
+                                    tmp);
 
             // 3) scatter
             internal::VectorDistributorLocalToGlobal<Number,
