@@ -21,6 +21,8 @@ public:
   {
     (void)dst;
     (void)src;
+
+    AssertThrow(false, ExcNotImplemented());
   }
 
   virtual void
@@ -35,6 +37,8 @@ public:
     (void)src;
     (void)operation_before_matrix_vector_product;
     (void)operation_after_matrix_vector_product;
+
+    AssertThrow(false, ExcNotImplemented());
   }
 
 private:
