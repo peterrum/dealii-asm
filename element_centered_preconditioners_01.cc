@@ -270,7 +270,129 @@ create_system_preconditioner(const OperatorType &              op,
                            Utilities::MPI::this_mpi_process(MPI_COMM_WORLD) ==
                              0);
 
-  if (type == "Chebyshev")
+  if (type == "Relaxation")
+    {
+      const auto preconditioner_parameters =
+        try_get_child(params, "preconditioner");
+
+      const auto preconditioner_type =
+        preconditioner_parameters.get<std::string>("type", "");
+
+      AssertThrow(preconditioner_type != "", ExcNotImplemented());
+
+      const auto setup_chebshev = [&](const auto precon) {
+        using RelaxationPreconditionerType = PreconditionRelaxation<
+          OperatorType,
+          typename std::remove_cv<
+            typename std::remove_reference<decltype(*precon)>::type>::type>;
+
+        const auto degree = params.get<unsigned int>("degree", 3);
+        auto       omega  = params.get<double>("omega", 0.0);
+
+
+        pcout << "- Create system preconditioner: Relaxation" << std::endl;
+        pcout << "    - degree: " << degree << std::endl;
+
+        if (omega == 0.0)
+          {
+            using ChebyshevPreconditionerType = PreconditionChebyshev<
+              OperatorType,
+              VectorType,
+              typename std::remove_cv<
+                typename std::remove_reference<decltype(*precon)>::type>::type>;
+
+            typename ChebyshevPreconditionerType::AdditionalData
+              chebyshev_additional_data;
+
+            chebyshev_additional_data.preconditioner = precon;
+            chebyshev_additional_data.constraints.copy_from(
+              op.get_constraints());
+            chebyshev_additional_data.degree              = degree;
+            chebyshev_additional_data.smoothing_range     = 20;
+            chebyshev_additional_data.eig_cg_n_iterations = 20;
+
+            const auto ev_algorithm =
+              params.get<std::string>("ev algorithm", "power iteration");
+
+            if (ev_algorithm == "lanczos")
+              {
+                chebyshev_additional_data.eigenvalue_algorithm =
+                  ChebyshevPreconditionerType::AdditionalData::
+                    EigenvalueAlgorithm::lanczos;
+              }
+            else if (ev_algorithm == "power iteration")
+              {
+                chebyshev_additional_data.eigenvalue_algorithm =
+                  ChebyshevPreconditionerType::AdditionalData::
+                    EigenvalueAlgorithm::power_iteration;
+              }
+            else
+              {
+                AssertThrow(false,
+                            ExcMessage("Eigen-value algorithm <" +
+                                       ev_algorithm + "> is not known!"))
+              }
+
+            auto chebyshev = std::make_shared<ChebyshevPreconditionerType>();
+            chebyshev->initialize(op, chebyshev_additional_data);
+
+            VectorType vec;
+            op.initialize_dof_vector(vec);
+            const auto evs = chebyshev->estimate_eigenvalues(vec);
+
+            const double alpha =
+              (chebyshev_additional_data.smoothing_range > 1. ?
+                 evs.max_eigenvalue_estimate /
+                   chebyshev_additional_data.smoothing_range :
+                 std::min(0.9 * evs.max_eigenvalue_estimate,
+                          evs.min_eigenvalue_estimate));
+
+            omega = 2.0 / (alpha + evs.max_eigenvalue_estimate);
+
+            pcout << "    - min ev: " << evs.min_eigenvalue_estimate
+                  << std::endl;
+            pcout << "    - max ev: " << evs.max_eigenvalue_estimate
+                  << std::endl;
+            pcout << std::endl;
+          }
+
+        pcout << "    - omega:  " << omega << std::endl;
+
+        typename RelaxationPreconditionerType::AdditionalData additional_data;
+
+        additional_data.preconditioner = precon;
+        additional_data.n_iterations   = degree;
+        additional_data.relaxation     = omega;
+
+        auto relexation = std::make_shared<RelaxationPreconditionerType>();
+        relexation->initialize(op, additional_data);
+
+        return std::make_shared<
+          PreconditionerAdapter<VectorType, RelaxationPreconditionerType>>(
+          relexation);
+      };
+
+      if (preconditioner_type == "Diagonal")
+        {
+          pcout << "- Create system preconditioner: Diagonal" << std::endl
+                << std::endl;
+
+          const auto precon = std::make_shared<DiagonalMatrix<VectorType>>();
+          op.compute_inverse_diagonal(precon->get_vector());
+
+          return setup_chebshev(precon);
+        }
+      else
+        {
+          const auto precon =
+            create_system_preconditioner(op, preconditioner_parameters);
+
+          return setup_chebshev(
+            std::const_pointer_cast<
+              PreconditionerBase<typename OperatorType::vector_type>>(precon));
+        }
+    }
+  else if (type == "Chebyshev")
     {
       const auto preconditioner_parameters =
         try_get_child(params, "preconditioner");
