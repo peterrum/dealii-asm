@@ -216,6 +216,7 @@ test(const unsigned int fe_degree,
     chebyshev_ad.degree = chebyshev_degree;
 
     precon_chebyshev_fdm.initialize(op, chebyshev_ad);
+    precon_chebyshev_fdm.estimate_eigenvalues(src);
   }
 
   PreconditionRelaxation<OperatorType, PreconditionerType>
@@ -262,6 +263,7 @@ test(const unsigned int fe_degree,
     chebyshev_ad.degree = chebyshev_degree;
 
     precon_chebyshev_diag.initialize(op, chebyshev_ad);
+    precon_chebyshev_diag.estimate_eigenvalues(src);
   }
 
   PreconditionRelaxation<OperatorType, DiagonalMatrix<VectorType>>
@@ -308,6 +310,37 @@ test(const unsigned int fe_degree,
     chebyshev_ad.degree = chebyshev_degree;
 
     precon_chebyshev_diag_my_op.initialize(my_op, chebyshev_ad);
+    precon_chebyshev_diag_my_op.estimate_eigenvalues(src);
+  }
+
+  PreconditionRelaxation<MyOperatorType, DiagonalMatrix<VectorType>>
+    precon_relaxation_o_diag_my_op;
+
+  {
+    typename PreconditionRelaxation<MyOperatorType,
+                                    DiagonalMatrix<VectorType>>::AdditionalData
+      chebyshev_ad;
+
+    chebyshev_ad.preconditioner = precon_diag;
+    chebyshev_ad.n_iterations   = chebyshev_degree;
+    chebyshev_ad.relaxation     = 1.0;
+
+    precon_relaxation_o_diag_my_op.initialize(my_op, chebyshev_ad);
+  }
+
+  PreconditionRelaxation<MyOperatorType, DiagonalMatrix<VectorType>>
+    precon_relaxation_n_diag_my_op;
+
+  {
+    typename PreconditionRelaxation<MyOperatorType,
+                                    DiagonalMatrix<VectorType>>::AdditionalData
+      chebyshev_ad;
+
+    chebyshev_ad.preconditioner = precon_diag;
+    chebyshev_ad.n_iterations   = chebyshev_degree;
+    chebyshev_ad.relaxation     = 1.1;
+
+    precon_relaxation_n_diag_my_op.initialize(my_op, chebyshev_ad);
   }
 
   PreconditionChebyshev<OperatorType, VectorType, MyDiagonalMatrix<VectorType>>
@@ -324,6 +357,37 @@ test(const unsigned int fe_degree,
     chebyshev_ad.degree = chebyshev_degree;
 
     precon_chebyshev_my_diag.initialize(op, chebyshev_ad);
+    precon_chebyshev_my_diag.estimate_eigenvalues(src);
+  }
+
+  PreconditionRelaxation<OperatorType, MyDiagonalMatrix<VectorType>>
+    precon_relaxation_o_my_diag;
+
+  {
+    typename PreconditionRelaxation<
+      OperatorType,
+      MyDiagonalMatrix<VectorType>>::AdditionalData chebyshev_ad;
+
+    chebyshev_ad.preconditioner = precon_my_diag;
+    chebyshev_ad.n_iterations   = chebyshev_degree;
+    chebyshev_ad.relaxation     = 1.0;
+
+    precon_relaxation_o_my_diag.initialize(op, chebyshev_ad);
+  }
+
+  PreconditionRelaxation<OperatorType, MyDiagonalMatrix<VectorType>>
+    precon_relaxation_n_my_diag;
+
+  {
+    typename PreconditionRelaxation<
+      OperatorType,
+      MyDiagonalMatrix<VectorType>>::AdditionalData chebyshev_ad;
+
+    chebyshev_ad.preconditioner = precon_my_diag;
+    chebyshev_ad.n_iterations   = chebyshev_degree;
+    chebyshev_ad.relaxation     = 1.1;
+
+    precon_relaxation_n_my_diag.initialize(op, chebyshev_ad);
   }
 
 
@@ -410,12 +474,42 @@ test(const unsigned int fe_degree,
     else
       precon_chebyshev_diag_my_op.step(dst, src);
   });
+  // diagonal + relaxation (1.0, no pre/post)
+  const auto t_diag_re_o_no_pre_post = run([&]() {
+    if (do_vmult)
+      precon_relaxation_o_diag_my_op.vmult(dst, src);
+    else
+      precon_relaxation_o_diag_my_op.step(dst, src);
+  });
+  // diagonal + relaxation (1.1, no pre/post)
+  const auto t_diag_re_n_no_pre_post = run([&]() {
+    if (do_vmult)
+      precon_relaxation_n_diag_my_op.vmult(dst, src);
+    else
+      precon_relaxation_n_diag_my_op.step(dst, src);
+  });
   // diagonal + chebyshev (without exploiting the fact that we have a diagonal)
   const auto t_diag_ch_black_box = run([&]() {
     if (do_vmult)
       precon_chebyshev_my_diag.vmult(dst, src);
     else
       precon_chebyshev_my_diag.step(dst, src);
+  });
+  // diagonal + relaxation (1.0; without exploiting the fact that we have a
+  // diagonal)
+  const auto t_diag_re_o_black_box = run([&]() {
+    if (do_vmult)
+      precon_relaxation_o_my_diag.vmult(dst, src);
+    else
+      precon_relaxation_o_my_diag.step(dst, src);
+  });
+  // diagonal + relaxation (1.1; without exploiting the fact that we have a
+  // diagonal)
+  const auto t_diag_re_n_black_box = run([&]() {
+    if (do_vmult)
+      precon_relaxation_n_my_diag.vmult(dst, src);
+    else
+      precon_relaxation_n_my_diag.step(dst, src);
   });
 
   table.add_value("ch_degree", chebyshev_degree);
@@ -441,7 +535,11 @@ test(const unsigned int fe_degree,
   table.add_value("t_diag_re_o", t_diag_re_o);
   table.add_value("t_diag_re_n", t_diag_re_n);
   table.add_value("t_diag_ch_no_pre_post", t_diag_ch_no_pre_post);
+  table.add_value("t_diag_re_o_no_pre_post", t_diag_re_o_no_pre_post);
+  table.add_value("t_diag_re_n_no_pre_post", t_diag_re_n_no_pre_post);
   table.add_value("t_diag_ch_black_box", t_diag_ch_black_box);
+  table.add_value("t_diag_re_o_black_box", t_diag_re_o_black_box);
+  table.add_value("t_diag_re_n_black_box", t_diag_re_n_black_box);
 
   if (false)
     {
