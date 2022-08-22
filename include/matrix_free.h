@@ -12,12 +12,40 @@
 #include "restrictors.h"
 #include "tensor_product_matrix.h"
 
+template <typename VectorType>
+class ASPoissonPreconditionerBase : public PreconditionerBase<VectorType>
+{
+public:
+  virtual void
+  vmult(VectorType &dst, const VectorType &src) const
+  {
+    (void)dst;
+    (void)src;
+  }
+
+  virtual void
+  vmult(VectorType &      dst,
+        const VectorType &src,
+        const std::function<void(const unsigned int, const unsigned int)>
+          &operation_before_matrix_vector_product,
+        const std::function<void(const unsigned int, const unsigned int)>
+          &operation_after_matrix_vector_product) const
+  {
+    (void)dst;
+    (void)src;
+    (void)operation_before_matrix_vector_product;
+    (void)operation_after_matrix_vector_product;
+  }
+
+private:
+};
+
 template <int dim,
           typename Number,
           typename VectorizedArrayType,
           int n_rows_1d = -1>
-class ASPoissonPreconditioner
-  : public PreconditionerBase<LinearAlgebra::distributed::Vector<Number>>
+class ASPoissonPreconditioner : public ASPoissonPreconditionerBase<
+                                  LinearAlgebra::distributed::Vector<Number>>
 {
 public:
   using VectorType = LinearAlgebra::distributed::Vector<Number>;
@@ -295,6 +323,20 @@ public:
     if (weight_type == Restrictors::WeightingType::post ||
         weight_type == Restrictors::WeightingType::symm)
       dst.scale(weights);
+  }
+
+  virtual void
+  vmult(VectorType &      dst,
+        const VectorType &src,
+        const std::function<void(const unsigned int, const unsigned int)>
+          &operation_before_matrix_vector_product,
+        const std::function<void(const unsigned int, const unsigned int)>
+          &operation_after_matrix_vector_product) const
+  {
+    (void)dst;
+    (void)src;
+    (void)operation_before_matrix_vector_product;
+    (void)operation_after_matrix_vector_product;
   }
 
   std::size_t

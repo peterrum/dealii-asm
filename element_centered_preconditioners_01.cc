@@ -507,13 +507,15 @@ create_system_preconditioner(const OperatorType &              op,
 
           const unsigned int n_rows = fe_degree + 2 * n_overlap - 1;
 
+          std::shared_ptr<const ASPoissonPreconditionerBase<VectorType>> prcon;
+
 #define OPERATION(c, d)                                                  \
   if (c == -1)                                                           \
     pcout << "Warning: FDM with <" + std::to_string(n_rows) +            \
                "> is not precompiled!"                                   \
           << std::endl;                                                  \
                                                                          \
-  return std::make_shared<                                               \
+  prcon = std::make_shared<                                              \
     const ASPoissonPreconditioner<dim, Number, VectorizedArrayType, c>>( \
     matrix_free,                                                         \
     n_overlap,                                                           \
@@ -526,6 +528,8 @@ create_system_preconditioner(const OperatorType &              op,
 
           EXPAND_OPERATIONS(OPERATION);
 #undef OPERATION
+
+          return prcon;
         }
       else
         {
