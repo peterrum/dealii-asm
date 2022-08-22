@@ -256,6 +256,59 @@ get_approximation(const OperatorType &              op,
 
 
 
+template <typename OperatorType, typename PreconditionerType>
+std::shared_ptr<const PreconditionChebyshev<OperatorType,
+                                            typename OperatorType::vector_type,
+                                            PreconditionerType>>
+create_chebyshev_preconditioner(
+  const OperatorType &                       op,
+  const std::shared_ptr<PreconditionerType> &precon,
+  const boost::property_tree::ptree          params)
+{
+  using ChebyshevPreconditionerType =
+    PreconditionChebyshev<OperatorType,
+                          typename OperatorType::vector_type,
+                          PreconditionerType>;
+
+  typename ChebyshevPreconditionerType::AdditionalData
+    chebyshev_additional_data;
+
+  chebyshev_additional_data.preconditioner = precon;
+  chebyshev_additional_data.constraints.copy_from(op.get_constraints());
+  chebyshev_additional_data.degree = params.get<unsigned int>("degree", 3);
+  chebyshev_additional_data.smoothing_range     = 20;
+  chebyshev_additional_data.eig_cg_n_iterations = 20;
+
+  const auto ev_algorithm =
+    params.get<std::string>("ev algorithm", "power iteration");
+
+  if (ev_algorithm == "lanczos")
+    {
+      chebyshev_additional_data.eigenvalue_algorithm =
+        ChebyshevPreconditionerType::AdditionalData::EigenvalueAlgorithm::
+          lanczos;
+    }
+  else if (ev_algorithm == "power iteration")
+    {
+      chebyshev_additional_data.eigenvalue_algorithm =
+        ChebyshevPreconditionerType::AdditionalData::EigenvalueAlgorithm::
+          power_iteration;
+    }
+  else
+    {
+      AssertThrow(false,
+                  ExcMessage("Eigen-value algorithm <" + ev_algorithm +
+                             "> is not known!"))
+    }
+
+  auto chebyshev = std::make_shared<ChebyshevPreconditionerType>();
+  chebyshev->initialize(op, chebyshev_additional_data);
+
+  return chebyshev;
+}
+
+
+
 template <typename OperatorType>
 std::shared_ptr<const PreconditionerBase<typename OperatorType::vector_type>>
 create_system_preconditioner(const OperatorType &              op,
@@ -295,55 +348,18 @@ create_system_preconditioner(const OperatorType &              op,
 
         if (omega == 0.0)
           {
-            using ChebyshevPreconditionerType = PreconditionChebyshev<
-              OperatorType,
-              VectorType,
-              typename std::remove_cv<
-                typename std::remove_reference<decltype(*precon)>::type>::type>;
-
-            typename ChebyshevPreconditionerType::AdditionalData
-              chebyshev_additional_data;
-
-            chebyshev_additional_data.preconditioner = precon;
-            chebyshev_additional_data.constraints.copy_from(
-              op.get_constraints());
-            chebyshev_additional_data.degree              = degree;
-            chebyshev_additional_data.smoothing_range     = 20;
-            chebyshev_additional_data.eig_cg_n_iterations = 20;
-
-            const auto ev_algorithm =
-              params.get<std::string>("ev algorithm", "power iteration");
-
-            if (ev_algorithm == "lanczos")
-              {
-                chebyshev_additional_data.eigenvalue_algorithm =
-                  ChebyshevPreconditionerType::AdditionalData::
-                    EigenvalueAlgorithm::lanczos;
-              }
-            else if (ev_algorithm == "power iteration")
-              {
-                chebyshev_additional_data.eigenvalue_algorithm =
-                  ChebyshevPreconditionerType::AdditionalData::
-                    EigenvalueAlgorithm::power_iteration;
-              }
-            else
-              {
-                AssertThrow(false,
-                            ExcMessage("Eigen-value algorithm <" +
-                                       ev_algorithm + "> is not known!"))
-              }
-
-            auto chebyshev = std::make_shared<ChebyshevPreconditionerType>();
-            chebyshev->initialize(op, chebyshev_additional_data);
+            const auto chebyshev =
+              create_chebyshev_preconditioner(op, precon, params);
 
             VectorType vec;
             op.initialize_dof_vector(vec);
             const auto evs = chebyshev->estimate_eigenvalues(vec);
 
+            const unsigned int smoothing_range = 20;
+
             const double alpha =
-              (chebyshev_additional_data.smoothing_range > 1. ?
-                 evs.max_eigenvalue_estimate /
-                   chebyshev_additional_data.smoothing_range :
+              (smoothing_range > 1. ?
+                 evs.max_eigenvalue_estimate / smoothing_range :
                  std::min(0.9 * evs.max_eigenvalue_estimate,
                           evs.min_eigenvalue_estimate));
 
@@ -355,6 +371,7 @@ create_system_preconditioner(const OperatorType &              op,
                   << std::endl;
             pcout << std::endl;
           }
+
 
         pcout << "    - omega:  " << omega << std::endl;
 
@@ -409,36 +426,8 @@ create_system_preconditioner(const OperatorType &              op,
           typename std::remove_cv<
             typename std::remove_reference<decltype(*precon)>::type>::type>;
 
-        typename PreconditionerType::AdditionalData additional_data;
-
-        additional_data.preconditioner = precon;
-        additional_data.constraints.copy_from(op.get_constraints());
-        additional_data.degree          = params.get<unsigned int>("degree", 3);
-        additional_data.smoothing_range = 20;
-        additional_data.eig_cg_n_iterations = 20;
-
-        const auto ev_algorithm =
-          params.get<std::string>("ev algorithm", "power iteration");
-
-        if (ev_algorithm == "lanczos")
-          {
-            additional_data.eigenvalue_algorithm =
-              PreconditionerType::AdditionalData::EigenvalueAlgorithm::lanczos;
-          }
-        else if (ev_algorithm == "power iteration")
-          {
-            additional_data.eigenvalue_algorithm = PreconditionerType::
-              AdditionalData::EigenvalueAlgorithm::power_iteration;
-          }
-        else
-          {
-            AssertThrow(false,
-                        ExcMessage("Eigen-value algorithm <" + ev_algorithm +
-                                   "> is not known!"))
-          }
-
-        auto chebyshev = std::make_shared<PreconditionerType>();
-        chebyshev->initialize(op, additional_data);
+        const auto chebyshev =
+          create_chebyshev_preconditioner(op, precon, params);
 
         VectorType vec;
         op.initialize_dof_vector(vec);
@@ -446,7 +435,8 @@ create_system_preconditioner(const OperatorType &              op,
 
         pcout << "- Create system preconditioner: Chebyshev" << std::endl;
 
-        pcout << "    - degree: " << additional_data.degree << std::endl;
+        pcout << "    - degree: " << params.get<unsigned int>("degree", 3)
+              << std::endl;
         pcout << "    - min ev: " << evs.min_eigenvalue_estimate << std::endl;
         pcout << "    - max ev: " << evs.max_eigenvalue_estimate << std::endl;
         pcout << "    - omega:  "
