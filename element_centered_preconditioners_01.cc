@@ -310,6 +310,87 @@ create_chebyshev_preconditioner(
 
 
 template <typename OperatorType>
+std::shared_ptr<
+  const ASPoissonPreconditionerBase<typename OperatorType::vector_type>>
+create_fdm_preconditioner(const OperatorType &              op,
+                          const boost::property_tree::ptree params)
+{
+  using VectorType = typename OperatorType::vector_type;
+  using Number     = typename VectorType::value_type;
+
+  if constexpr (OperatorType::is_matrix_free())
+    {
+      ConditionalOStream pcout(
+        std::cout, Utilities::MPI::this_mpi_process(MPI_COMM_WORLD) == 0);
+
+      pcout << "- Create system preconditioner: FDM" << std::endl;
+
+      const int dim             = OperatorType::dimension;
+      using VectorizedArrayType = typename OperatorType::vectorized_array_type;
+
+      const auto &matrix_free = op.get_matrix_free();
+      const auto &mapping     = op.get_mapping();
+      const auto &quadrature  = op.get_quadrature();
+
+      const unsigned int fe_degree =
+        matrix_free.get_dof_handler().get_fe().degree;
+
+      FE_Q<1> fe_1D(fe_degree);
+
+      const auto quadrature_1D = quadrature.get_tensor_basis()[0];
+      const Quadrature<dim - 1> quadrature_face(quadrature_1D);
+
+      const unsigned int n_overlap =
+        std::min(params.get<unsigned int>("n overlap", 1), fe_degree);
+      const auto weight_type = get_weighting_type(params);
+
+
+      const unsigned int sub_mesh_approximation =
+        params.get<unsigned int>("sub mesh approximation",
+                                 OperatorType::dimension);
+
+      pcout << "    - n overlap:              " << n_overlap << std::endl;
+      pcout << "    - sub mesh approximation: " << sub_mesh_approximation
+            << std::endl;
+      pcout << std::endl;
+
+      const unsigned int n_rows = fe_degree + 2 * n_overlap - 1;
+
+      std::shared_ptr<const ASPoissonPreconditionerBase<VectorType>> prcon;
+
+#define OPERATION(c, d)                                                  \
+  if (c == -1)                                                           \
+    pcout << "Warning: FDM with <" + std::to_string(n_rows) +            \
+               "> is not precompiled!"                                   \
+          << std::endl;                                                  \
+                                                                         \
+  prcon = std::make_shared<                                              \
+    const ASPoissonPreconditioner<dim, Number, VectorizedArrayType, c>>( \
+    matrix_free,                                                         \
+    n_overlap,                                                           \
+    sub_mesh_approximation,                                              \
+    mapping,                                                             \
+    fe_1D,                                                               \
+    quadrature_face,                                                     \
+    quadrature_1D,                                                       \
+    weight_type);
+
+      EXPAND_OPERATIONS(OPERATION);
+#undef OPERATION
+
+      return prcon;
+    }
+  else
+    {
+      AssertThrow(false,
+                  ExcMessage("FDM can only used with matrix-free operator!"));
+      return {};
+    }
+}
+
+
+
+template <typename OperatorType>
 std::shared_ptr<const PreconditionerBase<typename OperatorType::vector_type>>
 create_system_preconditioner(const OperatorType &              op,
                              const boost::property_tree::ptree params)
@@ -471,72 +552,10 @@ create_system_preconditioner(const OperatorType &              op,
     }
   else if (type == "FDM")
     {
-      if constexpr (OperatorType::is_matrix_free())
-        {
-          pcout << "- Create system preconditioner: FDM" << std::endl;
-
-          const int dim = OperatorType::dimension;
-          using VectorizedArrayType =
-            typename OperatorType::vectorized_array_type;
-
-          const auto &matrix_free = op.get_matrix_free();
-          const auto &mapping     = op.get_mapping();
-          const auto &quadrature  = op.get_quadrature();
-
-          const unsigned int fe_degree =
-            matrix_free.get_dof_handler().get_fe().degree;
-
-          FE_Q<1> fe_1D(fe_degree);
-
-          const auto quadrature_1D = quadrature.get_tensor_basis()[0];
-          const Quadrature<dim - 1> quadrature_face(quadrature_1D);
-
-          const unsigned int n_overlap =
-            std::min(params.get<unsigned int>("n overlap", 1), fe_degree);
-          const auto weight_type = get_weighting_type(params);
-
-
-          const unsigned int sub_mesh_approximation =
-            params.get<unsigned int>("sub mesh approximation",
-                                     OperatorType::dimension);
-
-          pcout << "    - n overlap:              " << n_overlap << std::endl;
-          pcout << "    - sub mesh approximation: " << sub_mesh_approximation
-                << std::endl;
-          pcout << std::endl;
-
-          const unsigned int n_rows = fe_degree + 2 * n_overlap - 1;
-
-          std::shared_ptr<const ASPoissonPreconditionerBase<VectorType>> prcon;
-
-#define OPERATION(c, d)                                                  \
-  if (c == -1)                                                           \
-    pcout << "Warning: FDM with <" + std::to_string(n_rows) +            \
-               "> is not precompiled!"                                   \
-          << std::endl;                                                  \
-                                                                         \
-  prcon = std::make_shared<                                              \
-    const ASPoissonPreconditioner<dim, Number, VectorizedArrayType, c>>( \
-    matrix_free,                                                         \
-    n_overlap,                                                           \
-    sub_mesh_approximation,                                              \
-    mapping,                                                             \
-    fe_1D,                                                               \
-    quadrature_face,                                                     \
-    quadrature_1D,                                                       \
-    weight_type);
-
-          EXPAND_OPERATIONS(OPERATION);
-#undef OPERATION
-
-          return prcon;
-        }
-      else
-        {
-          AssertThrow(
-            false, ExcMessage("FDM can only used with matrix-free operator!"));
-          return {};
-        }
+      return std::make_shared<
+        PreconditionerAdapter<VectorType,
+                              ASPoissonPreconditionerBase<VectorType>>>(
+        create_fdm_preconditioner(op, params));
     }
   else if (type == "AMG")
     {
