@@ -157,6 +157,73 @@ public:
                                const LevelMatrixType &level_matrix) = 0;
 
   void
+  print_timings() const
+  {
+    ConditionalOStream pcout(std::cout,
+                             Utilities::MPI::this_mpi_process(MPI_COMM_WORLD) ==
+                               0);
+
+    if (Utilities::MPI::this_mpi_process(MPI_COMM_WORLD) == 0)
+      {
+        std::cout << " - Times of multigrid (levels):" << std::endl;
+
+        const auto print_line = [](const auto &vector) {
+          for (const auto &i : vector)
+            printf("%10.2e", i.first);
+
+          double sum = 0;
+
+          for (const auto &i : vector)
+            sum += i.first;
+
+          printf("   | %10.2e", sum);
+
+          printf("\n");
+        };
+
+        for (unsigned int l = 0; l < all_mg_timers.size(); ++l)
+          {
+            printf("%4d: ", l);
+
+            print_line(all_mg_timers[l]);
+          }
+
+        std::vector<
+          std::pair<double, std::chrono::time_point<std::chrono::system_clock>>>
+          sums(all_mg_timers[0].size());
+
+        for (unsigned int i = 0; i < sums.size(); ++i)
+          for (unsigned int j = 0; j < all_mg_timers.size(); ++j)
+            sums[i].first += all_mg_timers[j][i].first;
+
+        printf(
+          "   ----------------------------------------------------------------------------+-----------\n");
+        printf("      ");
+        print_line(sums);
+
+        pcout << std::endl;
+
+        std::cout << " - Times of multigrid (solver <-> mg): ";
+
+        for (const auto i : all_mg_precon_timers)
+          pcout << i.first << " ";
+        pcout << std::endl;
+        pcout << std::endl;
+      }
+  }
+
+  void
+  clear_timings() const
+  {
+    for (auto &is : all_mg_timers)
+      for (auto &i : is)
+        i.first = 0.0;
+
+    for (auto &i : all_mg_precon_timers)
+      i.first = 0.0;
+  }
+
+  void
   do_update()
   {
     // setup coarse-grid solver
@@ -191,6 +258,67 @@ public:
     preconditioner =
       std::make_unique<PreconditionMG<dim, VectorType, MGTransferType>>(
         dof_handler, *mg, *transfer);
+
+    // timers
+    if (true)
+      {
+        all_mg_timers.resize((max_level - min_level + 1));
+        for (unsigned int i = 0; i < all_mg_timers.size(); ++i)
+          all_mg_timers[i].resize(7);
+
+        const auto create_mg_timer_function = [&](const unsigned int i,
+                                                  const std::string &label) {
+          return [i, label, this](const bool flag, const unsigned int level) {
+            if (false && flag)
+              std::cout << label << " " << level << std::endl;
+            if (flag)
+              all_mg_timers[level][i].second = std::chrono::system_clock::now();
+            else
+              all_mg_timers[level][i].first +=
+                std::chrono::duration_cast<std::chrono::nanoseconds>(
+                  std::chrono::system_clock::now() -
+                  all_mg_timers[level][i].second)
+                  .count() /
+                1e9;
+          };
+        };
+
+        {
+          mg->connect_pre_smoother_step(
+            create_mg_timer_function(0, "pre_smoother_step"));
+          mg->connect_residual_step(
+            create_mg_timer_function(1, "residual_step"));
+          mg->connect_restriction(create_mg_timer_function(2, "restriction"));
+          mg->connect_coarse_solve(create_mg_timer_function(3, "coarse_solve"));
+          mg->connect_prolongation(create_mg_timer_function(4, "prolongation"));
+          mg->connect_edge_prolongation(
+            create_mg_timer_function(5, "edge_prolongation"));
+          mg->connect_post_smoother_step(
+            create_mg_timer_function(6, "post_smoother_step"));
+        }
+
+
+        all_mg_precon_timers.resize(2);
+
+        const auto create_mg_precon_timer_function = [&](const unsigned int i) {
+          return [i, this](const bool flag) {
+            if (flag)
+              all_mg_precon_timers[i].second = std::chrono::system_clock::now();
+            else
+              all_mg_precon_timers[i].first +=
+                std::chrono::duration_cast<std::chrono::nanoseconds>(
+                  std::chrono::system_clock::now() -
+                  all_mg_precon_timers[i].second)
+                  .count() /
+                1e9;
+          };
+        };
+
+        preconditioner->connect_transfer_to_mg(
+          create_mg_precon_timer_function(0));
+        preconditioner->connect_transfer_to_global(
+          create_mg_precon_timer_function(1));
+      }
   }
 
   virtual void
@@ -228,6 +356,14 @@ protected:
   mutable std::unique_ptr<Multigrid<VectorType>>  mg;
   mutable std::unique_ptr<PreconditionMG<dim, VectorType, MGTransferType>>
     preconditioner;
+
+  mutable std::vector<std::vector<
+    std::pair<double, std::chrono::time_point<std::chrono::system_clock>>>>
+    all_mg_timers;
+
+  mutable std::vector<
+    std::pair<double, std::chrono::time_point<std::chrono::system_clock>>>
+    all_mg_precon_timers;
 };
 
 DEAL_II_NAMESPACE_CLOSE

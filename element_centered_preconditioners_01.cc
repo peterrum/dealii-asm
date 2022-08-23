@@ -49,6 +49,13 @@ using namespace dealii;
 
 static bool print_timings;
 
+template <typename T>
+using print_timings_t = decltype(std::declval<T const>().print_timings());
+
+template <typename T>
+constexpr bool has_timing_functionality =
+  dealii::internal::is_supported_operation<print_timings_t, T>;
+
 // clang-format off
 #define EXPAND_OPERATIONS(OPERATION)                                  \
   switch (n_rows)                                                     \
@@ -177,6 +184,9 @@ solve(const MatrixType &                              A,
 
   dispatch(); // warm up
 
+  if constexpr (has_timing_functionality<PreconditionerType>)
+    preconditioner->clear_timings();
+
   const auto timer = std::chrono::system_clock::now();
   dispatch();
   const double time = std::chrono::duration_cast<std::chrono::nanoseconds>(
@@ -193,7 +203,12 @@ solve(const MatrixType &                              A,
   table.add_value("it", reduction_control->last_step());
 
   if (print_timings)
-    table.add_value("time", time);
+    {
+      table.add_value("time", time);
+
+      if constexpr (has_timing_functionality<PreconditionerType>)
+        preconditioner->print_timings();
+    }
 
   return reduction_control;
 }
