@@ -219,6 +219,8 @@ public:
               (1.0 / ((weight_type == Restrictors::WeightingType::symm) ?
                         std::sqrt(i) :
                         i));
+
+      weights.update_ghost_values();
     }
 
     if (weight_type == Restrictors::WeightingType::none)
@@ -344,9 +346,7 @@ public:
           &operation_after_matrix_vector_product) const
   {
     if ((src.get_partitioner().get() !=
-         matrix_free.get_vector_partitioner().get()) ||
-        weight_type == Restrictors::WeightingType::symm ||
-        weight_type == Restrictors::WeightingType::pre)
+         matrix_free.get_vector_partitioner().get()))
       {
         AssertThrow(false, ExcNotImplemented());
         vmult(dst, src);
@@ -370,6 +370,17 @@ public:
             phi_dst.reinit(cell);
 
             phi_src.read_dof_values(src);
+
+            if (weight_type == Restrictors::WeightingType::symm ||
+                weight_type == Restrictors::WeightingType::pre)
+              {
+                phi_dst.read_dof_values_plain(weights);
+
+                for (unsigned int i = 0; i < phi_dst.dofs_per_cell; ++i)
+                  phi_src.begin_dof_values()[i] *=
+                    phi_dst.begin_dof_values()[i];
+              }
+
             fdm[cell].apply_inverse(
               ArrayView<VectorizedArrayType>(phi_dst.begin_dof_values(),
                                              phi_dst.dofs_per_cell),
