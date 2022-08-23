@@ -561,7 +561,7 @@ create_system_preconditioner(const OperatorType &              op,
         {
           return setup_chebshev(
             std::const_pointer_cast<ASPoissonPreconditionerBase<VectorType>>(
-              create_fdm_preconditioner(op, params)));
+              create_fdm_preconditioner(op, preconditioner_parameters)));
         }
       else
         {

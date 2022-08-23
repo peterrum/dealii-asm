@@ -345,11 +345,11 @@ public:
         const std::function<void(const unsigned int, const unsigned int)>
           &operation_after_matrix_vector_product) const
   {
-    if ((src.get_partitioner().get() !=
-         matrix_free.get_vector_partitioner().get()))
+    if ((src.get_partitioner().get() != src_.get_partitioner().get()))
       {
-        AssertThrow(false, ExcNotImplemented());
+        operation_before_matrix_vector_product(0, src.locally_owned_size());
         vmult(dst, src);
+        operation_after_matrix_vector_product(0, src.locally_owned_size());
 
         return;
       }
