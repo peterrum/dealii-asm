@@ -337,10 +337,59 @@ public:
         const std::function<void(const unsigned int, const unsigned int)>
           &operation_after_matrix_vector_product) const
   {
-    (void)dst;
-    (void)src;
-    (void)operation_before_matrix_vector_product;
-    (void)operation_after_matrix_vector_product;
+    if ((src.get_partitioner().get() !=
+         matrix_free.get_vector_partitioner().get()) ||
+        weight_type == Restrictors::WeightingType::symm ||
+        weight_type == Restrictors::WeightingType::pre)
+      {
+        AssertThrow(false, ExcNotImplemented());
+        vmult(dst, src);
+
+        return;
+      }
+
+    matrix_free.template cell_loop<VectorType, VectorType>(
+      [&](
+        const auto &matrix_free, auto &dst, const auto &src, const auto cells) {
+        FEEvaluation<dim, -1, 0, 1, Number, VectorizedArrayType> phi_src(
+          matrix_free);
+        FEEvaluation<dim, -1, 0, 1, Number, VectorizedArrayType> phi_dst(
+          matrix_free);
+
+        AlignedVector<VectorizedArrayType> tmp;
+
+        for (unsigned int cell = cells.first; cell < cells.second; ++cell)
+          {
+            phi_src.reinit(cell);
+            phi_dst.reinit(cell);
+
+            phi_src.read_dof_values(src);
+            fdm[cell].apply_inverse(
+              ArrayView<VectorizedArrayType>(phi_dst.begin_dof_values(),
+                                             phi_dst.dofs_per_cell),
+              ArrayView<const VectorizedArrayType>(phi_src.begin_dof_values(),
+                                                   phi_src.dofs_per_cell),
+              tmp);
+
+            phi_dst.distribute_local_to_global(dst);
+          }
+      },
+      dst,
+      src,
+      operation_before_matrix_vector_product,
+      [&](const auto begin, const auto end) {
+        if (weight_type == Restrictors::WeightingType::post)
+          {
+            const auto dst_ptr     = dst.begin();
+            const auto weights_ptr = weights.begin();
+
+            DEAL_II_OPENMP_SIMD_PRAGMA
+            for (std::size_t i = begin; i < end; ++i)
+              dst_ptr[i] *= weights_ptr[i];
+          }
+
+        operation_after_matrix_vector_product(begin, end);
+      });
   }
 
   std::size_t

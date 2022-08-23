@@ -540,6 +540,12 @@ create_system_preconditioner(const OperatorType &              op,
 
           return setup_chebshev(precon);
         }
+      else if (preconditioner_type == "FDM")
+        {
+          return setup_chebshev(
+            std::const_pointer_cast<ASPoissonPreconditionerBase<VectorType>>(
+              create_fdm_preconditioner(op, params)));
+        }
       else
         {
           const auto precon =
