@@ -41,6 +41,12 @@ public:
     AssertThrow(false, ExcNotImplemented());
   }
 
+  virtual std::size_t
+  memory_consumption() const
+  {
+    return 0.0;
+  }
+
 private:
 };
 

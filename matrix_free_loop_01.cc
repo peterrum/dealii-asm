@@ -42,9 +42,9 @@ test(const unsigned int fe_degree,
      const unsigned int n_global_refinements,
      const unsigned int n_overlap)
 {
-  using Number              = double;
+  using Number              = float;
   using VectorizedArrayType = VectorizedArray<Number>;
-  using VectorType          = LinearAlgebra::distributed::Vector<double>;
+  using VectorType          = LinearAlgebra::distributed::Vector<Number>;
 
   FE_Q<dim> fe(fe_degree);
   FE_Q<1>   fe_1D(fe_degree);
@@ -71,7 +71,7 @@ test(const unsigned int fe_degree,
 
   MappingQ1<dim> mapping;
 
-  AffineConstraints<double> constraints;
+  AffineConstraints<Number> constraints;
   DoFTools::make_zero_boundary_constraints(dof_handler, 1, constraints);
   constraints.close();
 

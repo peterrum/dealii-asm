@@ -124,11 +124,11 @@ test(const unsigned int fe_degree,
      const bool         use_renumbering,
      ConvergenceTable & table)
 {
-  using Number              = double;
+  using Number              = float;
   using VectorizedArrayType = VectorizedArray<Number>;
-  using VectorType          = LinearAlgebra::distributed::Vector<double>;
+  using VectorType          = LinearAlgebra::distributed::Vector<Number>;
 
-  const int n_rows_1d = 5; // TODO
+  const int n_rows_1d = 7; // TODO
 
   const unsigned int mapping_degree = fe_degree;
 
@@ -175,7 +175,7 @@ test(const unsigned int fe_degree,
     },
     true);
 
-  AffineConstraints<double> constraints;
+  AffineConstraints<Number> constraints;
   DoFTools::make_zero_boundary_constraints(dof_handler, 1, constraints);
   constraints.close();
 
@@ -194,8 +194,10 @@ test(const unsigned int fe_degree,
   using OperatorType = PoissonOperator<dim, Number, VectorizedArrayType>;
   using MyOperatorType =
     MyOperator<PoissonOperator<dim, Number, VectorizedArrayType>>;
-  using PreconditionerType =
+
+  using PreconditionerTypeActual =
     ASPoissonPreconditioner<dim, Number, VectorizedArrayType, n_rows_1d>;
+  using PreconditionerType   = ASPoissonPreconditionerBase<VectorType>;
   using MyPreconditionerType = Adapter<PreconditionerType>;
 
   OperatorType   op(matrix_free);
@@ -208,13 +210,14 @@ test(const unsigned int fe_degree,
 
   op.rhs(src);
 
-  const auto precon_fdm = std::make_shared<PreconditionerType>(matrix_free,
-                                                               n_overlap,
-                                                               dim,
-                                                               mapping_q_cache,
-                                                               fe_1D,
-                                                               quadrature_face,
-                                                               quadrature_1D);
+  const std::shared_ptr<PreconditionerType> precon_fdm =
+    std::make_shared<PreconditionerTypeActual>(matrix_free,
+                                               n_overlap,
+                                               dim,
+                                               mapping_q_cache,
+                                               fe_1D,
+                                               quadrature_face,
+                                               quadrature_1D);
 
   const auto precon_fdm_no_pre_post =
     std::make_shared<MyPreconditionerType>(precon_fdm);
