@@ -361,6 +361,8 @@ public:
           matrix_free);
         FEEvaluation<dim, -1, 0, 1, Number, VectorizedArrayType> phi_dst(
           matrix_free);
+        FEEvaluation<dim, -1, 0, 1, Number, VectorizedArrayType> phi_weights(
+          matrix_free);
 
         AlignedVector<VectorizedArrayType> tmp;
 
@@ -374,11 +376,12 @@ public:
             if (weight_type == Restrictors::WeightingType::symm ||
                 weight_type == Restrictors::WeightingType::pre)
               {
-                phi_dst.read_dof_values_plain(weights);
+                phi_weights.reinit(cell);
+                phi_weights.read_dof_values_plain(weights);
 
-                for (unsigned int i = 0; i < phi_dst.dofs_per_cell; ++i)
+                for (unsigned int i = 0; i < phi_weights.dofs_per_cell; ++i)
                   phi_src.begin_dof_values()[i] *=
-                    phi_dst.begin_dof_values()[i];
+                    phi_weights.begin_dof_values()[i];
               }
 
             fdm[cell].apply_inverse(
@@ -387,6 +390,13 @@ public:
               ArrayView<const VectorizedArrayType>(phi_src.begin_dof_values(),
                                                    phi_src.dofs_per_cell),
               tmp);
+
+            if (weight_type == Restrictors::WeightingType::symm)
+              {
+                for (unsigned int i = 0; i < phi_weights.dofs_per_cell; ++i)
+                  phi_dst.begin_dof_values()[i] *=
+                    phi_weights.begin_dof_values()[i];
+              }
 
             phi_dst.distribute_local_to_global(dst);
           }
