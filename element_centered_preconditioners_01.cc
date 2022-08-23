@@ -495,6 +495,8 @@ create_system_preconditioner(const OperatorType &              op,
       const auto preconditioner_parameters =
         try_get_child(params, "preconditioner");
 
+      const auto preconditioner_optimize = params.get<bool>("optimize", true);
+
       const auto preconditioner_type =
         preconditioner_parameters.get<std::string>("type", "");
 
@@ -530,7 +532,7 @@ create_system_preconditioner(const OperatorType &              op,
           PreconditionerAdapter<VectorType, PreconditionerType>>(chebyshev);
       };
 
-      if (preconditioner_type == "Diagonal")
+      if (preconditioner_optimize && (preconditioner_type == "Diagonal"))
         {
           pcout << "- Create system preconditioner: Diagonal" << std::endl
                 << std::endl;
@@ -540,7 +542,7 @@ create_system_preconditioner(const OperatorType &              op,
 
           return setup_chebshev(precon);
         }
-      else if (preconditioner_type == "FDM")
+      else if (preconditioner_optimize && (preconditioner_type == "FDM"))
         {
           return setup_chebshev(
             std::const_pointer_cast<ASPoissonPreconditionerBase<VectorType>>(

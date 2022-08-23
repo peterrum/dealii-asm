@@ -94,6 +94,25 @@ private:
   DiagonalMatrix<VectorType> op;
 };
 
+template <typename OperatorType>
+class Adapter : public Subscriptor
+{
+public:
+  Adapter(std::shared_ptr<OperatorType> op)
+    : op(op)
+  {}
+
+  template <typename VectorType>
+  void
+  vmult(VectorType &dst, const VectorType &src) const
+  {
+    op->vmult(dst, src);
+  }
+
+private:
+  std::shared_ptr<OperatorType> op;
+};
+
 template <int dim>
 void
 test(const unsigned int fe_degree,
@@ -177,6 +196,7 @@ test(const unsigned int fe_degree,
     MyOperator<PoissonOperator<dim, Number, VectorizedArrayType>>;
   using PreconditionerType =
     ASPoissonPreconditioner<dim, Number, VectorizedArrayType, n_rows_1d>;
+  using MyPreconditionerType = Adapter<PreconditionerType>;
 
   OperatorType   op(matrix_free);
   MyOperatorType my_op(op);
@@ -195,6 +215,9 @@ test(const unsigned int fe_degree,
                                                                fe_1D,
                                                                quadrature_face,
                                                                quadrature_1D);
+
+  const auto precon_fdm_no_pre_post =
+    std::make_shared<MyPreconditionerType>(precon_fdm);
 
   const auto precon_diag = std::make_shared<DiagonalMatrix<VectorType>>();
   op.compute_inverse_diagonal(precon_diag->get_vector());
@@ -217,6 +240,23 @@ test(const unsigned int fe_degree,
 
     precon_chebyshev_fdm.initialize(op, chebyshev_ad);
     precon_chebyshev_fdm.estimate_eigenvalues(src);
+  }
+
+  PreconditionChebyshev<OperatorType, VectorType, MyPreconditionerType>
+    precon_chebyshev_fdm_no_pre_post;
+
+  {
+    typename PreconditionChebyshev<OperatorType,
+                                   VectorType,
+                                   MyPreconditionerType>::AdditionalData
+      chebyshev_ad;
+
+    chebyshev_ad.preconditioner = precon_fdm_no_pre_post;
+    chebyshev_ad.constraints.copy_from(constraints);
+    chebyshev_ad.degree = chebyshev_degree;
+
+    precon_chebyshev_fdm_no_pre_post.initialize(op, chebyshev_ad);
+    precon_chebyshev_fdm_no_pre_post.estimate_eigenvalues(src);
   }
 
   PreconditionRelaxation<OperatorType, PreconditionerType>
@@ -429,6 +469,13 @@ test(const unsigned int fe_degree,
     else
       precon_chebyshev_fdm.step(dst, src);
   });
+  // fdm + chebyshev
+  const auto t_fdm_ch_no_pre_post = run([&]() {
+    if (do_vmult)
+      precon_chebyshev_fdm_no_pre_post.vmult(dst, src);
+    else
+      precon_chebyshev_fdm_no_pre_post.step(dst, src);
+  });
   // fdm + relaxation (1.0)
   const auto t_fdm_re_o = run([&]() {
     if (do_vmult)
@@ -527,6 +574,7 @@ test(const unsigned int fe_degree,
 
   table.add_value("t_fdm", t_fdm * chebyshev_degree);
   table.add_value("t_fdm_ch", t_fdm_ch);
+  table.add_value("t_fdm_ch_no_pre_post", t_fdm_ch_no_pre_post);
   table.add_value("t_fdm_re_o", t_fdm_re_o);
   table.add_value("t_fdm_re_n", t_fdm_re_n);
 
