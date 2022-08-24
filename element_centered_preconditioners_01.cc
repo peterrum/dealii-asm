@@ -1167,7 +1167,7 @@ public:
       {
         dst = 0.0; // during cell loop
 
-        src.update_ghost_values(); // TODO: use embedded partitioner
+        update_ghost_values(src, partitioner);
 
         FEEvaluation<dim, -1, 0, 1, Number, VectorizedArrayType> phi(
           matrix_free);
@@ -1201,9 +1201,29 @@ public:
                                                  true);
           }
 
-        dst.compress(VectorOperation::add); // TODO: use embedded partitioner
-        src.zero_out_ghost_values();        //
+        compress(dst, partitioner);
+        src.zero_out_ghost_values();
       }
+  }
+
+  static void
+  update_ghost_values(
+    const VectorType &                                        vec,
+    const std::shared_ptr<const Utilities::MPI::Partitioner> &partitioner)
+  {
+    (void)partitioner; // TODO
+
+    vec.update_ghost_values();
+  }
+
+  static void
+  compress(
+    VectorType &                                              vec,
+    const std::shared_ptr<const Utilities::MPI::Partitioner> &partitioner)
+  {
+    (void)partitioner; // TODO
+
+    vec.compress(VectorOperation::add);
   }
 
   void
