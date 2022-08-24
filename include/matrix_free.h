@@ -265,90 +265,53 @@ public:
         src_ptr = &src_copy;
       }
 
-    if (src_.get_partitioner().get() ==
-        matrix_free.get_vector_partitioner().get())
+    AlignedVector<VectorizedArrayType> src__(
+      Utilities::pow(fe_degree + 2 * n_overlap - 1, dim));
+    AlignedVector<VectorizedArrayType> dst__(
+      Utilities::pow(fe_degree + 2 * n_overlap - 1, dim));
+
+    // update ghost values
+    src_.copy_locally_owned_data_from(*src_ptr);
+    src_.update_ghost_values();
+
+    dst_ = 0.0;
+
+    AlignedVector<VectorizedArrayType> tmp;
+
+    for (unsigned int cell = 0; cell < matrix_free.n_cell_batches(); ++cell)
       {
-        matrix_free.template cell_loop<VectorType, VectorType>(
-          [&](const auto &matrix_free,
-              auto &      dst,
-              const auto &src,
-              const auto  cells) {
-            FECellIntegrator phi_src(matrix_free);
-            FECellIntegrator phi_dst(matrix_free);
+        // 1) gather
+        internal::VectorReader<Number, VectorizedArrayType> reader;
+        constraint_info.read_write_operation(reader,
+                                             src_,
+                                             src__,
+                                             cell_ptr[cell],
+                                             cell_ptr[cell + 1] -
+                                               cell_ptr[cell],
+                                             src__.size(),
+                                             true);
 
-            AlignedVector<VectorizedArrayType> tmp;
+        // 2) cell operation: fast diagonalization method
+        fdm[cell].apply_inverse(make_array_view(dst__.begin(), dst__.end()),
+                                make_array_view(src__.begin(), src__.end()),
+                                tmp);
 
-            for (unsigned int cell = cells.first; cell < cells.second; ++cell)
-              {
-                phi_src.reinit(cell);
-                phi_dst.reinit(cell);
-
-                phi_src.read_dof_values(src);
-                fdm[cell].apply_inverse(
-                  ArrayView<VectorizedArrayType>(phi_dst.begin_dof_values(),
-                                                 phi_dst.dofs_per_cell),
-                  ArrayView<const VectorizedArrayType>(
-                    phi_src.begin_dof_values(), phi_src.dofs_per_cell),
-                  tmp);
-
-                phi_dst.distribute_local_to_global(dst);
-              }
-          },
-          dst,
-          *src_ptr,
-          true);
+        // 3) scatter
+        internal::VectorDistributorLocalToGlobal<Number, VectorizedArrayType>
+          writer;
+        constraint_info.read_write_operation(writer,
+                                             dst_,
+                                             dst__,
+                                             cell_ptr[cell],
+                                             cell_ptr[cell + 1] -
+                                               cell_ptr[cell],
+                                             dst__.size(),
+                                             true);
       }
-    else
-      {
-        AlignedVector<VectorizedArrayType> src__(
-          Utilities::pow(fe_degree + 2 * n_overlap - 1, dim));
-        AlignedVector<VectorizedArrayType> dst__(
-          Utilities::pow(fe_degree + 2 * n_overlap - 1, dim));
 
-        // update ghost values
-        src_.copy_locally_owned_data_from(*src_ptr);
-        src_.update_ghost_values();
-
-        dst_ = 0.0;
-
-        AlignedVector<VectorizedArrayType> tmp;
-
-        for (unsigned int cell = 0; cell < matrix_free.n_cell_batches(); ++cell)
-          {
-            // 1) gather
-            internal::VectorReader<Number, VectorizedArrayType> reader;
-            constraint_info.read_write_operation(reader,
-                                                 src_,
-                                                 src__,
-                                                 cell_ptr[cell],
-                                                 cell_ptr[cell + 1] -
-                                                   cell_ptr[cell],
-                                                 src__.size(),
-                                                 true);
-
-            // 2) cell operation: fast diagonalization method
-            fdm[cell].apply_inverse(make_array_view(dst__.begin(), dst__.end()),
-                                    make_array_view(src__.begin(), src__.end()),
-                                    tmp);
-
-            // 3) scatter
-            internal::VectorDistributorLocalToGlobal<Number,
-                                                     VectorizedArrayType>
-              writer;
-            constraint_info.read_write_operation(writer,
-                                                 dst_,
-                                                 dst__,
-                                                 cell_ptr[cell],
-                                                 cell_ptr[cell + 1] -
-                                                   cell_ptr[cell],
-                                                 dst__.size(),
-                                                 true);
-          }
-
-        // compress
-        dst_.compress(VectorOperation::add);
-        dst.copy_locally_owned_data_from(dst_);
-      }
+    // compress
+    dst_.compress(VectorOperation::add);
+    dst.copy_locally_owned_data_from(dst_);
 
     if (weight_type == Restrictors::WeightingType::post ||
         weight_type == Restrictors::WeightingType::symm)
