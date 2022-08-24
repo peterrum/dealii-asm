@@ -88,7 +88,7 @@ public:
     // ... allocate memory
     constraint_info.reinit(matrix_free.n_physical_cells());
 
-    auto partitioner_for_fdm = matrix_free.get_vector_partitioner();
+    partitioner_for_fdm = matrix_free.get_vector_partitioner();
 
     if (n_overlap > 1)
       {
@@ -236,8 +236,9 @@ public:
   void
   vmult(VectorType &dst, const VectorType &src) const
   {
-    if (src_.get_partitioner().get() ==
-        matrix_free.get_vector_partitioner().get())
+    if ((partitioner_for_fdm.get() ==
+         matrix_free.get_vector_partitioner().get()) &&
+        (partitioner_for_fdm.get() == src.get_partitioner().get()))
       {
         // use matrix-free version
         vmult_internal(dst,
@@ -270,7 +271,9 @@ public:
         const std::function<void(const unsigned int, const unsigned int)>
           &operation_after_matrix_vector_product) const
   {
-    if ((src.get_partitioner().get() == src_.get_partitioner().get()))
+    if ((partitioner_for_fdm.get() ==
+         matrix_free.get_vector_partitioner().get()) &&
+        (partitioner_for_fdm.get() == src.get_partitioner().get()))
       {
         // use matrix-free version
         vmult_internal(dst,
@@ -446,6 +449,8 @@ private:
   const unsigned int                                  fe_degree;
   const unsigned int                                  n_overlap;
   const Restrictors::WeightingType                    weight_type;
+
+  std::shared_ptr<const Utilities::MPI::Partitioner> partitioner_for_fdm;
 
   internal::MatrixFreeFunctions::ConstraintInfo<dim, VectorizedArrayType>
                             constraint_info;
