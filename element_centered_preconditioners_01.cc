@@ -1082,15 +1082,17 @@ public:
 
   void
   set_partitioner(
-    std::shared_ptr<const Utilities::MPI::Partitioner> partitioner) const
+    std::shared_ptr<const Utilities::MPI::Partitioner> vector_partitioner) const
   {
-    if ((partitioner.get() == nullptr) ||
-        (partitioner.get() == matrix_free.get_vector_partitioner().get()))
+    if ((vector_partitioner.get() == nullptr) ||
+        (vector_partitioner.get() ==
+         matrix_free.get_vector_partitioner().get()))
       return; // nothing to do
 
     constraint_info.reinit(matrix_free.n_physical_cells());
 
-    const auto locally_owned_indices = partitioner->locally_owned_range();
+    const auto locally_owned_indices =
+      vector_partitioner->locally_owned_range();
     std::vector<types::global_dof_index> relevant_dofs;
 
     cell_ptr = {0};
@@ -1120,7 +1122,9 @@ public:
                     relevant_dofs.push_back(dof);
                 }
 
-            constraint_info.read_dof_indices(cell_counter, dofs, partitioner);
+            constraint_info.read_dof_indices(cell_counter,
+                                             dofs,
+                                             vector_partitioner);
           }
 
         cell_ptr.push_back(cell_ptr.back() +
@@ -1137,14 +1141,14 @@ public:
     relevant_ghost_indices.add_indices(relevant_dofs.begin(),
                                        relevant_dofs.end());
 
-    auto extended_partitioner = std::make_shared<Utilities::MPI::Partitioner>(
-      locally_owned_indices, partitioner->get_mpi_communicator());
+    auto embedded_partitioner = std::make_shared<Utilities::MPI::Partitioner>(
+      locally_owned_indices, vector_partitioner->get_mpi_communicator());
 
-    extended_partitioner->set_ghost_indices(relevant_ghost_indices,
-                                            partitioner->ghost_indices());
+    embedded_partitioner->set_ghost_indices(
+      relevant_ghost_indices, vector_partitioner->ghost_indices());
 
-    this->partitioner          = partitioner;
-    this->extended_partitioner = extended_partitioner;
+    this->vector_partitioner   = vector_partitioner;
+    this->embedded_partitioner = embedded_partitioner;
   }
 
   void
@@ -1174,7 +1178,7 @@ public:
   void
   vmult(VectorType &dst, const VectorType &src) const
   {
-    if (partitioner == nullptr)
+    if (vector_partitioner == nullptr)
       {
         matrix_free.template cell_loop<VectorType, VectorType>(
           [&](const auto &, auto &dst, const auto &src, const auto cells) {
@@ -1194,7 +1198,7 @@ public:
       {
         dst = 0.0; // during cell loop
 
-        update_ghost_values(src, extended_partitioner, partitioner);
+        update_ghost_values(src, embedded_partitioner, vector_partitioner);
 
         FEEvaluation<dim, -1, 0, 1, Number, VectorizedArrayType> phi(
           matrix_free);
@@ -1228,50 +1232,50 @@ public:
                                                  true);
           }
 
-        compress(dst, extended_partitioner);
+        compress(dst, embedded_partitioner);
         src.zero_out_ghost_values();
       }
   }
 
   static void
-  update_ghost_values(
-    const VectorType &                                        vec,
-    const std::shared_ptr<const Utilities::MPI::Partitioner> &partitioner,
-    const std::shared_ptr<const Utilities::MPI::Partitioner>
-      &extended_partitioner)
+  update_ghost_values(const VectorType &vec,
+                      const std::shared_ptr<const Utilities::MPI::Partitioner>
+                        &embedded_partitioner,
+                      const std::shared_ptr<const Utilities::MPI::Partitioner>
+                        &vector_partitioner)
   {
     dealii::AlignedVector<Number> buffer;
-    buffer.resize_fast(partitioner->n_import_indices()); // reuse?
+    buffer.resize_fast(embedded_partitioner->n_import_indices()); // reuse?
 
     std::vector<MPI_Request> requests;
 
-    partitioner
+    embedded_partitioner
       ->template export_to_ghosted_array_start<Number, MemorySpace::Host>(
         0,
-        dealii::ArrayView<const Number>(vec.begin(),
-                                        partitioner->locally_owned_size()),
+        dealii::ArrayView<const Number>(
+          vec.begin(), embedded_partitioner->locally_owned_size()),
         dealii::ArrayView<Number>(buffer.begin(), buffer.size()),
         dealii::ArrayView<Number>(const_cast<Number *>(vec.begin()) +
-                                    partitioner->locally_owned_size(),
-                                  extended_partitioner->n_ghost_indices()),
+                                    embedded_partitioner->locally_owned_size(),
+                                  vector_partitioner->n_ghost_indices()),
         requests);
 
-    partitioner
+    embedded_partitioner
       ->template export_to_ghosted_array_finish<Number, MemorySpace::Host>(
         dealii::ArrayView<Number>(const_cast<Number *>(vec.begin()) +
-                                    partitioner->locally_owned_size(),
-                                  extended_partitioner->n_ghost_indices()),
+                                    embedded_partitioner->locally_owned_size(),
+                                  vector_partitioner->n_ghost_indices()),
         requests);
 
     vec.set_ghost_state(true);
   }
 
   static void
-  compress(
-    VectorType &                                              vec,
-    const std::shared_ptr<const Utilities::MPI::Partitioner> &partitioner)
+  compress(VectorType &vec,
+           const std::shared_ptr<const Utilities::MPI::Partitioner>
+             &embedded_partitioner)
   {
-    (void)partitioner; // TODO
+    (void)embedded_partitioner; // TODO
 
     vec.compress(VectorOperation::add);
   }
@@ -1284,7 +1288,7 @@ public:
         const std::function<void(const unsigned int, const unsigned int)>
           &operation_after_matrix_vector_product) const
   {
-    AssertThrow(partitioner == nullptr, ExcNotImplemented());
+    AssertThrow(vector_partitioner == nullptr, ExcNotImplemented());
 
     matrix_free.template cell_loop<VectorType, VectorType>(
       [&](const auto &, auto &dst, const auto &src, const auto cells) {
@@ -1355,8 +1359,8 @@ public:
   void
   initialize_dof_vector(VectorType &vec) const
   {
-    if (partitioner)
-      vec.reinit(partitioner);
+    if (vector_partitioner)
+      vec.reinit(vector_partitioner);
     else
       matrix_free.initialize_dof_vector(vec);
   }
@@ -1420,9 +1424,9 @@ private:
   MatrixFree<dim, Number, VectorizedArrayType> matrix_free;
 
   // for own partitioner
-  mutable std::shared_ptr<const Utilities::MPI::Partitioner> partitioner;
+  mutable std::shared_ptr<const Utilities::MPI::Partitioner> vector_partitioner;
   mutable std::shared_ptr<const Utilities::MPI::Partitioner>
-                                    extended_partitioner;
+                                    embedded_partitioner;
   mutable std::vector<unsigned int> cell_ptr;
   mutable internal::MatrixFreeFunctions::ConstraintInfo<dim,
                                                         VectorizedArrayType>
