@@ -1195,16 +1195,18 @@ public:
       }
     else
       {
-        dst = 0.0; // during cell loop
-
-        update_ghost_values(src, embedded_partitioner);
+        update_ghost_values(src, embedded_partitioner); // TODO: overlap?
 
         FECellIntegrator phi(matrix_free);
 
-        const auto &partition_row_index =
-          matrix_free.get_task_info().partition_row_index;
-        const auto &cell_partition_data =
-          matrix_free.get_task_info().cell_partition_data;
+        // data structures needed for zeroing dst
+        const auto &task_info           = matrix_free.get_task_info();
+        const auto &partition_row_index = task_info.partition_row_index;
+        const auto &cell_partition_data = task_info.cell_partition_data;
+        const auto &dof_info            = matrix_free.get_dof_info();
+        const auto &vector_zero_range_list_index =
+          dof_info.vector_zero_range_list_index;
+        const auto &vector_zero_range_list = dof_info.vector_zero_range_list;
 
         for (unsigned int part = 0; part < partition_row_index.size() - 2;
              ++part)
@@ -1212,8 +1214,17 @@ public:
                i < partition_row_index[part + 1];
                ++i)
             {
-              // set dst zero
+              // zero out range in dst
+              for (unsigned int id = vector_zero_range_list_index[i];
+                   id != vector_zero_range_list_index[i + 1];
+                   ++id)
+                std::memset(dst.begin() + vector_zero_range_list[id].first,
+                            0,
+                            (vector_zero_range_list[id].second -
+                             vector_zero_range_list[id].first) *
+                              sizeof(Number));
 
+              // loop over cells
               for (unsigned int cell = cell_partition_data[i];
                    cell < cell_partition_data[i + 1];
                    ++cell)
@@ -1246,7 +1257,7 @@ public:
                 }
             }
 
-        compress(dst, embedded_partitioner);
+        compress(dst, embedded_partitioner); // TODO: overlap?
         src.zero_out_ghost_values();
       }
   }
