@@ -36,6 +36,24 @@ namespace dealii
             this->eigenvectors[d][i][j] *= masks[d][i];
     }
 
+    const std::array<AlignedVector<Number>, dim> &
+    get_eigenvalues() const
+    {
+      return this->eigenvalues;
+    }
+
+    const std::array<Table<2, Number>, dim> &
+    get_eigenvectors() const
+    {
+      return this->eigenvectors;
+    }
+
+    const std::array<AlignedVector<Number>, dim> &
+    get_masks() const
+    {
+      return this->masks;
+    }
+
     void
     apply_inverse(const ArrayView<Number> &      dst,
                   const ArrayView<const Number> &src) const
@@ -362,10 +380,70 @@ namespace dealii
   class MyTensorProductMatrixSymmetricSumCache
   {
   public:
+    struct compartor
+    {
+      bool
+      operator()(
+        const MyTensorProductMatrixSymmetricSum<dim,
+                                                VectorizedArrayType,
+                                                n_rows_1d> &left,
+        const MyTensorProductMatrixSymmetricSum<dim,
+                                                VectorizedArrayType,
+                                                n_rows_1d> &right) const
+      {
+        const auto &eigenvalues_0  = left.get_eigenvalues();
+        const auto &eigenvectors_0 = left.get_eigenvectors();
+        const auto &masks_0        = left.get_masks();
+        const auto &eigenvalues_1  = right.get_eigenvalues();
+        const auto &eigenvectors_1 = right.get_eigenvectors();
+        const auto &masks_1        = right.get_masks();
+
+        const unsigned int NN = VectorizedArrayType::size();
+
+        const auto less = [](const auto a, const auto b) -> bool {
+          return (b - a) > 1e-10; // TODO
+        };
+
+        const auto greater = [](const auto a, const auto b) -> bool {
+          return (a - b) > 1e-10; // TODO
+        };
+
+        for (unsigned int v = 0; v < NN; ++v)
+          for (unsigned int d = 0; d < dim; ++d)
+            for (unsigned int i = 0; i < eigenvalues_0[d].size(); ++i)
+              if (less(eigenvalues_0[d][i][v], eigenvalues_1[d][i][v]))
+                return true;
+              else if (greater(eigenvalues_0[d][i][v], eigenvalues_1[d][i][v]))
+                return false;
+
+        for (unsigned int v = 0; v < NN; ++v)
+          for (unsigned int d = 0; d < dim; ++d)
+            for (unsigned int i = 0; i < eigenvectors_0[d].size(0); ++i)
+              for (unsigned int j = 0; j < eigenvectors_0[d].size(1); ++j)
+                if (less(eigenvectors_0[d][i][j][v],
+                         eigenvectors_1[d][i][j][v]))
+                  return true;
+                else if (greater(eigenvectors_0[d][i][j][v],
+                                 eigenvectors_1[d][i][j][v]))
+                  return false;
+
+        for (unsigned int v = 0; v < NN; ++v)
+          for (unsigned int d = 0; d < dim; ++d)
+            for (unsigned int i = 0; i < masks_0[d].size(); ++i)
+              if (less(masks_0[d][i][v], masks_1[d][i][v]))
+                return true;
+              else if (greater(masks_0[d][i][v], masks_1[d][i][v]))
+                return false;
+
+        return false;
+      }
+    };
+
     void
     reserve(const unsigned int size)
     {
       vector.resize(size);
+      indices.assign(size, numbers::invalid_unsigned_int);
     }
 
     void
@@ -375,12 +453,26 @@ namespace dealii
                                                    n_rows_1d> &matrix)
     {
       vector[index] = matrix;
+
+      const auto ptr = cache.find(matrix);
+
+      if (ptr != cache.end())
+        indices[index] = ptr->second;
+      else
+        {
+          indices[index] = compressed_vector.size();
+          cache[matrix]  = compressed_vector.size();
+          compressed_vector.emplace_back(matrix);
+        }
     }
 
     const MyTensorProductMatrixSymmetricSum<dim, VectorizedArrayType, n_rows_1d>
       &
       get(const unsigned int index) const
     {
+      if (compressed_vector.size() > 0)
+        return compressed_vector[indices[index]];
+
       return vector[index];
     }
 
@@ -389,6 +481,34 @@ namespace dealii
     {
       return MemoryConsumption::memory_consumption(vector);
     }
+
+    void
+    finalize()
+    {
+      cache.clear();
+
+      if (compressed_vector.size() == vector.size())
+        {
+          indices.clear();
+          compressed_vector.clear();
+        }
+
+      // std::cout << compressed_vector.size() << " " << vector.size() <<
+      // std::endl;
+    }
+
+  private:
+    std::map<
+      MyTensorProductMatrixSymmetricSum<dim, VectorizedArrayType, n_rows_1d>,
+      unsigned int,
+      compartor>
+      cache;
+
+    std::vector<unsigned int> indices;
+
+    std::vector<
+      MyTensorProductMatrixSymmetricSum<dim, VectorizedArrayType, n_rows_1d>>
+      compressed_vector;
 
     std::vector<
       MyTensorProductMatrixSymmetricSum<dim, VectorizedArrayType, n_rows_1d>>

@@ -187,6 +187,8 @@ public:
                        matrix_free.n_active_entries_per_cell_batch(cell)));
       }
 
+    fdm.finalize();
+
     constraint_info.finalize();
 
     src_.reinit(partitioner_for_fdm);
