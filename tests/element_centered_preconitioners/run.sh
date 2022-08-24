@@ -23,4 +23,4 @@ do
   fi
 
   #cp __filtered__ ${f::-5}.output
-don
+done
