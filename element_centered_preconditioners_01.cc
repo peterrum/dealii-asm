@@ -1080,8 +1080,6 @@ public:
   set_partitioner(
     std::shared_ptr<const Utilities::MPI::Partitioner> partitioner) const
   {
-    this->partitioner = partitioner;
-
     if ((partitioner.get() == nullptr) ||
         (partitioner.get() == matrix_free.get_vector_partitioner().get()))
       return; // nothing to do
@@ -1148,8 +1146,7 @@ public:
   void
   vmult(VectorType &dst, const VectorType &src) const
   {
-    if ((partitioner.get() == nullptr) ||
-        (partitioner.get() == matrix_free.get_vector_partitioner().get()))
+    if (partitioner == nullptr)
       {
         matrix_free.template cell_loop<VectorType, VectorType>(
           [&](const auto &, auto &dst, const auto &src, const auto cells) {
@@ -1236,10 +1233,7 @@ public:
         const std::function<void(const unsigned int, const unsigned int)>
           &operation_after_matrix_vector_product) const
   {
-    AssertThrow((partitioner.get() == nullptr) ||
-                  (partitioner.get() ==
-                   matrix_free.get_vector_partitioner().get()),
-                ExcNotImplemented());
+    AssertThrow(partitioner == nullptr, ExcNotImplemented());
 
     matrix_free.template cell_loop<VectorType, VectorType>(
       [&](const auto &, auto &dst, const auto &src, const auto cells) {
