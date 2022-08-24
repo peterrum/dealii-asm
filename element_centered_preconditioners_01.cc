@@ -361,14 +361,18 @@ create_fdm_preconditioner(const OperatorType &              op,
         std::min(params.get<unsigned int>("n overlap", 1), fe_degree);
       const auto weight_type = get_weighting_type(params);
 
-
       const unsigned int sub_mesh_approximation =
         params.get<unsigned int>("sub mesh approximation",
                                  OperatorType::dimension);
 
+      const auto reuse_partitioner =
+        params.get<bool>("reuse partitioner", true);
+
       pcout << "    - n overlap:              " << n_overlap << std::endl;
       pcout << "    - sub mesh approximation: " << sub_mesh_approximation
             << std::endl;
+      pcout << "    - reuse partitioner:      "
+            << (reuse_partitioner ? "true" : "false") << std::endl;
       pcout << std::endl;
 
       const unsigned int n_rows = fe_degree + 2 * n_overlap - 1;
@@ -395,7 +399,7 @@ create_fdm_preconditioner(const OperatorType &              op,
       EXPAND_OPERATIONS(OPERATION);
 #undef OPERATION
 
-      if (false /*TODO*/)
+      if (reuse_partitioner)
         op.set_partitioner(precon->get_partitioner());
 
       return precon;
@@ -1083,6 +1087,8 @@ public:
     if ((partitioner.get() == nullptr) ||
         (partitioner.get() == matrix_free.get_vector_partitioner().get()))
       return; // nothing to do
+
+    this->partitioner = partitioner;
 
     constraint_info.reinit(matrix_free.n_physical_cells());
 
