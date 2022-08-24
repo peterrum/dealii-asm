@@ -230,12 +230,16 @@ public:
       weights.reinit(0);
   }
 
+  /**
+   * General matrix-vector product.
+   */
   void
   vmult(VectorType &dst, const VectorType &src) const
   {
     if (src_.get_partitioner().get() ==
         matrix_free.get_vector_partitioner().get())
       {
+        // use matrix-free version
         vmult_internal(dst,
                        src,
                        [&](const auto start_range, const auto end_range) {
@@ -246,9 +250,57 @@ public:
                                          (end_range - start_range));
                        },
                        {});
-
-        return;
       }
+    else
+      {
+        // use general version
+        vmult_internal(dst, src);
+      }
+  }
+
+  /**
+   * Matrix-vector product with pre- and post-operations to be used
+   * by PreconditionRelaxation and PreconditionChebyshev.
+   */
+  virtual void
+  vmult(VectorType &      dst,
+        const VectorType &src,
+        const std::function<void(const unsigned int, const unsigned int)>
+          &operation_before_matrix_vector_product,
+        const std::function<void(const unsigned int, const unsigned int)>
+          &operation_after_matrix_vector_product) const
+  {
+    if ((src.get_partitioner().get() == src_.get_partitioner().get()))
+      {
+        // use matrix-free version
+        vmult_internal(dst,
+                       src,
+                       operation_before_matrix_vector_product,
+                       operation_after_matrix_vector_product);
+      }
+    else
+      {
+        // use general version; note: the pre-operation cleares the content
+        // of dst so that we can skip zeroing
+        operation_before_matrix_vector_product(0, src.locally_owned_size());
+        vmult_internal(dst, src, /*dst is zero*/ true);
+        operation_after_matrix_vector_product(0, src.locally_owned_size());
+      }
+  }
+
+  std::size_t
+  memory_consumption() const
+  {
+    return MemoryConsumption::memory_consumption(fdm);
+  }
+
+private:
+  void
+  vmult_internal(VectorType &      dst,
+                 const VectorType &src,
+                 const bool        dst_is_zero = false) const
+  {
+    (void)dst_is_zero;
 
     const VectorType *src_ptr = &src;
 
@@ -318,36 +370,6 @@ public:
       dst.scale(weights);
   }
 
-  virtual void
-  vmult(VectorType &      dst,
-        const VectorType &src,
-        const std::function<void(const unsigned int, const unsigned int)>
-          &operation_before_matrix_vector_product,
-        const std::function<void(const unsigned int, const unsigned int)>
-          &operation_after_matrix_vector_product) const
-  {
-    if ((src.get_partitioner().get() != src_.get_partitioner().get()))
-      {
-        operation_before_matrix_vector_product(0, src.locally_owned_size());
-        vmult(dst, src);
-        operation_after_matrix_vector_product(0, src.locally_owned_size());
-
-        return;
-      }
-
-    vmult_internal(dst,
-                   src,
-                   operation_before_matrix_vector_product,
-                   operation_after_matrix_vector_product);
-  }
-
-  std::size_t
-  memory_consumption() const
-  {
-    return MemoryConsumption::memory_consumption(fdm);
-  }
-
-private:
   void
   vmult_internal(
     VectorType &      dst,
