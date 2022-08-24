@@ -303,74 +303,89 @@ private:
                  const VectorType &src,
                  const bool        dst_is_zero = false) const
   {
-    (void)dst_is_zero;
+    const bool do_inplace_dst =
+      partitioner_for_fdm.get() == src.get_partitioner().get();
+    const bool do_inplace_src =
+      do_inplace_dst &&
+      ((weight_type == Restrictors::WeightingType::pre ||
+        weight_type == Restrictors::WeightingType::symm) == false);
 
-    const VectorType *src_ptr = &src;
+    auto dst_ptr = do_inplace_dst ? &dst : &this->dst_;
+    auto src_ptr = do_inplace_src ? &src : &this->src_;
 
-    VectorType src_copy;
-
+    // apply weights and copy vector (both optional)
     if (weight_type == Restrictors::WeightingType::pre ||
         weight_type == Restrictors::WeightingType::symm)
       {
-        src_copy.reinit(src);
-        src_copy.copy_locally_owned_data_from(src);
-
-        src_copy.scale(weights);
-
-        src_ptr = &src_copy;
+        DEAL_II_OPENMP_SIMD_PRAGMA
+        for (std::size_t i = 0; i < src.locally_owned_size(); ++i)
+          this->src_.local_element(i) =
+            weights.local_element(i) * src.local_element(i);
       }
-
-    AlignedVector<VectorizedArrayType> src__(
-      Utilities::pow(fe_degree + 2 * n_overlap - 1, dim));
-    AlignedVector<VectorizedArrayType> dst__(
-      Utilities::pow(fe_degree + 2 * n_overlap - 1, dim));
+    else if (do_inplace_src == false)
+      this->src_.copy_locally_owned_data_from(src);
 
     // update ghost values
-    src_.copy_locally_owned_data_from(*src_ptr);
-    src_.update_ghost_values();
+    src_ptr->update_ghost_values();
 
-    dst_ = 0.0;
+    if ((do_inplace_dst == false) || (dst_is_zero == false))
+      *dst_ptr = 0.0;
 
+    // data structures needed for the cell loop
     AlignedVector<VectorizedArrayType> tmp;
 
+    AlignedVector<VectorizedArrayType> src_local(
+      Utilities::pow(fe_degree + 2 * n_overlap - 1, dim));
+    AlignedVector<VectorizedArrayType> dst_local(
+      Utilities::pow(fe_degree + 2 * n_overlap - 1, dim));
+
+    // loop over cells
     for (unsigned int cell = 0; cell < matrix_free.n_cell_batches(); ++cell)
       {
         // 1) gather
         internal::VectorReader<Number, VectorizedArrayType> reader;
         constraint_info.read_write_operation(reader,
-                                             src_,
-                                             src__,
+                                             *src_ptr,
+                                             src_local,
                                              cell_ptr[cell],
                                              cell_ptr[cell + 1] -
                                                cell_ptr[cell],
-                                             src__.size(),
+                                             src_local.size(),
                                              true);
 
         // 2) cell operation: fast diagonalization method
-        fdm[cell].apply_inverse(make_array_view(dst__.begin(), dst__.end()),
-                                make_array_view(src__.begin(), src__.end()),
-                                tmp);
+        fdm[cell].apply_inverse(
+          make_array_view(dst_local.begin(), dst_local.end()),
+          make_array_view(src_local.begin(), src_local.end()),
+          tmp);
 
         // 3) scatter
         internal::VectorDistributorLocalToGlobal<Number, VectorizedArrayType>
           writer;
         constraint_info.read_write_operation(writer,
-                                             dst_,
-                                             dst__,
+                                             *dst_ptr,
+                                             dst_local,
                                              cell_ptr[cell],
                                              cell_ptr[cell + 1] -
                                                cell_ptr[cell],
-                                             dst__.size(),
+                                             dst_local.size(),
                                              true);
       }
 
     // compress
-    dst_.compress(VectorOperation::add);
-    dst.copy_locally_owned_data_from(dst_);
+    dst_ptr->compress(VectorOperation::add);
 
+    // apply weights and copy vector back (both optional)
     if (weight_type == Restrictors::WeightingType::post ||
         weight_type == Restrictors::WeightingType::symm)
-      dst.scale(weights);
+      {
+        DEAL_II_OPENMP_SIMD_PRAGMA
+        for (std::size_t i = 0; i < dst.locally_owned_size(); ++i)
+          dst.local_element(i) =
+            weights.local_element(i) * dst_ptr->local_element(i);
+      }
+    else if (do_inplace_dst == false)
+      dst.copy_locally_owned_data_from(*dst_ptr);
   }
 
   void
