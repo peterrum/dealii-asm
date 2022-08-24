@@ -1201,34 +1201,50 @@ public:
 
         FECellIntegrator phi(matrix_free);
 
-        for (unsigned int cell = 0; cell < matrix_free.n_cell_batches(); ++cell)
-          {
-            phi.reinit(cell);
+        const auto &partition_row_index =
+          matrix_free.get_task_info().partition_row_index;
+        const auto &cell_partition_data =
+          matrix_free.get_task_info().cell_partition_data;
 
-            internal::VectorReader<Number, VectorizedArrayType> reader;
-            constraint_info.read_write_operation(reader,
-                                                 src,
-                                                 phi.begin_dof_values(),
-                                                 cell_ptr[cell],
-                                                 cell_ptr[cell + 1] -
-                                                   cell_ptr[cell],
-                                                 phi.dofs_per_cell,
-                                                 true);
+        for (unsigned int part = 0; part < partition_row_index.size() - 2;
+             ++part)
+          for (unsigned int i = partition_row_index[part];
+               i < partition_row_index[part + 1];
+               ++i)
+            {
+              // set dst zero
 
-            do_cell_integral_local(phi);
+              for (unsigned int cell = cell_partition_data[i];
+                   cell < cell_partition_data[i + 1];
+                   ++cell)
+                {
+                  phi.reinit(cell);
 
-            internal::VectorDistributorLocalToGlobal<Number,
-                                                     VectorizedArrayType>
-              writer;
-            constraint_info.read_write_operation(writer,
-                                                 dst,
-                                                 phi.begin_dof_values(),
-                                                 cell_ptr[cell],
-                                                 cell_ptr[cell + 1] -
-                                                   cell_ptr[cell],
-                                                 phi.dofs_per_cell,
-                                                 true);
-          }
+                  internal::VectorReader<Number, VectorizedArrayType> reader;
+                  constraint_info.read_write_operation(reader,
+                                                       src,
+                                                       phi.begin_dof_values(),
+                                                       cell_ptr[cell],
+                                                       cell_ptr[cell + 1] -
+                                                         cell_ptr[cell],
+                                                       phi.dofs_per_cell,
+                                                       true);
+
+                  do_cell_integral_local(phi);
+
+                  internal::VectorDistributorLocalToGlobal<Number,
+                                                           VectorizedArrayType>
+                    writer;
+                  constraint_info.read_write_operation(writer,
+                                                       dst,
+                                                       phi.begin_dof_values(),
+                                                       cell_ptr[cell],
+                                                       cell_ptr[cell + 1] -
+                                                         cell_ptr[cell],
+                                                       phi.dofs_per_cell,
+                                                       true);
+                }
+            }
 
         compress(dst, embedded_partitioner);
         src.zero_out_ghost_values();
