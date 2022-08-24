@@ -1571,7 +1571,12 @@ test(const boost::property_tree::ptree params, ConvergenceTable &table)
       pcout << "  - epsz: " << epsz << std::endl;
       pcout << std::endl;
 
-      GridGenerator::subdivided_hyper_cube(tria, 6);
+      // replace 6 coarse cells by 3 coarse cells and
+      // an additional refinement to favor GMG (TODO: is this
+      // according to specification)
+      GridGenerator::subdivided_hyper_cube(tria, 3);
+      tria.refine_global(1);
+
       mapping_degree = 3; // TODO
 
       transformation_function = [epsy, epsz](const auto &,
@@ -1686,25 +1691,8 @@ test(const boost::property_tree::ptree params, ConvergenceTable &table)
       std::unique_ptr<MGTransferGlobalCoarsening<dim, LevelVectorType>>
         transfer;
 
-      bool use_pmg = false;
-
       const auto mg_type =
         preconditioner_parameters.get<std::string>("mg type", "h");
-
-      if (mg_type == "h")
-        {
-          use_pmg = false;
-        }
-      else if (mg_type == "p")
-        {
-          use_pmg = true;
-        }
-      else
-        {
-          AssertThrow(false,
-                      ExcMessage("Multigrid variant <" + mg_type +
-                                 "> is not known!"));
-        }
 
       const auto mg_p_sequence_string =
         preconditioner_parameters.get<std::string>("mg p sequence", "bisect");
@@ -1745,9 +1733,27 @@ test(const boost::property_tree::ptree params, ConvergenceTable &table)
         MGTransferGlobalCoarseningTools::create_geometric_coarsening_sequence(
           tria);
 
+      std::vector<std::pair<unsigned int, unsigned int>> levels;
+
+      if (mg_type == "h")
+        {
+          for (unsigned int r = 0; r < mg_triangulations.size(); ++r)
+            levels.emplace_back(r, mg_degress.back());
+        }
+      else if (mg_type == "p")
+        {
+          for (const auto mg_degree : mg_degress)
+            levels.emplace_back(mg_triangulations.size() - 1, mg_degree);
+        }
+      else
+        {
+          AssertThrow(false,
+                      ExcMessage("Multigrid variant <" + mg_type +
+                                 "> is not known!"));
+        }
+
       const unsigned int min_level = 0;
-      const unsigned int max_level =
-        (use_pmg ? mg_degress.size() : mg_triangulations.size()) - 1;
+      const unsigned int max_level = levels.size() - 1;
 
       mg_dof_handlers.resize(min_level, max_level);
       mg_constraints.resize(min_level, max_level);
@@ -1756,14 +1762,11 @@ test(const boost::property_tree::ptree params, ConvergenceTable &table)
 
       for (unsigned int l = min_level; l <= max_level; ++l)
         {
-          const unsigned int mg_fe_degree = use_pmg ? mg_degress[l] : fe_degree;
+          const unsigned int mg_fe_degree = levels[l].second;
           const FE_Q<dim>    mg_fe(mg_fe_degree);
-          const auto &       mg_tria = use_pmg ?
-                                         static_cast<Triangulation<dim> &>(tria) :
-                                         *mg_triangulations[l];
+          const auto &       mg_tria = *mg_triangulations[levels[l].first];
 
           const QGauss<dim> mg_quadrature(mg_fe_degree + 1);
-
 
           mg_mapping[l] = std::make_shared<MappingQCache<dim>>(mapping_degree);
 
