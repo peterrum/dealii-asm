@@ -1079,6 +1079,44 @@ public:
     std::shared_ptr<const Utilities::MPI::Partitioner> partitioner) const
   {
     this->partitioner = partitioner;
+
+    if ((partitioner.get() == nullptr) ||
+        (partitioner.get() == matrix_free.get_vector_partitioner().get()))
+      return; // nothing to do
+
+    constraint_info.reinit(matrix_free.n_physical_cells());
+
+    cell_ptr = {0};
+    for (unsigned int cell = 0, cell_counter = 0;
+         cell < matrix_free.n_cell_batches();
+         ++cell)
+      {
+        for (unsigned int v = 0;
+             v < matrix_free.n_active_entries_per_cell_batch(cell);
+             ++v, ++cell_counter)
+          {
+            const auto cell_iterator = matrix_free.get_cell_iterator(cell, v);
+
+            const auto cells =
+              dealii::GridTools::extract_all_surrounding_cells_cartesian<dim>(
+                cell_iterator, 0);
+
+            auto dofs = dealii::DoFTools::get_dof_indices_cell_with_overlap(
+              dof_handler, cells, 1, false);
+
+            for (auto &dof : dofs)
+              if (dof != numbers::invalid_unsigned_int &&
+                  constraints.is_constrained(dof))
+                dof = numbers::invalid_unsigned_int;
+
+            constraint_info.read_dof_indices(cell_counter, dofs, partitioner);
+          }
+
+        cell_ptr.push_back(cell_ptr.back() +
+                           matrix_free.n_active_entries_per_cell_batch(cell));
+      }
+
+    constraint_info.finalize();
   }
 
   void
@@ -1127,7 +1165,44 @@ public:
       }
     else
       {
-        AssertThrow(false, ExcNotImplemented());
+        dst = 0.0; // during cell loop
+
+        src.update_ghost_values(); // TODO: use embedded partitioner
+
+        FEEvaluation<dim, -1, 0, 1, Number, VectorizedArrayType> phi(
+          matrix_free);
+
+        for (unsigned int cell = 0; cell < matrix_free.n_cell_batches(); ++cell)
+          {
+            phi.reinit(cell);
+
+            internal::VectorReader<Number, VectorizedArrayType> reader;
+            constraint_info.read_write_operation(reader,
+                                                 src,
+                                                 phi.begin_dof_values(),
+                                                 cell_ptr[cell],
+                                                 cell_ptr[cell + 1] -
+                                                   cell_ptr[cell],
+                                                 phi.dofs_per_cell,
+                                                 true);
+
+            do_cell_integral_local(phi);
+
+            internal::VectorDistributorLocalToGlobal<Number,
+                                                     VectorizedArrayType>
+              writer;
+            constraint_info.read_write_operation(writer,
+                                                 dst,
+                                                 phi.begin_dof_values(),
+                                                 cell_ptr[cell],
+                                                 cell_ptr[cell + 1] -
+                                                   cell_ptr[cell],
+                                                 phi.dofs_per_cell,
+                                                 true);
+          }
+
+        dst.compress(VectorOperation::add); // TODO: use embedded partitioner
+        src.zero_out_ghost_values();        //
       }
   }
 
@@ -1275,8 +1350,14 @@ private:
   AffineConstraints<Number> constraints;
   Quadrature<dim>           quadrature;
 
-  MatrixFree<dim, Number, VectorizedArrayType>               matrix_free;
+  MatrixFree<dim, Number, VectorizedArrayType> matrix_free;
+
+  // for own partitioner
   mutable std::shared_ptr<const Utilities::MPI::Partitioner> partitioner;
+  mutable std::vector<unsigned int>                          cell_ptr;
+  mutable internal::MatrixFreeFunctions::ConstraintInfo<dim,
+                                                        VectorizedArrayType>
+    constraint_info;
 
   ConditionalOStream pcout;
 
