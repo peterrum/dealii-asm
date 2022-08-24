@@ -1745,6 +1745,22 @@ test(const boost::property_tree::ptree params, ConvergenceTable &table)
           for (const auto mg_degree : mg_degress)
             levels.emplace_back(mg_triangulations.size() - 1, mg_degree);
         }
+      else if (mg_type == "hp")
+        {
+          for (const auto mg_degree : mg_degress)
+            levels.emplace_back(0, mg_degree);
+
+          for (unsigned int r = 0; r < mg_triangulations.size(); ++r)
+            levels.emplace_back(r, mg_degress.back());
+        }
+      else if (mg_type == "ph")
+        {
+          for (unsigned int r = 0; r < mg_triangulations.size(); ++r)
+            levels.emplace_back(r, mg_degress.front());
+
+          for (const auto mg_degree : mg_degress)
+            levels.emplace_back(mg_triangulations.size() - 1, mg_degree);
+        }
       else
         {
           AssertThrow(false,
