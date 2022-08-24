@@ -1088,9 +1088,10 @@ public:
         (partitioner.get() == matrix_free.get_vector_partitioner().get()))
       return; // nothing to do
 
-    this->partitioner = partitioner;
-
     constraint_info.reinit(matrix_free.n_physical_cells());
+
+    const auto locally_owned_indices = partitioner->locally_owned_range();
+    std::vector<types::global_dof_index> relevant_dofs;
 
     cell_ptr = {0};
     for (unsigned int cell = 0, cell_counter = 0;
@@ -1114,6 +1115,8 @@ public:
               if (dof != numbers::invalid_unsigned_int &&
                   constraints.is_constrained(dof))
                 dof = numbers::invalid_unsigned_int;
+              else if (locally_owned_indices.is_element(dof) == false)
+                relevant_dofs.push_back(dof);
 
             constraint_info.read_dof_indices(cell_counter, dofs, partitioner);
           }
@@ -1123,6 +1126,23 @@ public:
       }
 
     constraint_info.finalize();
+
+    std::sort(relevant_dofs.begin(), relevant_dofs.end());
+    relevant_dofs.erase(std::unique(relevant_dofs.begin(), relevant_dofs.end()),
+                        relevant_dofs.end());
+
+    IndexSet relevant_ghost_indices(locally_owned_indices.size());
+    relevant_ghost_indices.add_indices(relevant_dofs.begin(),
+                                       relevant_dofs.end());
+
+    auto extended_partitioner = std::make_shared<Utilities::MPI::Partitioner>(
+      locally_owned_indices, partitioner->get_mpi_communicator());
+
+    extended_partitioner->set_ghost_indices(relevant_ghost_indices,
+                                            partitioner->ghost_indices());
+
+    this->partitioner          = partitioner;
+    this->extended_partitioner = extended_partitioner;
   }
 
   void
@@ -1172,7 +1192,7 @@ public:
       {
         dst = 0.0; // during cell loop
 
-        update_ghost_values(src, partitioner);
+        update_ghost_values(src, extended_partitioner);
 
         FEEvaluation<dim, -1, 0, 1, Number, VectorizedArrayType> phi(
           matrix_free);
@@ -1206,7 +1226,7 @@ public:
                                                  true);
           }
 
-        compress(dst, partitioner);
+        compress(dst, extended_partitioner);
         src.zero_out_ghost_values();
       }
   }
@@ -1376,7 +1396,9 @@ private:
 
   // for own partitioner
   mutable std::shared_ptr<const Utilities::MPI::Partitioner> partitioner;
-  mutable std::vector<unsigned int>                          cell_ptr;
+  mutable std::shared_ptr<const Utilities::MPI::Partitioner>
+                                    extended_partitioner;
+  mutable std::vector<unsigned int> cell_ptr;
   mutable internal::MatrixFreeFunctions::ConstraintInfo<dim,
                                                         VectorizedArrayType>
     constraint_info;
