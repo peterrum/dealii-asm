@@ -136,7 +136,7 @@ public:
           locally_owned_dofs, is_ghost_indices, dof_handler.get_communicator());
       }
 
-    fdm.resize(matrix_free.n_cell_batches());
+    fdm.reserve(matrix_free.n_cell_batches());
 
     const auto harmonic_patch_extend =
       GridTools::compute_harmonic_patch_extend(mapping,
@@ -180,9 +180,11 @@ public:
         cell_ptr.push_back(cell_ptr.back() +
                            matrix_free.n_active_entries_per_cell_batch(cell));
 
-        fdm[cell] = MyTensorProductMatrixSymmetricSum<dim, Number, n_rows_1d>::
-          template transpose<VectorizedArrayType::size()>(
-            scalar_fdm, matrix_free.n_active_entries_per_cell_batch(cell));
+        fdm.insert(cell,
+                   MyTensorProductMatrixSymmetricSum<dim, Number, n_rows_1d>::
+                     template transpose<VectorizedArrayType::size()>(
+                       scalar_fdm,
+                       matrix_free.n_active_entries_per_cell_batch(cell)));
       }
 
     constraint_info.finalize();
@@ -297,7 +299,7 @@ public:
   std::size_t
   memory_consumption() const
   {
-    return MemoryConsumption::memory_consumption(fdm);
+    return fdm.memory_consumption();
   }
 
   std::shared_ptr<const Utilities::MPI::Partitioner>
@@ -388,7 +390,7 @@ private:
             src_local[i] *= weights_local[i];
 
         // 3) cell operation: fast diagonalization method
-        fdm[cell].apply_inverse(
+        fdm.get(cell).apply_inverse(
           make_array_view(dst_local.begin(), dst_local.end()),
           make_array_view(src_local.begin(), src_local.end()),
           tmp);
@@ -465,7 +467,7 @@ private:
                     phi_weights.begin_dof_values()[i];
               }
 
-            fdm[cell].apply_inverse(
+            fdm.get(cell).apply_inverse(
               ArrayView<VectorizedArrayType>(phi_dst.begin_dof_values(),
                                              phi_dst.dofs_per_cell),
               ArrayView<const VectorizedArrayType>(phi_src.begin_dof_values(),
@@ -512,8 +514,7 @@ private:
                             constraint_info;
   std::vector<unsigned int> cell_ptr;
 
-  std::vector<
-    MyTensorProductMatrixSymmetricSum<dim, VectorizedArrayType, n_rows_1d>>
+  MyTensorProductMatrixSymmetricSumCache<dim, VectorizedArrayType, n_rows_1d>
     fdm;
 
   mutable VectorType src_;

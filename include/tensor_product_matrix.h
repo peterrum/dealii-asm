@@ -358,4 +358,41 @@ namespace dealii
     return fdm;
   }
 
+  template <int dim, typename VectorizedArrayType, int n_rows_1d = -1>
+  class MyTensorProductMatrixSymmetricSumCache
+  {
+  public:
+    void
+    reserve(const unsigned int size)
+    {
+      vector.resize(size);
+    }
+
+    void
+    insert(const unsigned int                                  index,
+           const MyTensorProductMatrixSymmetricSum<dim,
+                                                   VectorizedArrayType,
+                                                   n_rows_1d> &matrix)
+    {
+      vector[index] = matrix;
+    }
+
+    const MyTensorProductMatrixSymmetricSum<dim, VectorizedArrayType, n_rows_1d>
+      &
+      get(const unsigned int index) const
+    {
+      return vector[index];
+    }
+
+    std::size_t
+    memory_consumption() const
+    {
+      return MemoryConsumption::memory_consumption(vector);
+    }
+
+    std::vector<
+      MyTensorProductMatrixSymmetricSum<dim, VectorizedArrayType, n_rows_1d>>
+      vector;
+  };
+
 } // namespace dealii
