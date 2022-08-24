@@ -371,7 +371,7 @@ create_fdm_preconditioner(const OperatorType &              op,
 
       const unsigned int n_rows = fe_degree + 2 * n_overlap - 1;
 
-      std::shared_ptr<const ASPoissonPreconditionerBase<VectorType>> prcon;
+      std::shared_ptr<const ASPoissonPreconditionerBase<VectorType>> precon;
 
 #define OPERATION(c, d)                                                  \
   if (c == -1)                                                           \
@@ -379,7 +379,7 @@ create_fdm_preconditioner(const OperatorType &              op,
                "> is not precompiled!"                                   \
           << std::endl;                                                  \
                                                                          \
-  prcon = std::make_shared<                                              \
+  precon = std::make_shared<                                             \
     const ASPoissonPreconditioner<dim, Number, VectorizedArrayType, c>>( \
     matrix_free,                                                         \
     n_overlap,                                                           \
@@ -393,7 +393,10 @@ create_fdm_preconditioner(const OperatorType &              op,
       EXPAND_OPERATIONS(OPERATION);
 #undef OPERATION
 
-      return prcon;
+      if (false /*TODO*/)
+        op.set_partitioner(precon->get_partitioner());
+
+      return precon;
     }
   else
     {
@@ -1072,6 +1075,13 @@ public:
   }
 
   void
+  set_partitioner(
+    std::shared_ptr<const Utilities::MPI::Partitioner> partitioner) const
+  {
+    this->partitioner = partitioner;
+  }
+
+  void
   do_cell_integral_local(FECellIntegrator &integrator) const
   {
     integrator.evaluate(EvaluationFlags::gradients);
@@ -1098,19 +1108,27 @@ public:
   void
   vmult(VectorType &dst, const VectorType &src) const
   {
-    matrix_free.template cell_loop<VectorType, VectorType>(
-      [&](const auto &, auto &dst, const auto &src, const auto cells) {
-        FEEvaluation<dim, -1, 0, 1, Number, VectorizedArrayType> phi(
-          matrix_free);
-        for (unsigned int cell = cells.first; cell < cells.second; ++cell)
-          {
-            phi.reinit(cell);
-            do_cell_integral_global(phi, dst, src);
-          }
-      },
-      dst,
-      src,
-      true);
+    if ((partitioner.get() == nullptr) ||
+        (partitioner.get() == matrix_free.get_vector_partitioner().get()))
+      {
+        matrix_free.template cell_loop<VectorType, VectorType>(
+          [&](const auto &, auto &dst, const auto &src, const auto cells) {
+            FEEvaluation<dim, -1, 0, 1, Number, VectorizedArrayType> phi(
+              matrix_free);
+            for (unsigned int cell = cells.first; cell < cells.second; ++cell)
+              {
+                phi.reinit(cell);
+                do_cell_integral_global(phi, dst, src);
+              }
+          },
+          dst,
+          src,
+          true);
+      }
+    else
+      {
+        AssertThrow(false, ExcNotImplemented());
+      }
   }
 
   void
@@ -1121,6 +1139,11 @@ public:
         const std::function<void(const unsigned int, const unsigned int)>
           &operation_after_matrix_vector_product) const
   {
+    AssertThrow((partitioner.get() == nullptr) ||
+                  (partitioner.get() ==
+                   matrix_free.get_vector_partitioner().get()),
+                ExcNotImplemented());
+
     matrix_free.template cell_loop<VectorType, VectorType>(
       [&](const auto &, auto &dst, const auto &src, const auto cells) {
         FEEvaluation<dim, -1, 0, 1, Number, VectorizedArrayType> phi(
@@ -1190,7 +1213,10 @@ public:
   void
   initialize_dof_vector(VectorType &vec) const
   {
-    matrix_free.initialize_dof_vector(vec);
+    if (partitioner)
+      vec.reinit(partitioner);
+    else
+      matrix_free.initialize_dof_vector(vec);
   }
 
   const AffineConstraints<Number> &
@@ -1249,7 +1275,8 @@ private:
   AffineConstraints<Number> constraints;
   Quadrature<dim>           quadrature;
 
-  MatrixFree<dim, Number, VectorizedArrayType> matrix_free;
+  MatrixFree<dim, Number, VectorizedArrayType>               matrix_free;
+  mutable std::shared_ptr<const Utilities::MPI::Partitioner> partitioner;
 
   ConditionalOStream pcout;
 

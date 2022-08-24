@@ -41,6 +41,9 @@ public:
     AssertThrow(false, ExcNotImplemented());
   }
 
+  virtual std::shared_ptr<const Utilities::MPI::Partitioner>
+  get_partitioner() const = 0;
+
   virtual std::size_t
   memory_consumption() const
   {
@@ -295,6 +298,12 @@ public:
   memory_consumption() const
   {
     return MemoryConsumption::memory_consumption(fdm);
+  }
+
+  std::shared_ptr<const Utilities::MPI::Partitioner>
+  get_partitioner() const final
+  {
+    return partitioner_for_fdm;
   }
 
 private:
