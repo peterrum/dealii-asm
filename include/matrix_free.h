@@ -233,6 +233,23 @@ public:
   void
   vmult(VectorType &dst, const VectorType &src) const
   {
+    if (src_.get_partitioner().get() ==
+        matrix_free.get_vector_partitioner().get())
+      {
+        vmult_internal(dst,
+                       src,
+                       [&](const auto start_range, const auto end_range) {
+                         if (end_range > start_range)
+                           std::memset(dst.begin() + start_range,
+                                       0,
+                                       sizeof(Number) *
+                                         (end_range - start_range));
+                       },
+                       {});
+
+        return;
+      }
+
     const VectorType *src_ptr = &src;
 
     VectorType src_copy;
