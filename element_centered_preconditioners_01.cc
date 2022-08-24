@@ -1182,8 +1182,7 @@ public:
       {
         matrix_free.template cell_loop<VectorType, VectorType>(
           [&](const auto &, auto &dst, const auto &src, const auto cells) {
-            FEEvaluation<dim, -1, 0, 1, Number, VectorizedArrayType> phi(
-              matrix_free);
+            FECellIntegrator phi(matrix_free);
             for (unsigned int cell = cells.first; cell < cells.second; ++cell)
               {
                 phi.reinit(cell);
@@ -1200,8 +1199,7 @@ public:
 
         update_ghost_values(src, embedded_partitioner);
 
-        FEEvaluation<dim, -1, 0, 1, Number, VectorizedArrayType> phi(
-          matrix_free);
+        FECellIntegrator phi(matrix_free);
 
         for (unsigned int cell = 0; cell < matrix_free.n_cell_batches(); ++cell)
           {
@@ -1316,8 +1314,7 @@ public:
 
     matrix_free.template cell_loop<VectorType, VectorType>(
       [&](const auto &, auto &dst, const auto &src, const auto cells) {
-        FEEvaluation<dim, -1, 0, 1, Number, VectorizedArrayType> phi(
-          matrix_free);
+        FECellIntegrator phi(matrix_free);
         for (unsigned int cell = cells.first; cell < cells.second; ++cell)
           {
             phi.reinit(cell);
