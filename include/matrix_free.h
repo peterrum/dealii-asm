@@ -303,19 +303,22 @@ private:
                  const VectorType &src,
                  const bool        dst_is_zero = false) const
   {
+    const bool do_weights_global = true;
+
     const bool do_inplace_dst =
       partitioner_for_fdm.get() == src.get_partitioner().get();
     const bool do_inplace_src =
       do_inplace_dst &&
-      ((weight_type == Restrictors::WeightingType::pre ||
-        weight_type == Restrictors::WeightingType::symm) == false);
+      ((do_weights_global == false) ||
+       ((weight_type == Restrictors::WeightingType::pre ||
+         weight_type == Restrictors::WeightingType::symm) == false));
 
-    auto dst_ptr = do_inplace_dst ? &dst : &this->dst_;
-    auto src_ptr = do_inplace_src ? &src : &this->src_;
+    auto &      dst_ptr = do_inplace_dst ? dst : this->dst_;
+    const auto &src_ptr = do_inplace_src ? src : this->src_;
 
     // apply weights and copy vector (both optional)
-    if (weight_type == Restrictors::WeightingType::pre ||
-        weight_type == Restrictors::WeightingType::symm)
+    if (do_weights_global && (weight_type == Restrictors::WeightingType::pre ||
+                              weight_type == Restrictors::WeightingType::symm))
       {
         DEAL_II_OPENMP_SIMD_PRAGMA
         for (std::size_t i = 0; i < src.locally_owned_size(); ++i)
@@ -326,10 +329,10 @@ private:
       this->src_.copy_locally_owned_data_from(src);
 
     // update ghost values
-    src_ptr->update_ghost_values();
+    src_ptr.update_ghost_values();
 
     if ((do_inplace_dst == false) || (dst_is_zero == false))
-      *dst_ptr = 0.0;
+      dst_ptr = 0.0;
 
     // data structures needed for the cell loop
     AlignedVector<VectorizedArrayType> tmp;
@@ -345,7 +348,7 @@ private:
         // 1) gather
         internal::VectorReader<Number, VectorizedArrayType> reader;
         constraint_info.read_write_operation(reader,
-                                             *src_ptr,
+                                             src_ptr,
                                              src_local,
                                              cell_ptr[cell],
                                              cell_ptr[cell + 1] -
@@ -363,7 +366,7 @@ private:
         internal::VectorDistributorLocalToGlobal<Number, VectorizedArrayType>
           writer;
         constraint_info.read_write_operation(writer,
-                                             *dst_ptr,
+                                             dst_ptr,
                                              dst_local,
                                              cell_ptr[cell],
                                              cell_ptr[cell + 1] -
@@ -373,19 +376,19 @@ private:
       }
 
     // compress
-    dst_ptr->compress(VectorOperation::add);
+    dst_ptr.compress(VectorOperation::add);
 
     // apply weights and copy vector back (both optional)
-    if (weight_type == Restrictors::WeightingType::post ||
-        weight_type == Restrictors::WeightingType::symm)
+    if (do_weights_global && (weight_type == Restrictors::WeightingType::post ||
+                              weight_type == Restrictors::WeightingType::symm))
       {
         DEAL_II_OPENMP_SIMD_PRAGMA
         for (std::size_t i = 0; i < dst.locally_owned_size(); ++i)
           dst.local_element(i) =
-            weights.local_element(i) * dst_ptr->local_element(i);
+            weights.local_element(i) * dst_ptr.local_element(i);
       }
     else if (do_inplace_dst == false)
-      dst.copy_locally_owned_data_from(*dst_ptr);
+      dst.copy_locally_owned_data_from(dst_ptr);
   }
 
   void
