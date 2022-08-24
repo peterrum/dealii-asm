@@ -46,7 +46,7 @@
     - degree: 1
     - min ev: 1
     - max ev: 1.2
-    - omega:  0.909091
+    - omega:  0.90909
 
 - Setting up smoother on level 2
 
