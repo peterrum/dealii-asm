@@ -1198,7 +1198,7 @@ public:
       {
         dst = 0.0; // during cell loop
 
-        update_ghost_values(src, embedded_partitioner, vector_partitioner);
+        update_ghost_values(src, embedded_partitioner);
 
         FEEvaluation<dim, -1, 0, 1, Number, VectorizedArrayType> phi(
           matrix_free);
@@ -1240,10 +1240,10 @@ public:
   static void
   update_ghost_values(const VectorType &vec,
                       const std::shared_ptr<const Utilities::MPI::Partitioner>
-                        &embedded_partitioner,
-                      const std::shared_ptr<const Utilities::MPI::Partitioner>
-                        &vector_partitioner)
+                        &embedded_partitioner)
   {
+    const auto &vector_partitioner = vec.get_partitioner();
+
     dealii::AlignedVector<Number> buffer;
     buffer.resize_fast(embedded_partitioner->n_import_indices()); // reuse?
 
@@ -1275,9 +1275,33 @@ public:
            const std::shared_ptr<const Utilities::MPI::Partitioner>
              &embedded_partitioner)
   {
-    (void)embedded_partitioner; // TODO
+    const auto &vector_partitioner = vec.get_partitioner();
 
-    vec.compress(VectorOperation::add);
+    dealii::AlignedVector<Number> buffer;
+    buffer.resize_fast(embedded_partitioner->n_import_indices()); // reuse?
+
+    std::vector<MPI_Request> requests;
+
+    embedded_partitioner
+      ->template import_from_ghosted_array_start<Number, MemorySpace::Host>(
+        dealii::VectorOperation::add,
+        0,
+        dealii::ArrayView<Number>(const_cast<Number *>(vec.begin()) +
+                                    embedded_partitioner->locally_owned_size(),
+                                  vector_partitioner->n_ghost_indices()),
+        dealii::ArrayView<Number>(buffer.begin(), buffer.size()),
+        requests);
+
+    embedded_partitioner
+      ->template import_from_ghosted_array_finish<Number, MemorySpace::Host>(
+        dealii::VectorOperation::add,
+        dealii::ArrayView<const Number>(buffer.begin(), buffer.size()),
+        dealii::ArrayView<Number>(vec.begin(),
+                                  embedded_partitioner->locally_owned_size()),
+        dealii::ArrayView<Number>(const_cast<Number *>(vec.begin()) +
+                                    embedded_partitioner->locally_owned_size(),
+                                  vector_partitioner->n_ghost_indices()),
+        requests);
   }
 
   void
