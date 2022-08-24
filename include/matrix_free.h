@@ -60,6 +60,9 @@ class ASPoissonPreconditioner : public ASPoissonPreconditionerBase<
 public:
   using VectorType = LinearAlgebra::distributed::Vector<Number>;
 
+  using FECellIntegrator =
+    FEEvaluation<dim, -1, 0, 1, Number, VectorizedArrayType>;
+
   ASPoissonPreconditioner(
     const MatrixFree<dim, Number, VectorizedArrayType> &matrix_free,
     const unsigned int                                  n_overlap,
@@ -253,10 +256,8 @@ public:
               auto &      dst,
               const auto &src,
               const auto  cells) {
-            FEEvaluation<dim, -1, 0, 1, Number, VectorizedArrayType> phi_src(
-              matrix_free);
-            FEEvaluation<dim, -1, 0, 1, Number, VectorizedArrayType> phi_dst(
-              matrix_free);
+            FECellIntegrator phi_src(matrix_free);
+            FECellIntegrator phi_dst(matrix_free);
 
             AlignedVector<VectorizedArrayType> tmp;
 
@@ -354,15 +355,34 @@ public:
         return;
       }
 
+    vmult_internal(dst,
+                   src,
+                   operation_before_matrix_vector_product,
+                   operation_after_matrix_vector_product);
+  }
+
+  std::size_t
+  memory_consumption() const
+  {
+    return MemoryConsumption::memory_consumption(fdm);
+  }
+
+private:
+  void
+  vmult_internal(
+    VectorType &      dst,
+    const VectorType &src,
+    const std::function<void(const unsigned int, const unsigned int)>
+      &operation_before_matrix_vector_product,
+    const std::function<void(const unsigned int, const unsigned int)>
+      &operation_after_matrix_vector_product) const
+  {
     matrix_free.template cell_loop<VectorType, VectorType>(
       [&](
         const auto &matrix_free, auto &dst, const auto &src, const auto cells) {
-        FEEvaluation<dim, -1, 0, 1, Number, VectorizedArrayType> phi_src(
-          matrix_free);
-        FEEvaluation<dim, -1, 0, 1, Number, VectorizedArrayType> phi_dst(
-          matrix_free);
-        FEEvaluation<dim, -1, 0, 1, Number, VectorizedArrayType> phi_weights(
-          matrix_free);
+        FECellIntegrator phi_src(matrix_free);
+        FECellIntegrator phi_dst(matrix_free);
+        FECellIntegrator phi_weights(matrix_free);
 
         AlignedVector<VectorizedArrayType> tmp;
 
@@ -415,17 +435,11 @@ public:
               dst_ptr[i] *= weights_ptr[i];
           }
 
-        operation_after_matrix_vector_product(begin, end);
+        if (operation_after_matrix_vector_product)
+          operation_after_matrix_vector_product(begin, end);
       });
   }
 
-  std::size_t
-  memory_consumption() const
-  {
-    return MemoryConsumption::memory_consumption(fdm);
-  }
-
-private:
   const MatrixFree<dim, Number, VectorizedArrayType> &matrix_free;
   const unsigned int                                  fe_degree;
   const unsigned int                                  n_overlap;
