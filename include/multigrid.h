@@ -134,19 +134,7 @@ public:
     , min_level(mg_dof_handlers.min_level())
     , max_level(mg_dof_handlers.max_level())
     , transfers(min_level, max_level)
-  {
-    // setup transfer operators
-    for (auto l = min_level; l < max_level; ++l)
-      transfers[l + 1].reinit(*mg_dof_handlers[l + 1],
-                              *mg_dof_handlers[l],
-                              *mg_constraints[l + 1],
-                              *mg_constraints[l]);
-
-    transfer =
-      std::make_shared<MGTransferType>(transfers, [&](const auto l, auto &vec) {
-        this->mg_operators[l]->initialize_dof_vector(vec);
-      });
-  }
+  {}
 
   virtual SmootherType
   create_mg_level_smoother(unsigned int           level,
@@ -243,6 +231,19 @@ public:
 
     // wrap level operators
     mg_matrix = std::make_unique<mg::Matrix<VectorType>>(mg_operators);
+
+    // setup transfer operators (note: we do it here, since the smoothers
+    // might change the ghosting of the level operators)
+    for (auto l = min_level; l < max_level; ++l)
+      transfers[l + 1].reinit(*mg_dof_handlers[l + 1],
+                              *mg_dof_handlers[l],
+                              *mg_constraints[l + 1],
+                              *mg_constraints[l]);
+
+    transfer =
+      std::make_shared<MGTransferType>(transfers, [&](const auto l, auto &vec) {
+        this->mg_operators[l]->initialize_dof_vector(vec);
+      });
 
     // create multigrid algorithm (put level operators, smoothers, transfer
     // operators and smoothers together)
