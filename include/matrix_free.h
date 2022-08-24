@@ -212,7 +212,7 @@ public:
 
       dst_.compress(VectorOperation::add);
 
-      matrix_free.initialize_dof_vector(weights);
+      weights.reinit(partitioner_for_fdm);
 
       weights.copy_locally_owned_data_from(dst_);
 
@@ -303,7 +303,7 @@ private:
                  const VectorType &src,
                  const bool        dst_is_zero = false) const
   {
-    const bool do_weights_global = true;
+    const bool do_weights_global = true; // TODO
 
     const bool do_inplace_dst =
       partitioner_for_fdm.get() == src.get_partitioner().get();
@@ -341,11 +341,16 @@ private:
       Utilities::pow(fe_degree + 2 * n_overlap - 1, dim));
     AlignedVector<VectorizedArrayType> dst_local(
       Utilities::pow(fe_degree + 2 * n_overlap - 1, dim));
+    AlignedVector<VectorizedArrayType> weights_local;
+
+    if ((do_weights_global == false) &&
+        (weight_type == Restrictors::WeightingType::none))
+      weights_local.resize(Utilities::pow(fe_degree + 2 * n_overlap - 1, dim));
 
     // loop over cells
     for (unsigned int cell = 0; cell < matrix_free.n_cell_batches(); ++cell)
       {
-        // 1) gather
+        // 1) gather src and weights (optional)
         internal::VectorReader<Number, VectorizedArrayType> reader;
         constraint_info.read_write_operation(reader,
                                              src_ptr,
@@ -356,13 +361,37 @@ private:
                                              src_local.size(),
                                              true);
 
-        // 2) cell operation: fast diagonalization method
+        if (weights_local.size() > 0)
+          constraint_info.read_write_operation(reader,
+                                               weights,
+                                               weights_local,
+                                               cell_ptr[cell],
+                                               cell_ptr[cell + 1] -
+                                                 cell_ptr[cell],
+                                               weights_local.size(),
+                                               true);
+
+        // 2) apply weights (optional)
+        if ((weights_local.size() > 0) &&
+            (weight_type == Restrictors::WeightingType::pre ||
+             weight_type == Restrictors::WeightingType::symm))
+          for (unsigned int i = 0; i < weights_local.size(); ++i)
+            src_local[i] *= weights_local[i];
+
+        // 3) cell operation: fast diagonalization method
         fdm[cell].apply_inverse(
           make_array_view(dst_local.begin(), dst_local.end()),
           make_array_view(src_local.begin(), src_local.end()),
           tmp);
 
-        // 3) scatter
+        // 4) apply weights (optional)
+        if ((weights_local.size() > 0) &&
+            (weight_type == Restrictors::WeightingType::post ||
+             weight_type == Restrictors::WeightingType::symm))
+          for (unsigned int i = 0; i < weights_local.size(); ++i)
+            dst_local[i] *= weights_local[i];
+
+        // 5) scatter
         internal::VectorDistributorLocalToGlobal<Number, VectorizedArrayType>
           writer;
         constraint_info.read_write_operation(writer,
