@@ -1112,11 +1112,13 @@ public:
               dof_handler, cells, 1, false);
 
             for (auto &dof : dofs)
-              if (dof != numbers::invalid_unsigned_int &&
-                  constraints.is_constrained(dof))
-                dof = numbers::invalid_unsigned_int;
-              else if (locally_owned_indices.is_element(dof) == false)
-                relevant_dofs.push_back(dof);
+              if (dof != numbers::invalid_unsigned_int)
+                {
+                  if (constraints.is_constrained(dof))
+                    dof = numbers::invalid_unsigned_int;
+                  else if (locally_owned_indices.is_element(dof) == false)
+                    relevant_dofs.push_back(dof);
+                }
 
             constraint_info.read_dof_indices(cell_counter, dofs, partitioner);
           }
@@ -1192,7 +1194,7 @@ public:
       {
         dst = 0.0; // during cell loop
 
-        update_ghost_values(src, extended_partitioner);
+        update_ghost_values(src, extended_partitioner, partitioner);
 
         FEEvaluation<dim, -1, 0, 1, Number, VectorizedArrayType> phi(
           matrix_free);
@@ -1234,11 +1236,34 @@ public:
   static void
   update_ghost_values(
     const VectorType &                                        vec,
-    const std::shared_ptr<const Utilities::MPI::Partitioner> &partitioner)
+    const std::shared_ptr<const Utilities::MPI::Partitioner> &partitioner,
+    const std::shared_ptr<const Utilities::MPI::Partitioner>
+      &extended_partitioner)
   {
-    (void)partitioner; // TODO
+    dealii::AlignedVector<Number> buffer;
+    buffer.resize_fast(partitioner->n_import_indices()); // reuse?
 
-    vec.update_ghost_values();
+    std::vector<MPI_Request> requests;
+
+    partitioner
+      ->template export_to_ghosted_array_start<Number, MemorySpace::Host>(
+        0,
+        dealii::ArrayView<const Number>(vec.begin(),
+                                        partitioner->locally_owned_size()),
+        dealii::ArrayView<Number>(buffer.begin(), buffer.size()),
+        dealii::ArrayView<Number>(const_cast<Number *>(vec.begin()) +
+                                    partitioner->locally_owned_size(),
+                                  extended_partitioner->n_ghost_indices()),
+        requests);
+
+    partitioner
+      ->template export_to_ghosted_array_finish<Number, MemorySpace::Host>(
+        dealii::ArrayView<Number>(const_cast<Number *>(vec.begin()) +
+                                    partitioner->locally_owned_size(),
+                                  extended_partitioner->n_ghost_indices()),
+        requests);
+
+    vec.set_ghost_state(true);
   }
 
   static void
