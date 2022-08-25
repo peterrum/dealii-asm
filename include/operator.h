@@ -476,21 +476,28 @@ public:
         const std::function<void(const unsigned int, const unsigned int)>
           &operation_after_matrix_vector_product) const
   {
-    AssertThrow(vector_partitioner == nullptr, ExcNotImplemented());
-
-    matrix_free.template cell_loop<VectorType, VectorType>(
-      [&](const auto &, auto &dst, const auto &src, const auto cells) {
-        FECellIntegrator phi(matrix_free);
-        for (unsigned int cell = cells.first; cell < cells.second; ++cell)
-          {
-            phi.reinit(cell);
-            do_cell_integral_global(phi, dst, src);
-          }
-      },
-      dst,
-      src,
-      operation_before_matrix_vector_product,
-      operation_after_matrix_vector_product);
+    if (vector_partitioner == nullptr)
+      {
+        matrix_free.template cell_loop<VectorType, VectorType>(
+          [&](const auto &, auto &dst, const auto &src, const auto cells) {
+            FECellIntegrator phi(matrix_free);
+            for (unsigned int cell = cells.first; cell < cells.second; ++cell)
+              {
+                phi.reinit(cell);
+                do_cell_integral_global(phi, dst, src);
+              }
+          },
+          dst,
+          src,
+          operation_before_matrix_vector_product,
+          operation_after_matrix_vector_product);
+      }
+    else
+      {
+        operation_before_matrix_vector_product(0, src.locally_owned_size());
+        vmult(dst, src);
+        operation_after_matrix_vector_product(0, src.locally_owned_size());
+      }
   }
 
   void

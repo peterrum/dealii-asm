@@ -41,6 +41,29 @@ using namespace dealii;
 #include "include/matrix_free.h"
 #include "include/operator.h"
 
+#define MAX_N_ROWS_FDM 10
+
+#define COMPILE_2D 0
+#define COMPILE_3D 1
+
+// clang-format off
+#define EXPAND_OPERATIONS(OPERATION)                                     \
+  switch (n_rows)                                                        \
+    {                                                                    \
+      case  2: OPERATION((( 2 <= MAX_N_ROWS_FDM) ?  2 : -1), -1); break; \
+      case  3: OPERATION((( 3 <= MAX_N_ROWS_FDM) ?  3 : -1), -1); break; \
+      case  4: OPERATION((( 4 <= MAX_N_ROWS_FDM) ?  4 : -1), -1); break; \
+      case  5: OPERATION((( 5 <= MAX_N_ROWS_FDM) ?  5 : -1), -1); break; \
+      case  6: OPERATION((( 6 <= MAX_N_ROWS_FDM) ?  6 : -1), -1); break; \
+      case  7: OPERATION((( 7 <= MAX_N_ROWS_FDM) ?  7 : -1), -1); break; \
+      case  8: OPERATION((( 8 <= MAX_N_ROWS_FDM) ?  8 : -1), -1); break; \
+      case  9: OPERATION((( 9 <= MAX_N_ROWS_FDM) ?  9 : -1), -1); break; \
+      case 10: OPERATION(((10 <= MAX_N_ROWS_FDM) ? 10 : -1), -1); break; \
+      default:                                                           \
+        OPERATION(-1, -1);                                               \
+    }
+// clang-format on
+
 template <typename OperatorType>
 class MyOperator : public Subscriptor
 {
@@ -129,8 +152,6 @@ test(const unsigned int fe_degree,
   using VectorizedArrayType = VectorizedArray<Number>;
   using VectorType          = LinearAlgebra::distributed::Vector<Number>;
 
-  const int n_rows_1d = 5; // TODO
-
   const unsigned int mapping_degree = fe_degree;
 
   FE_Q<dim> fe(fe_degree);
@@ -196,8 +217,6 @@ test(const unsigned int fe_degree,
     LaplaceOperatorMatrixFree<dim, Number, VectorizedArrayType>;
   using MyOperatorType = MyOperator<OperatorType>;
 
-  using PreconditionerTypeActual =
-    ASPoissonPreconditioner<dim, Number, VectorizedArrayType, n_rows_1d>;
   using PreconditionerType   = ASPoissonPreconditionerBase<VectorType>;
   using MyPreconditionerType = Adapter<PreconditionerType>;
 
@@ -207,23 +226,37 @@ test(const unsigned int fe_degree,
 
   MyOperatorType my_op(op);
 
+  std::shared_ptr<PreconditionerType> precon_fdm;
+
+  const unsigned int n_rows = fe_degree + 2 * n_overlap - 1;
+
+#define OPERATION(c, d)                                            \
+  if (c == -1)                                                     \
+    pcout << "Warning: FDM with <" + std::to_string(n_rows) +      \
+               "> is not precompiled!"                             \
+          << std::endl;                                            \
+                                                                   \
+  precon_fdm = std::make_shared<                                   \
+    ASPoissonPreconditioner<dim, Number, VectorizedArrayType, c>>( \
+    matrix_free,                                                   \
+    n_overlap,                                                     \
+    dim,                                                           \
+    mapping_q_cache,                                               \
+    fe_1D,                                                         \
+    quadrature_face,                                               \
+    quadrature_1D);
+
+  EXPAND_OPERATIONS(OPERATION);
+#undef OPERATION
+
+  op.set_partitioner(precon_fdm->get_partitioner());
+
   VectorType src, dst;
 
   op.initialize_dof_vector(src);
   op.initialize_dof_vector(dst);
 
   src = 1;
-
-  const std::shared_ptr<PreconditionerType> precon_fdm =
-    std::make_shared<PreconditionerTypeActual>(matrix_free,
-                                               n_overlap,
-                                               dim,
-                                               mapping_q_cache,
-                                               fe_1D,
-                                               quadrature_face,
-                                               quadrature_1D);
-
-  op.set_partitioner(precon_fdm->get_partitioner());
 
   const auto precon_fdm_no_pre_post =
     std::make_shared<MyPreconditionerType>(precon_fdm);
@@ -637,6 +670,7 @@ main(int argc, char *argv[])
   for (unsigned int chebyshev_degree = 1; chebyshev_degree <= 5;
        ++chebyshev_degree)
     {
+#ifdef COMPILE_2D
       if (dim == 2)
         test<2>(fe_degree,
                 n_global_refinements,
@@ -646,7 +680,10 @@ main(int argc, char *argv[])
                 use_cartesian_mesh,
                 use_renumbering,
                 table);
-      else if (dim == 3)
+      else
+#endif
+#ifdef COMPILE_3D
+        if (dim == 3)
         test<3>(fe_degree,
                 n_global_refinements,
                 n_overlap,
@@ -656,6 +693,7 @@ main(int argc, char *argv[])
                 use_renumbering,
                 table);
       else
+#endif
         AssertThrow(false, ExcNotImplemented());
 
       if (is_root && verbose)

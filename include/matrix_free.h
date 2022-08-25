@@ -418,6 +418,7 @@ private:
       }
 
     // compress
+    src_ptr.zero_out_ghost_values();
     dst_ptr.compress(VectorOperation::add);
 
     // apply weights and copy vector back (both optional)
