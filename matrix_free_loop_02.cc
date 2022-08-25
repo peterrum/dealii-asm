@@ -39,6 +39,7 @@
 using namespace dealii;
 
 #include "include/matrix_free.h"
+#include "include/operator.h"
 
 template <typename OperatorType>
 class MyOperator : public Subscriptor
@@ -128,7 +129,7 @@ test(const unsigned int fe_degree,
   using VectorizedArrayType = VectorizedArray<Number>;
   using VectorType          = LinearAlgebra::distributed::Vector<Number>;
 
-  const int n_rows_1d = 7; // TODO
+  const int n_rows_1d = 5; // TODO
 
   const unsigned int mapping_degree = fe_degree;
 
@@ -152,8 +153,8 @@ test(const unsigned int fe_degree,
 
   tria.refine_global(n_global_refinements);
 
-  DoFHandler<dim> dof_handler(tria);
-  dof_handler.distribute_dofs(FE_Q<dim>(fe_degree));
+  // DoFHandler<dim> dof_handler(tria);
+  // dof_handler.distribute_dofs(FE_Q<dim>(fe_degree));
 
   MappingQ<dim>      mapping(mapping_degree);
   MappingQCache<dim> mapping_q_cache(mapping_degree);
@@ -175,32 +176,35 @@ test(const unsigned int fe_degree,
     },
     true);
 
-  AffineConstraints<Number> constraints;
-  DoFTools::make_zero_boundary_constraints(dof_handler, 1, constraints);
-  constraints.close();
+  // AffineConstraints<Number> constraints;
+  // DoFTools::make_zero_boundary_constraints(dof_handler, 1, constraints);
+  // constraints.close();
+  //
+  // typename MatrixFree<dim, Number, VectorizedArrayType>::AdditionalData
+  //  additional_data;
+  //
+  // if (use_renumbering)
+  //  DoFRenumbering::matrix_free_data_locality(dof_handler,
+  //                                            constraints,
+  //                                            additional_data);
+  //
+  // MatrixFree<dim, Number, VectorizedArrayType> matrix_free;
+  // matrix_free.reinit(
+  //  mapping_q_cache, dof_handler, constraints, quadrature, additional_data);
 
-  typename MatrixFree<dim, Number, VectorizedArrayType>::AdditionalData
-    additional_data;
-
-  if (use_renumbering)
-    DoFRenumbering::matrix_free_data_locality(dof_handler,
-                                              constraints,
-                                              additional_data);
-
-  MatrixFree<dim, Number, VectorizedArrayType> matrix_free;
-  matrix_free.reinit(
-    mapping_q_cache, dof_handler, constraints, quadrature, additional_data);
-
-  using OperatorType = PoissonOperator<dim, Number, VectorizedArrayType>;
-  using MyOperatorType =
-    MyOperator<PoissonOperator<dim, Number, VectorizedArrayType>>;
+  using OperatorType =
+    LaplaceOperatorMatrixFree<dim, Number, VectorizedArrayType>;
+  using MyOperatorType = MyOperator<OperatorType>;
 
   using PreconditionerTypeActual =
     ASPoissonPreconditioner<dim, Number, VectorizedArrayType, n_rows_1d>;
   using PreconditionerType   = ASPoissonPreconditionerBase<VectorType>;
   using MyPreconditionerType = Adapter<PreconditionerType>;
 
-  OperatorType   op(matrix_free);
+  OperatorType op(mapping_q_cache, tria, fe, quadrature);
+  const auto & matrix_free = op.get_matrix_free();
+  const auto & constraints = op.get_constraints();
+
   MyOperatorType my_op(op);
 
   VectorType src, dst;
@@ -208,7 +212,7 @@ test(const unsigned int fe_degree,
   op.initialize_dof_vector(src);
   op.initialize_dof_vector(dst);
 
-  op.rhs(src);
+  src = 1;
 
   const std::shared_ptr<PreconditionerType> precon_fdm =
     std::make_shared<PreconditionerTypeActual>(matrix_free,
@@ -218,6 +222,8 @@ test(const unsigned int fe_degree,
                                                fe_1D,
                                                quadrature_face,
                                                quadrature_1D);
+
+  op.set_partitioner(precon_fdm->get_partitioner());
 
   const auto precon_fdm_no_pre_post =
     std::make_shared<MyPreconditionerType>(precon_fdm);
@@ -569,7 +575,7 @@ test(const unsigned int fe_degree,
   table.add_value("do_renumbering", use_renumbering);
   table.add_value("do_cartesian", use_cartesian_mesh);
 
-  table.add_value("n_dofs", dof_handler.n_dofs());
+  table.add_value("n_dofs", op.get_dof_handler().n_dofs());
 
   table.add_value("t_vmult",
                   t_vmult *
