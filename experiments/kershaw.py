@@ -2,7 +2,7 @@ import json
 import os
 from argparse import ArgumentParser
 
-def run_instance(counter, d, l, k, preconditioner, sequence, s, eps):
+def run_instance(counter, d, l, k, solver, preconditioner, sequence, s, eps):
     with open(os.path.dirname(os.path.abspath(__file__)) + "/default.json", 'r') as f:
        datastore = json.load(f)
 
@@ -13,6 +13,9 @@ def run_instance(counter, d, l, k, preconditioner, sequence, s, eps):
     datastore["dim"]           = d
     datastore["n refinements"] = l
     datastore["degree"]        = k
+
+    # ... solver
+    datastore["solver"]["type"] = solver
 
     # ... multigrid
     datastore["preconditioner"]["mg p sequence"]      = sequence
@@ -28,9 +31,10 @@ def run_instance(counter, d, l, k, preconditioner, sequence, s, eps):
             raise Exception("Not implemented!")
 
         datastore["preconditioner"]["mg smoother"]["preconditioner"]["type"] = "FDM"
-        datastore["preconditioner"]["mg smoother"]["preconditioner"]["n overlap"] = props[1]
+        datastore["preconditioner"]["mg smoother"]["preconditioner"]["weighting type"] = props[1]
+        datastore["preconditioner"]["mg smoother"]["preconditioner"]["n overlap"] = props[2]
 
-        if props[2] == "f":
+        if props[3] == "f":
           datastore["preconditioner"]["mg smoother"]["preconditioner"]["sub mesh approximation"] = d
         else:
           datastore["preconditioner"]["mg smoother"]["preconditioner"]["sub mesh approximation"] = 1
@@ -60,18 +64,27 @@ def main():
 
     preconditioners = ["diagonal"]
 
-    #for o in range(1, 2):
-    #    preconditioners.append("fdm-%d-f" % o);
+    for a in ["post", "symm"]:
+        for o in range(1, 3):
+            preconditioners.append("fdm-%s-%d-f" %  (a, o));
 
-    for o in range(1, 2):
-        preconditioners.append("fdm-%d-r" % o);
+        #for o in range(1, 2):
+        #    preconditioners.append("fdm-%s-%d-r" %  (a, o));
 
     for eps in [1.0, 0.99, 0.9, 0.7, 0.5, 0.3]:
-        for preconditioner in preconditioners:
-            for sequence in ["bisect", "go to one", "decrease by one"]:
-                for s in range(1, 6):
-                    run_instance(counter, d, l, k, preconditioner, sequence, s, eps)
-                    counter = counter + 1;
+        for solver in ["CG", "GMRES"]:
+            preconditioners_to_be_used = []
+
+            if solver == "CG":
+                preconditioners_to_be_used = [i for i in preconditioners if ("diagonal" == i) or  ("symm" in i)]
+            elif solver == "GMRES":
+                preconditioners_to_be_used = [i for i in preconditioners if ("post" in i)]
+
+            for preconditioner in preconditioners_to_be_used:
+                for sequence in ["bisect", "go to one", "decrease by one"]:
+                    for s in range(1, 6):
+                        run_instance(counter, d, l, k, solver, preconditioner, sequence, s, eps)
+                        counter = counter + 1;
 
 
 if __name__== "__main__":
