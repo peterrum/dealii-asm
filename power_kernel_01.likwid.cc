@@ -288,6 +288,12 @@ run(const unsigned int s,
       phi.distribute_local_to_global(dst);
     };
 
+
+  const auto matrix_free_cell_loop = [&](const auto fu) {
+    Number dummy = 0;
+    matrix_free.template cell_loop<Number, Number>(fu, dummy, dummy);
+  };
+
   MPI_Barrier(MPI_COMM_WORLD);
   LIKWID_MARKER_START("power");
 
@@ -298,7 +304,7 @@ run(const unsigned int s,
   for (unsigned int c = 0; c < n_repetitions; ++c)
     {
       counter = 0;
-      matrix_free.template cell_loop<Number, Number>(
+      matrix_free_cell_loop(
         [&](const auto &data, auto &, const auto &, const auto cells) {
           FECellIntegrator phi(data);
           FECellIntegrator phi_(data);
@@ -326,9 +332,7 @@ run(const unsigned int s,
             }
 
           counter++;
-        },
-        dummy,
-        dummy);
+        });
     }
 
   MPI_Barrier(MPI_COMM_WORLD);
@@ -417,7 +421,7 @@ run(const unsigned int s,
   temp_time = std::chrono::system_clock::now();
   for (unsigned int c = 0; c < n_repetitions; ++c)
     for (unsigned int c = 0; c < 2; ++c)
-      matrix_free.template cell_loop<Number, Number>(
+      matrix_free_cell_loop(
         [&](const auto &data, auto &, const auto &, const auto cells) {
           FECellIntegrator phi(data);
 
@@ -426,9 +430,7 @@ run(const unsigned int s,
               process_batch_vmult(cell, phi, dst_0, src);
             else if (c == 1)
               process_batch_post(cell, phi, dst_1, dst_0);
-        },
-        dummy,
-        dummy);
+        });
 
   MPI_Barrier(MPI_COMM_WORLD);
   LIKWID_MARKER_STOP("normal");
