@@ -29,6 +29,19 @@
 
 using namespace dealii;
 
+struct Parameters
+{
+  unsigned int dim              = 3;
+  unsigned int fe_degree        = 1;
+  unsigned int n_components     = 1;
+  unsigned int subdivisions     = 34;
+  unsigned int n_lanes          = 0;
+  unsigned int cell_granularity = 0;
+  unsigned int n_repetitions    = 10;
+
+  std::string number_type = "double";
+};
+
 template <int dim, typename Number>
 class Fu : public Function<dim, Number>
 {
@@ -42,16 +55,15 @@ public:
   }
 };
 
-template <int dim,
-          typename Number              = double,
-          typename VectorizedArrayType = VectorizedArray<Number>>
+template <int dim, typename Number, std::size_t n_lanes>
 void
-run(const unsigned int s,
-    const unsigned int fe_degree,
-    const bool         deformed_mesh,
-    const unsigned int n_components = 1)
+run(const Parameters &params)
 {
-  AssertThrow(deformed_mesh == false, ExcNotImplemented());
+  const unsigned int s            = params.subdivisions;
+  const unsigned int fe_degree    = params.fe_degree;
+  const unsigned int n_components = params.n_components;
+
+  using VectorizedArrayType = VectorizedArray<Number, n_lanes>;
 
   using FECellIntegrator =
     FEEvaluation<dim, -1, 0, 1, Number, VectorizedArrayType>;
@@ -89,18 +101,9 @@ run(const unsigned int s,
                                             Point<dim>(),
                                             p2);
 
-  // if (deformed_mesh)
-  //  {
-  //    GridTools::transform(
-  //      std::bind(&MyManifold<dim>::push_forward, manifold,
-  //      std::placeholders::_1), tria);
-  //    tria.set_all_manifold_ids(1);
-  //    tria.set_manifold(1, manifold);
-  //  }
-
   tria.refine_global(n_refine);
 
-  MappingQGeneric<dim> mapping(2);
+  MappingQ1<dim> mapping;
 
   FE_Q<dim>       fe_scalar(fe_degree);
   FESystem<dim>   fe_q(fe_scalar, n_components);
@@ -145,6 +148,10 @@ run(const unsigned int s,
                      QGaussLobatto<1>(fe_degree + 1),
                      mf_data);
 
+  const auto matrix_free_cell_loop = [&](const auto fu) {
+    Number dummy = 0;
+    matrix_free.template cell_loop<Number, Number>(fu, dummy, dummy);
+  };
 
   std::vector<unsigned int> min_vector(matrix_free.n_cell_batches() *
                                          VectorizedArrayType::size(),
@@ -158,44 +165,42 @@ run(const unsigned int s,
     tria.n_vertices(),
     std::pair<unsigned int, unsigned int>(numbers::invalid_unsigned_int, 0));
 
-  Number       dummy   = 0;
   unsigned int counter = 0;
 
-  matrix_free.template loop_cell_centric<Number, Number>(
-    [&](const auto &data, auto &, const auto &, const auto cells) {
-      (void)data;
+  matrix_free_cell_loop([&](const auto &data,
+                            auto &,
+                            const auto &,
+                            const auto cells) {
+    (void)data;
 
-      for (unsigned int cell = cells.first; cell < cells.second; ++cell)
-        {
-          const auto n_active_entries_per_cell_batch =
-            data.n_active_entries_per_cell_batch(cell);
+    for (unsigned int cell = cells.first; cell < cells.second; ++cell)
+      {
+        const auto n_active_entries_per_cell_batch =
+          data.n_active_entries_per_cell_batch(cell);
 
-          for (unsigned int v = 0; v < n_active_entries_per_cell_batch; ++v)
-            {
-              const auto cell_iterator = matrix_free.get_cell_iterator(cell, v);
+        for (unsigned int v = 0; v < n_active_entries_per_cell_batch; ++v)
+          {
+            const auto cell_iterator = matrix_free.get_cell_iterator(cell, v);
 
-              for (const auto i : cell_iterator->vertex_indices())
-                {
-                  vertex_tracker[cell_iterator->vertex_index(i)].first =
-                    std::min(
-                      vertex_tracker[cell_iterator->vertex_index(i)].first,
-                      counter);
-                  vertex_tracker[cell_iterator->vertex_index(i)].second =
-                    std::max(
-                      vertex_tracker[cell_iterator->vertex_index(i)].second,
-                      counter);
-                }
-            }
-        }
-      counter++;
-    },
-    dummy,
-    dummy);
+            for (const auto i : cell_iterator->vertex_indices())
+              {
+                vertex_tracker[cell_iterator->vertex_index(i)].first =
+                  std::min(vertex_tracker[cell_iterator->vertex_index(i)].first,
+                           counter);
+                vertex_tracker[cell_iterator->vertex_index(i)].second =
+                  std::max(
+                    vertex_tracker[cell_iterator->vertex_index(i)].second,
+                    counter);
+              }
+          }
+      }
+    counter++;
+  });
 
   std::vector<std::vector<unsigned int>> my_indices(counter);
 
   counter = 0;
-  matrix_free.template loop_cell_centric<Number, Number>(
+  matrix_free_cell_loop(
     [&](const auto &data, auto &, const auto &, const auto cells) {
       (void)data;
 
@@ -228,9 +233,7 @@ run(const unsigned int s,
       counter++;
 
       // std::cout << cells.first << " " << cells.second << std::endl;
-    },
-    dummy,
-    dummy);
+    });
 
   const auto process = [counter](const auto &ids) {
     std::vector<std::vector<unsigned int>> temp(counter);
@@ -288,18 +291,12 @@ run(const unsigned int s,
       phi.distribute_local_to_global(dst);
     };
 
-
-  const auto matrix_free_cell_loop = [&](const auto fu) {
-    Number dummy = 0;
-    matrix_free.template cell_loop<Number, Number>(fu, dummy, dummy);
-  };
-
   MPI_Barrier(MPI_COMM_WORLD);
   LIKWID_MARKER_START("power");
 
   auto temp_time = std::chrono::system_clock::now();
 
-  const unsigned int n_repetitions = 10;
+  const unsigned int n_repetitions = params.n_repetitions;
 
   for (unsigned int c = 0; c < n_repetitions; ++c)
     {
@@ -452,41 +449,103 @@ run(const unsigned int s,
               << time_normal << std::endl;
 }
 
-template <int dim>
+template <int dim, typename T>
 void
-run_dim(const unsigned int s,
-        const unsigned int fe_degree,
-        const bool         deformed_mesh,
-        const unsigned int n_components = 1)
+run_number(const Parameters &params)
 {
-  using T = double;
-  run<dim, T, VectorizedArray<T>>(s, fe_degree, deformed_mesh, n_components);
+  unsigned int n_lanes = params.n_lanes;
+
+  constexpr std::size_t n_lanes_max = VectorizedArray<T>::size();
+
+  if (n_lanes == 0)
+    n_lanes = n_lanes_max;
+
+  AssertThrow(n_lanes <= n_lanes_max, ExcNotImplemented());
+
+  if (n_lanes == 1)
+    run<dim, T, std::min<std::size_t>(1, n_lanes_max)>(params);
+  else if (n_lanes == 2)
+    run<dim, T, std::min<std::size_t>(2, n_lanes_max)>(params);
+  else if (n_lanes == 4)
+    run<dim, T, std::min<std::size_t>(4, n_lanes_max)>(params);
+  else if (n_lanes == 8)
+    run<dim, T, std::min<std::size_t>(8, n_lanes_max)>(params);
+  else if (n_lanes == 16)
+    run<dim, T, std::min<std::size_t>(16, n_lanes_max)>(params);
+  else
+    AssertThrow(false, ExcNotImplemented());
 }
 
+template <int dim>
+void
+run_dim(const Parameters &params)
+{
+  unsigned int n_lanes = params.n_lanes;
+
+  if (params.number_type == "double")
+    {
+      using T = double;
+
+      constexpr std::size_t n_lanes_max = VectorizedArray<T>::size();
+
+      if (n_lanes == 0)
+        n_lanes = n_lanes_max;
+
+      AssertThrow(n_lanes <= n_lanes_max, ExcNotImplemented());
+
+      if (n_lanes == 1)
+        run<dim, T, std::min<std::size_t>(1, n_lanes_max)>(params);
+      else if (n_lanes == 2)
+        run<dim, T, std::min<std::size_t>(2, n_lanes_max)>(params);
+      else if (n_lanes == 4)
+        run<dim, T, std::min<std::size_t>(4, n_lanes_max)>(params);
+      else if (n_lanes == 8)
+        run<dim, T, std::min<std::size_t>(8, n_lanes_max)>(params);
+      else
+        AssertThrow(false, ExcNotImplemented());
+    }
+  else if (params.number_type == "float")
+    {
+      using T = float;
+
+      constexpr std::size_t n_lanes_max = VectorizedArray<T>::size();
+
+      if (n_lanes == 0)
+        n_lanes = n_lanes_max;
+
+      AssertThrow(n_lanes <= n_lanes_max, ExcNotImplemented());
+
+      if (n_lanes == 1)
+        run<dim, T, std::min<std::size_t>(1, n_lanes_max)>(params);
+      else if (n_lanes == 4)
+        run<dim, T, std::min<std::size_t>(4, n_lanes_max)>(params);
+      else if (n_lanes == 8)
+        run<dim, T, std::min<std::size_t>(8, n_lanes_max)>(params);
+      else if (n_lanes == 16)
+        run<dim, T, std::min<std::size_t>(16, n_lanes_max)>(params);
+      else
+        AssertThrow(false, ExcNotImplemented());
+    }
+  else
+    AssertThrow(false, ExcNotImplemented());
+}
 
 int
 main(int argc, char **argv)
 {
-  // mpirun -np 40 ./benchmark_matrix_power_kernel/bench 3 5 34 0
-  // mpirun -np 40 ./benchmark_matrix_power_kernel/bench 3 5 31 1
   Utilities::MPI::MPI_InitFinalize mpi(argc, argv, 1);
-
-  AssertThrow(argc > 3, ExcNotImplemented());
 
 #ifdef LIKWID_PERFMON
   LIKWID_MARKER_INIT;
   LIKWID_MARKER_THREADINIT;
 #endif
 
-  const unsigned int dim           = std::atoi(argv[1]);
-  const unsigned int degree        = std::atoi(argv[2]);
-  const unsigned int n_steps       = std::atoi(argv[3]);
-  const unsigned int deformed_mesh = std::atoi(argv[4]);
+  Parameters params;
 
-  if (dim == 2)
-    run_dim<2>(n_steps, degree, deformed_mesh);
-  else if (dim == 3)
-    run_dim<3>(n_steps, degree, deformed_mesh);
+  if (params.dim == 2)
+    run_dim<2>(params);
+  else if (params.dim == 3)
+    run_dim<3>(params);
   else
     AssertThrow(false, ExcNotImplemented());
 
