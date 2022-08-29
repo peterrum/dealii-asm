@@ -53,6 +53,9 @@ run(const unsigned int s,
 {
   AssertThrow(deformed_mesh == false, ExcNotImplemented());
 
+  using FECellIntegrator =
+    FEEvaluation<dim, -1, 0, 1, Number, VectorizedArrayType>;
+
   unsigned int       n_refine  = s / 6;
   const unsigned int remainder = s % 6;
 
@@ -295,10 +298,10 @@ run(const unsigned int s,
   for (unsigned int c = 0; c < n_repetitions; ++c)
     {
       counter = 0;
-      matrix_free.template loop_cell_centric<double, double>(
+      matrix_free.template cell_loop<double, double>(
         [&](const auto &data, auto &, const auto &, const auto cells) {
-          FEEvaluation<dim, -1, 0, 1, Number, VectorizedArrayType> phi(data);
-          FEEvaluation<dim, -1, 0, 1, Number, VectorizedArrayType> phi_(data);
+          FECellIntegrator phi(data);
+          FECellIntegrator phi_(data);
 
           // vmult
           for (unsigned int cell = cells.first; cell < cells.second; ++cell)
@@ -414,9 +417,9 @@ run(const unsigned int s,
   temp_time = std::chrono::system_clock::now();
   for (unsigned int c = 0; c < n_repetitions; ++c)
     for (unsigned int c = 0; c < 2; ++c)
-      matrix_free.template loop_cell_centric<double, double>(
+      matrix_free.template cell_loop<double, double>(
         [&](const auto &data, auto &, const auto &, const auto cells) {
-          FEEvaluation<dim, -1, 0, 1, Number, VectorizedArrayType> phi(data);
+          FECellIntegrator phi(data);
 
           for (unsigned int cell = cells.first; cell < cells.second; ++cell)
             if (c == 0)
