@@ -29,11 +29,11 @@
 
 using namespace dealii;
 
-template <int dim>
-class Fu : public Function<dim>
+template <int dim, typename Number>
+class Fu : public Function<dim, Number>
 {
 public:
-  virtual double
+  virtual Number
   value(const Point<dim> &p, const unsigned int component) const
   {
     (void)component;
@@ -107,21 +107,21 @@ run(const unsigned int s,
   DoFHandler<dim> dof_handler(tria);
   dof_handler.distribute_dofs(fe_q);
 
-  AffineConstraints<double> constraints;
+  AffineConstraints<Number> constraints;
   IndexSet                  relevant_dofs;
   DoFTools::extract_locally_relevant_dofs(dof_handler, relevant_dofs);
   constraints.reinit(relevant_dofs);
   VectorTools::interpolate_boundary_values(mapping,
                                            dof_handler,
                                            0,
-                                           Functions::ZeroFunction<dim>(
+                                           Functions::ZeroFunction<dim, Number>(
                                              n_components),
                                            constraints);
   constraints.close();
   typename MatrixFree<dim, Number, VectorizedArrayType>::AdditionalData mf_data;
 
   mf_data.mapping_update_flags  = update_gradients;
-  mf_data.tasks_parallel_scheme = MatrixFree<dim, double, VectorizedArrayType>::
+  mf_data.tasks_parallel_scheme = MatrixFree<dim, Number, VectorizedArrayType>::
     AdditionalData::TasksParallelScheme::none;
 
   DoFRenumbering::matrix_free_data_locality(dof_handler, constraints, mf_data);
@@ -132,7 +132,7 @@ run(const unsigned int s,
   VectorTools::interpolate_boundary_values(mapping,
                                            dof_handler,
                                            0,
-                                           Functions::ZeroFunction<dim>(
+                                           Functions::ZeroFunction<dim, Number>(
                                              n_components),
                                            constraints);
   constraints.close();
@@ -158,10 +158,10 @@ run(const unsigned int s,
     tria.n_vertices(),
     std::pair<unsigned int, unsigned int>(numbers::invalid_unsigned_int, 0));
 
-  double       dummy   = 0;
+  Number       dummy   = 0;
   unsigned int counter = 0;
 
-  matrix_free.template loop_cell_centric<double, double>(
+  matrix_free.template loop_cell_centric<Number, Number>(
     [&](const auto &data, auto &, const auto &, const auto cells) {
       (void)data;
 
@@ -195,7 +195,7 @@ run(const unsigned int s,
   std::vector<std::vector<unsigned int>> my_indices(counter);
 
   counter = 0;
-  matrix_free.template loop_cell_centric<double, double>(
+  matrix_free.template loop_cell_centric<Number, Number>(
     [&](const auto &data, auto &, const auto &, const auto cells) {
       (void)data;
 
@@ -245,14 +245,14 @@ run(const unsigned int s,
   const auto pre_indices  = process(min_vector);
   const auto post_indices = process(max_vector);
 
-  using VectorType = LinearAlgebra::distributed::Vector<double>;
+  using VectorType = LinearAlgebra::distributed::Vector<Number>;
   VectorType src, dst_0, dst_1;
 
   matrix_free.initialize_dof_vector(src);
   matrix_free.initialize_dof_vector(dst_0);
   matrix_free.initialize_dof_vector(dst_1);
 
-  VectorTools::interpolate(mapping, dof_handler, Fu<dim>(), src);
+  VectorTools::interpolate(mapping, dof_handler, Fu<dim, Number>(), src);
 
   const auto process_batch_vmult =
     [](const auto &id, auto &phi, auto &dst, const auto &src) {
@@ -298,7 +298,7 @@ run(const unsigned int s,
   for (unsigned int c = 0; c < n_repetitions; ++c)
     {
       counter = 0;
-      matrix_free.template cell_loop<double, double>(
+      matrix_free.template cell_loop<Number, Number>(
         [&](const auto &data, auto &, const auto &, const auto cells) {
           FECellIntegrator phi(data);
           FECellIntegrator phi_(data);
@@ -417,7 +417,7 @@ run(const unsigned int s,
   temp_time = std::chrono::system_clock::now();
   for (unsigned int c = 0; c < n_repetitions; ++c)
     for (unsigned int c = 0; c < 2; ++c)
-      matrix_free.template cell_loop<double, double>(
+      matrix_free.template cell_loop<Number, Number>(
         [&](const auto &data, auto &, const auto &, const auto cells) {
           FECellIntegrator phi(data);
 
