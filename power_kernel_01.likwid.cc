@@ -42,7 +42,9 @@ public:
   }
 };
 
-template <int dim, typename Number = double, typename VectorizedArrayType = VectorizedArray<Number>>
+template <int dim,
+          typename Number              = double,
+          typename VectorizedArrayType = VectorizedArray<Number>>
 void
 run(const unsigned int s,
     const unsigned int fe_degree,
@@ -254,16 +256,16 @@ run(const unsigned int s,
       phi.reinit(id);
       phi.read_dof_values(src);
 
-      if(false)
-      {
-      phi.evaluate(EvaluationFlags::gradients);
+      if (false)
+        {
+          phi.evaluate(EvaluationFlags::gradients);
 
-      for (const auto q : phi.quadrature_point_indices())
-        phi.submit_gradient(phi.get_gradient(q), q); 
+          for (const auto q : phi.quadrature_point_indices())
+            phi.submit_gradient(phi.get_gradient(q), q);
 
-      phi.integrate(EvaluationFlags::gradients);
-      }
-      
+          phi.integrate(EvaluationFlags::gradients);
+        }
+
       phi.distribute_local_to_global(dst);
     };
 
@@ -271,15 +273,15 @@ run(const unsigned int s,
     [](const auto &id, auto &phi, auto &dst, const auto &src) {
       phi.reinit(id);
       phi.read_dof_values(src);
-      if(false)
-      {
-      phi.evaluate(EvaluationFlags::values);
+      if (false)
+        {
+          phi.evaluate(EvaluationFlags::values);
 
-      for (const auto q : phi.quadrature_point_indices())
-        phi.submit_value(phi.get_value(q), q);
+          for (const auto q : phi.quadrature_point_indices())
+            phi.submit_value(phi.get_value(q), q);
 
-      phi.integrate(EvaluationFlags::values); 
-      }
+          phi.integrate(EvaluationFlags::values);
+        }
       phi.distribute_local_to_global(dst);
     };
 
@@ -452,8 +454,8 @@ run_dim(const unsigned int s,
         const bool         deformed_mesh,
         const unsigned int n_components = 1)
 {
-    using T = double;
-    run<dim, T, VectorizedArray<T>>(s, fe_degree, deformed_mesh, n_components);
+  using T = double;
+  run<dim, T, VectorizedArray<T>>(s, fe_degree, deformed_mesh, n_components);
 }
 
 
@@ -467,8 +469,8 @@ main(int argc, char **argv)
   AssertThrow(argc > 3, ExcNotImplemented());
 
 #ifdef LIKWID_PERFMON
-      LIKWID_MARKER_INIT;
-      LIKWID_MARKER_THREADINIT;
+  LIKWID_MARKER_INIT;
+  LIKWID_MARKER_THREADINIT;
 #endif
 
   const unsigned int dim           = std::atoi(argv[1]);
@@ -484,7 +486,7 @@ main(int argc, char **argv)
     AssertThrow(false, ExcNotImplemented());
 
 #ifdef LIKWID_PERFMON
-      LIKWID_MARKER_CLOSE;
+  LIKWID_MARKER_CLOSE;
 #endif
 
   return 0;
