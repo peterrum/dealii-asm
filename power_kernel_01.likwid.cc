@@ -19,6 +19,10 @@
 
 #include <deal.II/numerics/vector_tools.h>
 
+#ifdef LIKWID_PERFMON
+#  include <likwid.h>
+#endif
+
 //#include "../common_code/curved_manifold.h"
 //#include "../common_code/diagonal_matrix_blocked.h"
 //#include "../common_code/poisson_operator.h"
@@ -38,7 +42,7 @@ public:
   }
 };
 
-template <int dim>
+template <int dim, typename Number = double, typename VectorizedArrayType = VectorizedArray<Number>>
 void
 run(const unsigned int s,
     const unsigned int fe_degree,
@@ -46,9 +50,6 @@ run(const unsigned int s,
     const unsigned int n_components = 1)
 {
   AssertThrow(deformed_mesh == false, ExcNotImplemented());
-
-  using Number              = double;
-  using VectorizedArrayType = VectorizedArray<Number>;
 
   unsigned int       n_refine  = s / 6;
   const unsigned int remainder = s % 6;
@@ -112,7 +113,7 @@ run(const unsigned int s,
                                              n_components),
                                            constraints);
   constraints.close();
-  typename MatrixFree<dim, double>::AdditionalData mf_data;
+  typename MatrixFree<dim, Number, VectorizedArrayType>::AdditionalData mf_data;
 
   mf_data.mapping_update_flags  = update_gradients;
   mf_data.tasks_parallel_scheme = MatrixFree<dim, double, VectorizedArrayType>::
@@ -131,7 +132,7 @@ run(const unsigned int s,
                                            constraints);
   constraints.close();
 
-  MatrixFree<dim, double> matrix_free;
+  MatrixFree<dim, Number, VectorizedArrayType> matrix_free;
 
   matrix_free.reinit(mapping,
                      dof_handler,
@@ -248,20 +249,42 @@ run(const unsigned int s,
 
   VectorTools::interpolate(mapping, dof_handler, Fu<dim>(), src);
 
-  const auto process_batch =
+  const auto process_batch_vmult =
     [](const auto &id, auto &phi, auto &dst, const auto &src) {
       phi.reinit(id);
       phi.read_dof_values(src);
+
+      if(false)
+      {
       phi.evaluate(EvaluationFlags::gradients);
 
       for (const auto q : phi.quadrature_point_indices())
-        phi.submit_gradient(phi.get_gradient(q), q);
+        phi.submit_gradient(phi.get_gradient(q), q); 
 
       phi.integrate(EvaluationFlags::gradients);
+      }
+      
+      phi.distribute_local_to_global(dst);
+    };
+
+  const auto process_batch_post =
+    [](const auto &id, auto &phi, auto &dst, const auto &src) {
+      phi.reinit(id);
+      phi.read_dof_values(src);
+      if(false)
+      {
+      phi.evaluate(EvaluationFlags::values);
+
+      for (const auto q : phi.quadrature_point_indices())
+        phi.submit_value(phi.get_value(q), q);
+
+      phi.integrate(EvaluationFlags::values); 
+      }
       phi.distribute_local_to_global(dst);
     };
 
   MPI_Barrier(MPI_COMM_WORLD);
+  LIKWID_MARKER_START("power");
 
   auto temp_time = std::chrono::system_clock::now();
 
@@ -278,7 +301,7 @@ run(const unsigned int s,
           // vmult
           for (unsigned int cell = cells.first; cell < cells.second; ++cell)
             {
-              process_batch(cell, phi_, dst_0, src);
+              process_batch_vmult(cell, phi_, dst_0, src);
             }
 
           // post vmult
@@ -294,7 +317,7 @@ run(const unsigned int s,
                    ++v)
                 ids[v] = post_indices[counter][i + v];
 
-              process_batch(ids, phi, dst_1, dst_0);
+              process_batch_post(ids, phi, dst_1, dst_0);
             }
 
           counter++;
@@ -304,6 +327,7 @@ run(const unsigned int s,
     }
 
   MPI_Barrier(MPI_COMM_WORLD);
+  LIKWID_MARKER_STOP("power");
 
   if (Utilities::MPI::this_mpi_process(MPI_COMM_WORLD) == 0)
     std::cout << src.l2_norm() << " " << dst_0.l2_norm() << " "
@@ -383,6 +407,7 @@ run(const unsigned int s,
   dst_1 = 0.0;
 
   MPI_Barrier(MPI_COMM_WORLD);
+  LIKWID_MARKER_START("normal");
 
   temp_time = std::chrono::system_clock::now();
   for (unsigned int c = 0; c < n_repetitions; ++c)
@@ -393,14 +418,15 @@ run(const unsigned int s,
 
           for (unsigned int cell = cells.first; cell < cells.second; ++cell)
             if (c == 0)
-              process_batch(cell, phi, dst_0, src);
+              process_batch_vmult(cell, phi, dst_0, src);
             else if (c == 1)
-              process_batch(cell, phi, dst_1, dst_0);
+              process_batch_post(cell, phi, dst_1, dst_0);
         },
         dummy,
         dummy);
 
   MPI_Barrier(MPI_COMM_WORLD);
+  LIKWID_MARKER_STOP("normal");
 
   if (Utilities::MPI::this_mpi_process(MPI_COMM_WORLD) == 0)
     std::cout << src.l2_norm() << " " << dst_0.l2_norm() << " "
@@ -419,6 +445,16 @@ run(const unsigned int s,
               << time_normal << std::endl;
 }
 
+template <int dim>
+void
+run_dim(const unsigned int s,
+        const unsigned int fe_degree,
+        const bool         deformed_mesh,
+        const unsigned int n_components = 1)
+{
+    using T = double;
+    run<dim, T, VectorizedArray<T>>(s, fe_degree, deformed_mesh, n_components);
+}
 
 
 int
@@ -430,17 +466,26 @@ main(int argc, char **argv)
 
   AssertThrow(argc > 3, ExcNotImplemented());
 
+#ifdef LIKWID_PERFMON
+      LIKWID_MARKER_INIT;
+      LIKWID_MARKER_THREADINIT;
+#endif
+
   const unsigned int dim           = std::atoi(argv[1]);
   const unsigned int degree        = std::atoi(argv[2]);
   const unsigned int n_steps       = std::atoi(argv[3]);
   const unsigned int deformed_mesh = std::atoi(argv[4]);
 
   if (dim == 2)
-    run<3>(n_steps, degree, deformed_mesh);
+    run_dim<2>(n_steps, degree, deformed_mesh);
   else if (dim == 3)
-    run<3>(n_steps, degree, deformed_mesh);
+    run_dim<3>(n_steps, degree, deformed_mesh);
   else
     AssertThrow(false, ExcNotImplemented());
+
+#ifdef LIKWID_PERFMON
+      LIKWID_MARKER_CLOSE;
+#endif
 
   return 0;
 }
