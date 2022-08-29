@@ -55,24 +55,13 @@ public:
   }
 };
 
-template <int dim, typename Number, std::size_t n_lanes>
+template <int dim>
 void
-run(const Parameters &params)
+create_grid(Triangulation<dim> &tria, const unsigned int s)
 {
-  const unsigned int s            = params.subdivisions;
-  const unsigned int fe_degree    = params.fe_degree;
-  const unsigned int n_components = params.n_components;
-
-  using VectorizedArrayType = VectorizedArray<Number, n_lanes>;
-
-  using FECellIntegrator =
-    FEEvaluation<dim, -1, 0, 1, Number, VectorizedArrayType>;
-
   unsigned int       n_refine  = s / 6;
   const unsigned int remainder = s % 6;
 
-  // MyManifold<dim>           manifold;
-  Triangulation<dim>        tria;
   std::vector<unsigned int> subdivisions(dim, 1);
   if (remainder == 1 && s > 1)
     {
@@ -102,11 +91,27 @@ run(const Parameters &params)
                                             p2);
 
   tria.refine_global(n_refine);
+}
+
+template <int dim, typename Number, std::size_t n_lanes>
+void
+run(const Parameters &params)
+{
+  const unsigned int fe_degree    = params.fe_degree;
+  const unsigned int n_components = params.n_components;
+
+  using VectorizedArrayType = VectorizedArray<Number, n_lanes>;
+
+  using FECellIntegrator =
+    FEEvaluation<dim, -1, 0, 1, Number, VectorizedArrayType>;
+
+  Triangulation<dim> tria;
+  create_grid(tria, params.subdivisions);
 
   MappingQ1<dim> mapping;
+  FE_Q<dim>      fe_scalar(fe_degree);
+  FESystem<dim>  fe_q(fe_scalar, n_components);
 
-  FE_Q<dim>       fe_scalar(fe_degree);
-  FESystem<dim>   fe_q(fe_scalar, n_components);
   DoFHandler<dim> dof_handler(tria);
   dof_handler.distribute_dofs(fe_q);
 
@@ -149,8 +154,15 @@ run(const Parameters &params)
                      mf_data);
 
   const auto matrix_free_cell_loop = [&](const auto fu) {
-    Number dummy = 0;
-    matrix_free.template cell_loop<Number, Number>(fu, dummy, dummy);
+    if (params.cell_granularity == 0)
+      {
+        Number dummy = 0;
+        matrix_free.template cell_loop<Number, Number>(fu, dummy, dummy);
+      }
+    else
+      {
+        AssertThrow(false, ExcNotImplemented());
+      }
   };
 
   std::vector<unsigned int> min_vector(matrix_free.n_cell_batches() *
@@ -209,8 +221,6 @@ run(const Parameters &params)
           const auto n_active_entries_per_cell_batch =
             data.n_active_entries_per_cell_batch(cell);
 
-          // std::cout << n_active_entries_per_cell_batch << std::endl;
-
           for (unsigned int v = 0; v < n_active_entries_per_cell_batch; ++v)
             {
               my_indices[counter].push_back(cell * VectorizedArrayType::size() +
@@ -231,8 +241,6 @@ run(const Parameters &params)
             }
         }
       counter++;
-
-      // std::cout << cells.first << " " << cells.second << std::endl;
     });
 
   const auto process = [counter](const auto &ids) {
@@ -261,17 +269,6 @@ run(const Parameters &params)
     [](const auto &id, auto &phi, auto &dst, const auto &src) {
       phi.reinit(id);
       phi.read_dof_values(src);
-
-      if (false)
-        {
-          phi.evaluate(EvaluationFlags::gradients);
-
-          for (const auto q : phi.quadrature_point_indices())
-            phi.submit_gradient(phi.get_gradient(q), q);
-
-          phi.integrate(EvaluationFlags::gradients);
-        }
-
       phi.distribute_local_to_global(dst);
     };
 
@@ -279,15 +276,6 @@ run(const Parameters &params)
     [](const auto &id, auto &phi, auto &dst, const auto &src) {
       phi.reinit(id);
       phi.read_dof_values(src);
-      if (false)
-        {
-          phi.evaluate(EvaluationFlags::values);
-
-          for (const auto q : phi.quadrature_point_indices())
-            phi.submit_value(phi.get_value(q), q);
-
-          phi.integrate(EvaluationFlags::values);
-        }
       phi.distribute_local_to_global(dst);
     };
 
@@ -308,9 +296,7 @@ run(const Parameters &params)
 
           // vmult
           for (unsigned int cell = cells.first; cell < cells.second; ++cell)
-            {
-              process_batch_vmult(cell, phi_, dst_0, src);
-            }
+            process_batch_vmult(cell, phi_, dst_0, src);
 
           // post vmult
           for (unsigned int i = 0; i < post_indices[counter].size();
@@ -339,69 +325,6 @@ run(const Parameters &params)
     std::cout << src.l2_norm() << " " << dst_0.l2_norm() << " "
               << dst_1.l2_norm() << std::endl;
 
-
-  if (false && (Utilities::MPI::this_mpi_process(MPI_COMM_WORLD) == 0))
-    {
-      for (unsigned int i = 0; i < counter; ++i)
-        {
-          std::set<unsigned int> indices_my;
-          std::set<unsigned int> indices_pre;
-          std::set<unsigned int> indices_post;
-          std::set<unsigned int> indices_all;
-          std::set<unsigned int> indices_2;
-          std::set<unsigned int> indices_3;
-
-          for (auto j : my_indices[i])
-            {
-              indices_my.insert(j);
-              indices_all.insert(j);
-            }
-
-
-          for (auto j : pre_indices[i])
-            {
-              indices_pre.insert(j);
-              indices_all.insert(j);
-            }
-
-          for (auto j : post_indices[i])
-            {
-              indices_post.insert(j);
-              indices_all.insert(j);
-            }
-
-          for (auto j : indices_all)
-            {
-              if ((indices_pre.count(j) + indices_post.count(j) +
-                   indices_my.count(j)) > 1)
-                indices_2.insert(j);
-              if ((indices_pre.count(j) + indices_post.count(j) +
-                   indices_my.count(j)) == 3)
-                indices_3.insert(j);
-            }
-
-
-          std::cout
-            << pre_indices[i].size()                             // pre
-            << " "                                               //
-            << my_indices[i].size()                              // current
-            << " "                                               //
-            << post_indices[i].size()                            // post
-            << " "                                               //
-            << indices_all.size()                                // all
-            << " "                                               //
-            << (indices_all.size() * 100 / my_indices[i].size()) // increase [%]
-            << " "                                               //
-            << (indices_2.size() * 100 / indices_all.size()) // reusage: 2x [%]
-            << " "                                           //
-            << (indices_3.size() * 100 / indices_all.size()) // reusage: 3x [%]
-            << " " << std::endl;
-        }
-
-
-      std::cout << std::endl;
-    }
-
   const double time_power =
     std::chrono::duration_cast<std::chrono::nanoseconds>(
       std::chrono::system_clock::now() - temp_time)
@@ -417,17 +340,23 @@ run(const Parameters &params)
 
   temp_time = std::chrono::system_clock::now();
   for (unsigned int c = 0; c < n_repetitions; ++c)
-    for (unsigned int c = 0; c < 2; ++c)
+    {
       matrix_free_cell_loop(
         [&](const auto &data, auto &, const auto &, const auto cells) {
           FECellIntegrator phi(data);
 
           for (unsigned int cell = cells.first; cell < cells.second; ++cell)
-            if (c == 0)
-              process_batch_vmult(cell, phi, dst_0, src);
-            else if (c == 1)
-              process_batch_post(cell, phi, dst_1, dst_0);
+            process_batch_vmult(cell, phi, dst_0, src);
         });
+
+      matrix_free_cell_loop(
+        [&](const auto &data, auto &, const auto &, const auto cells) {
+          FECellIntegrator phi(data);
+
+          for (unsigned int cell = cells.first; cell < cells.second; ++cell)
+            process_batch_post(cell, phi, dst_1, dst_0);
+        });
+    }
 
   MPI_Barrier(MPI_COMM_WORLD);
   LIKWID_MARKER_STOP("normal");
