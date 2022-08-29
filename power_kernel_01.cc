@@ -240,12 +240,11 @@ run(const unsigned int s,
   const auto post_indices = process(max_vector);
 
   using VectorType = LinearAlgebra::distributed::Vector<double>;
-  VectorType src, dst_0, dst_1, dst_2;
+  VectorType src, dst_0, dst_1;
 
   matrix_free.initialize_dof_vector(src);
   matrix_free.initialize_dof_vector(dst_0);
   matrix_free.initialize_dof_vector(dst_1);
-  matrix_free.initialize_dof_vector(dst_2);
 
   VectorTools::interpolate(mapping, dof_handler, Fu<dim>(), src);
 
@@ -276,46 +275,27 @@ run(const unsigned int s,
           FEEvaluation<dim, -1, 0, 1, Number, VectorizedArrayType> phi(data);
           FEEvaluation<dim, -1, 0, 1, Number, VectorizedArrayType> phi_(data);
 
-          // pre vmult
-          if (true)
-            for (unsigned int i = 0; i < pre_indices[counter].size();
-                 i += VectorizedArrayType::size())
-              {
-                std::array<unsigned int, VectorizedArrayType::size()> ids = {};
-                ids.fill(numbers::invalid_unsigned_int);
-
-                for (unsigned int v = 0;
-                     v < std::min(VectorizedArrayType::size(),
-                                  pre_indices[counter].size() - i);
-                     ++v)
-                  ids[v] = pre_indices[counter][i + v];
-
-                process_batch(ids, phi, dst_0, src);
-              }
-
           // vmult
-          if (true)
-            for (unsigned int cell = cells.first; cell < cells.second; ++cell)
-              {
-                process_batch(cell, phi_, dst_1, dst_0);
-              }
+          for (unsigned int cell = cells.first; cell < cells.second; ++cell)
+            {
+              process_batch(cell, phi_, dst_0, src);
+            }
 
           // post vmult
-          if (true)
-            for (unsigned int i = 0; i < post_indices[counter].size();
-                 i += VectorizedArrayType::size())
-              {
-                std::array<unsigned int, VectorizedArrayType::size()> ids = {};
-                ids.fill(numbers::invalid_unsigned_int);
+          for (unsigned int i = 0; i < post_indices[counter].size();
+               i += VectorizedArrayType::size())
+            {
+              std::array<unsigned int, VectorizedArrayType::size()> ids = {};
+              ids.fill(numbers::invalid_unsigned_int);
 
-                for (unsigned int v = 0;
-                     v < std::min(VectorizedArrayType::size(),
-                                  post_indices[counter].size() - i);
-                     ++v)
-                  ids[v] = post_indices[counter][i + v];
+              for (unsigned int v = 0;
+                   v < std::min(VectorizedArrayType::size(),
+                                post_indices[counter].size() - i);
+                   ++v)
+                ids[v] = post_indices[counter][i + v];
 
-                process_batch(ids, phi, dst_2, dst_1);
-              }
+              process_batch(ids, phi, dst_1, dst_0);
+            }
 
           counter++;
         },
@@ -327,10 +307,10 @@ run(const unsigned int s,
 
   if (Utilities::MPI::this_mpi_process(MPI_COMM_WORLD) == 0)
     std::cout << src.l2_norm() << " " << dst_0.l2_norm() << " "
-              << dst_1.l2_norm() << " " << dst_2.l2_norm() << std::endl;
+              << dst_1.l2_norm() << std::endl;
 
 
-  if (Utilities::MPI::this_mpi_process(MPI_COMM_WORLD) == 0)
+  if (false && (Utilities::MPI::this_mpi_process(MPI_COMM_WORLD) == 0))
     {
       for (unsigned int i = 0; i < counter; ++i)
         {
@@ -392,8 +372,6 @@ run(const unsigned int s,
       std::cout << std::endl;
     }
 
-
-
   const double time_power =
     std::chrono::duration_cast<std::chrono::nanoseconds>(
       std::chrono::system_clock::now() - temp_time)
@@ -403,13 +381,12 @@ run(const unsigned int s,
 
   dst_0 = 0.0;
   dst_1 = 0.0;
-  dst_2 = 0.0;
 
   MPI_Barrier(MPI_COMM_WORLD);
 
   temp_time = std::chrono::system_clock::now();
   for (unsigned int c = 0; c < n_repetitions; ++c)
-    for (unsigned int c = 0; c < 3; ++c)
+    for (unsigned int c = 0; c < 2; ++c)
       matrix_free.template loop_cell_centric<double, double>(
         [&](const auto &data, auto &, const auto &, const auto cells) {
           FEEvaluation<dim, -1, 0, 1, Number, VectorizedArrayType> phi(data);
@@ -419,8 +396,6 @@ run(const unsigned int s,
               process_batch(cell, phi, dst_0, src);
             else if (c == 1)
               process_batch(cell, phi, dst_1, dst_0);
-            else if (c == 2)
-              process_batch(cell, phi, dst_2, dst_1);
         },
         dummy,
         dummy);
@@ -429,7 +404,7 @@ run(const unsigned int s,
 
   if (Utilities::MPI::this_mpi_process(MPI_COMM_WORLD) == 0)
     std::cout << src.l2_norm() << " " << dst_0.l2_norm() << " "
-              << dst_1.l2_norm() << " " << dst_2.l2_norm() << std::endl;
+              << dst_1.l2_norm() << std::endl;
 
   const double time_normal =
     std::chrono::duration_cast<std::chrono::nanoseconds>(
