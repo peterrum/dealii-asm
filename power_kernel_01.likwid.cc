@@ -289,7 +289,8 @@ run(const Parameters &params)
   // version 1: power kernel
   const auto time_power = run(
     [&]() {
-      counter = 0;
+      unsigned int counter = 0;
+
       matrix_free_cell_loop(
         [&](const auto &data, auto &, const auto &, const auto cells) {
           FECellIntegrator phi_0(data);
