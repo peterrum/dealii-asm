@@ -100,59 +100,36 @@ run(const Parameters &params)
   const unsigned int fe_degree    = params.fe_degree;
   const unsigned int n_components = params.n_components;
 
+  using VectorType          = LinearAlgebra::distributed::Vector<Number>;
   using VectorizedArrayType = VectorizedArray<Number, n_lanes>;
-
   using FECellIntegrator =
     FEEvaluation<dim, -1, 0, 1, Number, VectorizedArrayType>;
 
   Triangulation<dim> tria;
   create_grid(tria, params.subdivisions);
 
-  MappingQ1<dim> mapping;
-  FE_Q<dim>      fe_scalar(fe_degree);
-  FESystem<dim>  fe_q(fe_scalar, n_components);
+  MappingQ1<dim>   mapping;
+  FE_Q<dim>        fe_scalar(fe_degree);
+  FESystem<dim>    fe_q(fe_scalar, n_components);
+  QGaussLobatto<1> quad(fe_degree + 1);
 
   DoFHandler<dim> dof_handler(tria);
   dof_handler.distribute_dofs(fe_q);
 
   AffineConstraints<Number> constraints;
-  IndexSet                  relevant_dofs;
-  DoFTools::extract_locally_relevant_dofs(dof_handler, relevant_dofs);
-  constraints.reinit(relevant_dofs);
-  VectorTools::interpolate_boundary_values(mapping,
-                                           dof_handler,
-                                           0,
-                                           Functions::ZeroFunction<dim, Number>(
-                                             n_components),
-                                           constraints);
-  constraints.close();
-  typename MatrixFree<dim, Number, VectorizedArrayType>::AdditionalData mf_data;
 
-  mf_data.mapping_update_flags  = update_gradients;
+  // setup matrixfree
+  typename MatrixFree<dim, Number, VectorizedArrayType>::AdditionalData mf_data;
   mf_data.tasks_parallel_scheme = MatrixFree<dim, Number, VectorizedArrayType>::
     AdditionalData::TasksParallelScheme::none;
 
   DoFRenumbering::matrix_free_data_locality(dof_handler, constraints, mf_data);
 
-  DoFTools::extract_locally_relevant_dofs(dof_handler, relevant_dofs);
-  constraints.clear();
-  constraints.reinit(relevant_dofs);
-  VectorTools::interpolate_boundary_values(mapping,
-                                           dof_handler,
-                                           0,
-                                           Functions::ZeroFunction<dim, Number>(
-                                             n_components),
-                                           constraints);
-  constraints.close();
-
   MatrixFree<dim, Number, VectorizedArrayType> matrix_free;
 
-  matrix_free.reinit(mapping,
-                     dof_handler,
-                     constraints,
-                     QGaussLobatto<1>(fe_degree + 1),
-                     mf_data);
+  matrix_free.reinit(mapping, dof_handler, constraints, quad, mf_data);
 
+  // wrap matrix-free loop to be able to control granularity
   const auto matrix_free_cell_loop = [&](const auto fu) {
     if (params.cell_granularity == 0)
       {
@@ -256,15 +233,14 @@ run(const Parameters &params)
   const auto pre_indices  = process(min_vector);
   const auto post_indices = process(max_vector);
 
-  using VectorType = LinearAlgebra::distributed::Vector<Number>;
+  // intialize vectors
   VectorType src, dst_0, dst_1;
-
   matrix_free.initialize_dof_vector(src);
   matrix_free.initialize_dof_vector(dst_0);
   matrix_free.initialize_dof_vector(dst_1);
-
   VectorTools::interpolate(mapping, dof_handler, Fu<dim, Number>(), src);
 
+  // define vmult operations and ...
   const auto process_batch_vmult =
     [](const auto &id, auto &phi, auto &dst, const auto &src) {
       phi.reinit(id);
@@ -272,6 +248,7 @@ run(const Parameters &params)
       phi.distribute_local_to_global(dst);
     };
 
+  // ... post operation
   const auto process_batch_post =
     [](const auto &id, auto &phi, auto &dst, const auto &src) {
       phi.reinit(id);
