@@ -286,6 +286,7 @@ run(const Parameters &params)
            1e9;
   };
 
+  // version 1: power kernel
   const auto time_power = run(
     [&]() {
       counter = 0;
@@ -319,16 +320,9 @@ run(const Parameters &params)
     },
     "power");
 
-
-  dst_0 = 0.0;
-  dst_1 = 0.0;
-
-  MPI_Barrier(MPI_COMM_WORLD);
-  LIKWID_MARKER_START("normal");
-
-  auto temp_time = std::chrono::system_clock::now();
-  for (unsigned int c = 0; c < params.n_repetitions; ++c)
-    {
+  // version 2: run sequentially
+  const auto time_sequential = run(
+    [&]() {
       matrix_free_cell_loop(
         [&](const auto &data, auto &, const auto &, const auto cells) {
           FECellIntegrator phi(data);
@@ -344,26 +338,14 @@ run(const Parameters &params)
           for (unsigned int cell = cells.first; cell < cells.second; ++cell)
             process_batch_post(cell, phi, dst_1, dst_0);
         });
-    }
-
-  MPI_Barrier(MPI_COMM_WORLD);
-  LIKWID_MARKER_STOP("normal");
-
-  if (Utilities::MPI::this_mpi_process(MPI_COMM_WORLD) == 0)
-    std::cout << src.l2_norm() << " " << dst_0.l2_norm() << " "
-              << dst_1.l2_norm() << std::endl;
-
-  const double time_normal =
-    std::chrono::duration_cast<std::chrono::nanoseconds>(
-      std::chrono::system_clock::now() - temp_time)
-      .count() /
-    1e9;
+    },
+    "sequential");
 
 
   if (Utilities::MPI::this_mpi_process(MPI_COMM_WORLD) == 0)
     std::cout << tria.n_active_cells() << " " << dof_handler.n_dofs() << " "
-              << (time_power / time_normal) << " " << time_power << " "
-              << time_normal << std::endl;
+              << (time_power / time_sequential) << " " << time_power << " "
+              << time_sequential << std::endl;
 }
 
 template <int dim, typename T>
