@@ -89,10 +89,15 @@ create_grid(Triangulation<dim> &tria, const unsigned int s)
   tria.refine_global(n_refine);
 }
 
+struct PrePost
+{
+  std::vector<std::vector<unsigned int>> pre_indices;
+  std::vector<std::vector<unsigned int>> post_indices;
+};
+
 
 template <typename Fu>
-std::tuple<std::vector<std::vector<unsigned int>>,
-           std::vector<std::vector<unsigned int>>>
+PrePost
 determine_pre_post(const Fu &         matrix_free_cell_loop,
                    const unsigned int batch_size,
                    const bool         track_individual_cell)
@@ -187,7 +192,11 @@ determine_pre_post(const Fu &         matrix_free_cell_loop,
     return temp;
   };
 
-  return {process(min_vector), process(max_vector)};
+  PrePost result;
+  result.pre_indices  = process(min_vector);
+  result.post_indices = process(max_vector);
+
+  return result;
 }
 
 template <int dim, typename Number, std::size_t n_lanes>
@@ -239,15 +248,13 @@ run(const Parameters &params)
       }
   };
 
-  const auto [pre_indices_own, post_indices_own] =
-    determine_pre_post(matrix_free_cell_loop,
-                       VectorizedArrayType::size(),
-                       true);
+  const auto pre_post_own = determine_pre_post(matrix_free_cell_loop,
+                                               VectorizedArrayType::size(),
+                                               true);
 
-  const auto [pre_indices_batch, post_indices_batch] =
-    determine_pre_post(matrix_free_cell_loop,
-                       VectorizedArrayType::size(),
-                       false);
+  const auto pre_post_batch = determine_pre_post(matrix_free_cell_loop,
+                                                 VectorizedArrayType::size(),
+                                                 false);
 
   // intialize vectors
   VectorType src, dst_0, dst_1;
@@ -317,7 +324,8 @@ run(const Parameters &params)
             process_batch_vmult(cell, phi_0, dst_0, src);
 
           // post vmult
-          for (unsigned int i = 0; i < post_indices_own[counter].size();
+          for (unsigned int i = 0;
+               i < pre_post_own.post_indices[counter].size();
                i += VectorizedArrayType::size())
             {
               std::array<unsigned int, VectorizedArrayType::size()> ids = {};
@@ -325,9 +333,9 @@ run(const Parameters &params)
 
               for (unsigned int v = 0;
                    v < std::min(VectorizedArrayType::size(),
-                                post_indices_own[counter].size() - i);
+                                pre_post_own.post_indices[counter].size() - i);
                    ++v)
-                ids[v] = post_indices_own[counter][i + v];
+                ids[v] = pre_post_own.post_indices[counter][i + v];
 
               process_batch_post(ids, phi_1, dst_1, dst_0);
             }
@@ -352,8 +360,10 @@ run(const Parameters &params)
             process_batch_vmult(cell, phi_0, dst_0, src);
 
           // post vmult
-          for (unsigned int i = 0; i < post_indices_batch[counter].size(); ++i)
-            process_batch_post(post_indices_batch[counter][i],
+          for (unsigned int i = 0;
+               i < pre_post_batch.post_indices[counter].size();
+               ++i)
+            process_batch_post(pre_post_batch.post_indices[counter][i],
                                phi_1,
                                dst_1,
                                dst_0);
