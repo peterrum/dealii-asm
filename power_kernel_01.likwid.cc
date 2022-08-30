@@ -276,14 +276,26 @@ run(const Parameters &params)
 
   // wrap matrix-free loop to be able to control granularity
   const auto matrix_free_cell_loop = [&](const auto fu) {
+    Number dummy = 0;
+
     if (params.cell_granularity == 0)
       {
-        Number dummy = 0;
         matrix_free.template cell_loop<Number, Number>(fu, dummy, dummy);
       }
     else
       {
-        AssertThrow(false, ExcNotImplemented());
+        AssertThrow(params.cell_granularity >= VectorizedArrayType::size(),
+                    ExcInternalError());
+
+        const unsigned int stride =
+          params.cell_granularity / VectorizedArrayType::size();
+        const unsigned int n_cell_batches = matrix_free.n_cell_batches();
+
+        for (unsigned int i = 0; i < n_cell_batches; i += stride)
+          fu(matrix_free,
+             dummy,
+             dummy,
+             std::make_pair(i, std::min(i + stride, n_cell_batches)));
       }
   };
 
