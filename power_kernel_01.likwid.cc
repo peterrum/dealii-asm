@@ -1,3 +1,4 @@
+#include <deal.II/base/conditional_ostream.h>
 
 #include <deal.II/distributed/tria.h>
 
@@ -34,6 +35,7 @@ struct Parameters
   unsigned int n_lanes          = 0;
   unsigned int cell_granularity = 0;
   unsigned int n_repetitions    = 10;
+  bool         dof_renumbering  = true;
 
   std::string number_type = "double";
 
@@ -44,6 +46,12 @@ struct Parameters
     add_parameters(prm);
 
     prm.parse_input(file_name, "", true);
+  }
+
+  void
+  print()
+  {
+    print(ParameterHandler::OutputStyle::ShortJSON);
   }
 
 private:
@@ -57,10 +65,25 @@ private:
     prm.add_parameter("n lanes", n_lanes);
     prm.add_parameter("cell granularity", cell_granularity);
     prm.add_parameter("n repetitions", n_repetitions);
+    prm.add_parameter("dof renumbering", dof_renumbering);
     prm.add_parameter("number type",
                       number_type,
                       "",
                       Patterns::Selection("double|float"));
+  }
+
+  void
+  print(const ParameterHandler::OutputStyle style)
+  {
+    dealii::ParameterHandler prm;
+    add_parameters(prm);
+
+    ConditionalOStream pcout(std::cout,
+                             Utilities::MPI::this_mpi_process(MPI_COMM_WORLD) ==
+                               0);
+
+    if (pcout.is_active())
+      prm.print_parameters(pcout.get_stream(), style);
   }
 };
 
@@ -268,7 +291,10 @@ run(const Parameters &params)
   mf_data.tasks_parallel_scheme = MatrixFree<dim, Number, VectorizedArrayType>::
     AdditionalData::TasksParallelScheme::none;
 
-  DoFRenumbering::matrix_free_data_locality(dof_handler, constraints, mf_data);
+  if (params.dof_renumbering)
+    DoFRenumbering::matrix_free_data_locality(dof_handler,
+                                              constraints,
+                                              mf_data);
 
   MatrixFree<dim, Number, VectorizedArrayType> matrix_free;
 
@@ -557,6 +583,8 @@ main(int argc, char **argv)
 
       if (file_name != "")
         params.parse(file_name);
+
+      params.print();
 
       if (params.dim == 2)
         run_dim<2>(params);
