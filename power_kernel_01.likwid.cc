@@ -256,24 +256,47 @@ run(const Parameters &params)
       phi.distribute_local_to_global(dst);
     };
 
-  MPI_Barrier(MPI_COMM_WORLD);
-  LIKWID_MARKER_START("power");
+  // helper function to run performance study
+  const auto run = [&](const auto &fu, const std::string label) {
+    dst_0 = 0.0;
+    dst_1 = 0.0;
 
-  auto temp_time = std::chrono::system_clock::now();
+    MPI_Barrier(MPI_COMM_WORLD);
 
-  const unsigned int n_repetitions = params.n_repetitions;
+    if (label != "")
+      LIKWID_MARKER_START("power");
 
-  for (unsigned int c = 0; c < n_repetitions; ++c)
-    {
+    auto temp_time = std::chrono::system_clock::now();
+
+    for (unsigned int c = 0; c < params.n_repetitions; ++c)
+      fu();
+
+    MPI_Barrier(MPI_COMM_WORLD);
+
+    if (label != "")
+      LIKWID_MARKER_STOP("power");
+
+    if (Utilities::MPI::this_mpi_process(MPI_COMM_WORLD) == 0)
+      std::cout << src.l2_norm() << " " << dst_0.l2_norm() << " "
+                << dst_1.l2_norm() << std::endl;
+
+    return std::chrono::duration_cast<std::chrono::nanoseconds>(
+             std::chrono::system_clock::now() - temp_time)
+             .count() /
+           1e9;
+  };
+
+  const auto time_power = run(
+    [&]() {
       counter = 0;
       matrix_free_cell_loop(
         [&](const auto &data, auto &, const auto &, const auto cells) {
-          FECellIntegrator phi(data);
-          FECellIntegrator phi_(data);
+          FECellIntegrator phi_0(data);
+          FECellIntegrator phi_1(data);
 
           // vmult
           for (unsigned int cell = cells.first; cell < cells.second; ++cell)
-            process_batch_vmult(cell, phi_, dst_0, src);
+            process_batch_vmult(cell, phi_0, dst_0, src);
 
           // post vmult
           for (unsigned int i = 0; i < post_indices[counter].size();
@@ -288,25 +311,13 @@ run(const Parameters &params)
                    ++v)
                 ids[v] = post_indices[counter][i + v];
 
-              process_batch_post(ids, phi, dst_1, dst_0);
+              process_batch_post(ids, phi_1, dst_1, dst_0);
             }
 
           counter++;
         });
-    }
-
-  MPI_Barrier(MPI_COMM_WORLD);
-  LIKWID_MARKER_STOP("power");
-
-  if (Utilities::MPI::this_mpi_process(MPI_COMM_WORLD) == 0)
-    std::cout << src.l2_norm() << " " << dst_0.l2_norm() << " "
-              << dst_1.l2_norm() << std::endl;
-
-  const double time_power =
-    std::chrono::duration_cast<std::chrono::nanoseconds>(
-      std::chrono::system_clock::now() - temp_time)
-      .count() /
-    1e9;
+    },
+    "power");
 
 
   dst_0 = 0.0;
@@ -315,8 +326,8 @@ run(const Parameters &params)
   MPI_Barrier(MPI_COMM_WORLD);
   LIKWID_MARKER_START("normal");
 
-  temp_time = std::chrono::system_clock::now();
-  for (unsigned int c = 0; c < n_repetitions; ++c)
+  auto temp_time = std::chrono::system_clock::now();
+  for (unsigned int c = 0; c < params.n_repetitions; ++c)
     {
       matrix_free_cell_loop(
         [&](const auto &data, auto &, const auto &, const auto cells) {
