@@ -36,6 +36,32 @@ struct Parameters
   unsigned int n_repetitions    = 10;
 
   std::string number_type = "double";
+
+  void
+  parse(const std::string file_name)
+  {
+    dealii::ParameterHandler prm;
+    add_parameters(prm);
+
+    prm.parse_input(file_name, "", true);
+  }
+
+private:
+  void
+  add_parameters(ParameterHandler &prm)
+  {
+    prm.add_parameter("dim", dim);
+    prm.add_parameter("fe degree", fe_degree);
+    prm.add_parameter("n components", n_components);
+    prm.add_parameter("n subdivisions", subdivisions);
+    prm.add_parameter("n lanes", n_lanes);
+    prm.add_parameter("cell granularity", cell_granularity);
+    prm.add_parameter("n repetitions", n_repetitions);
+    prm.add_parameter("number type",
+                      number_type,
+                      "",
+                      Patterns::Selection("double|float"));
+  }
 };
 
 template <int dim, typename Number>
@@ -505,14 +531,28 @@ main(int argc, char **argv)
   LIKWID_MARKER_THREADINIT;
 #endif
 
-  Parameters params;
+  std::vector<std::string> input_files;
 
-  if (params.dim == 2)
-    run_dim<2>(params);
-  else if (params.dim == 3)
-    run_dim<3>(params);
-  else
-    AssertThrow(false, ExcNotImplemented());
+  for (int i = 1; i < argc; ++i)
+    input_files.emplace_back(std::string(argv[i]));
+
+  if (input_files.empty())
+    input_files.push_back("");
+
+  for (const auto file_name : input_files)
+    {
+      Parameters params;
+
+      if (file_name != "")
+        params.parse(file_name);
+
+      if (params.dim == 2)
+        run_dim<2>(params);
+      else if (params.dim == 3)
+        run_dim<3>(params);
+      else
+        AssertThrow(false, ExcNotImplemented());
+    }
 
 #ifdef LIKWID_PERFMON
   LIKWID_MARKER_CLOSE;
