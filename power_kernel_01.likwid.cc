@@ -1,4 +1,5 @@
 #include <deal.II/base/conditional_ostream.h>
+#include <deal.II/base/convergence_table.h>
 
 #include <deal.II/distributed/tria.h>
 
@@ -263,7 +264,7 @@ determine_pre_post(const Fu &         matrix_free_cell_loop,
 
 template <int dim, typename Number, std::size_t n_lanes>
 void
-run(const Parameters &params)
+run(const Parameters &params, ConvergenceTable &table)
 {
   const unsigned int fe_degree    = params.fe_degree;
   const unsigned int n_components = params.n_components;
@@ -470,17 +471,44 @@ run(const Parameters &params)
     },
     "sequential");
 
+  const unsigned int n_mpi_processes =
+    Utilities::MPI::n_mpi_processes(MPI_COMM_WORLD);
 
-  if (Utilities::MPI::this_mpi_process(MPI_COMM_WORLD) == 0)
-    std::cout << tria.n_active_cells() << " " << dof_handler.n_dofs() << " "
-              << (time_power_own / time_sequential) << " "
-              << (time_power_batch / time_sequential) << " " << time_power_own
-              << " " << time_power_batch << " " << time_sequential << std::endl;
+
+  table.add_value("degree", fe_degree);
+  table.add_value("n_lanes", VectorizedArrayType::size());
+  table.add_value("granularity", params.cell_granularity);
+  table.add_value("n_repetitions", params.n_repetitions);
+  table.add_value("n_procs", n_mpi_processes);
+  table.add_value("n_cells", tria.n_active_cells());
+  table.add_value("n_dofs", dof_handler.n_dofs());
+
+  table.add_value("s_own", time_sequential / time_power_own);
+  table.set_scientific("s_own", true);
+  table.add_value("s_batch", time_sequential / time_power_batch);
+  table.set_scientific("s_batch", true);
+
+  table.add_value("t_own", time_power_own);
+  table.set_scientific("t_own", true);
+  table.add_value("t_batch", time_power_batch);
+  table.set_scientific("t_batch", true);
+  table.add_value("t_sequential", time_sequential);
+  table.set_scientific("t_sequential", true);
+
+  const unsigned int dofs_ =
+    2 * dof_handler.n_dofs() * params.n_repetitions * n_mpi_processes;
+
+  table.add_value("tp_own", dofs_ / time_power_own);
+  table.set_scientific("tp_own", true);
+  table.add_value("tp_batch", dofs_ / time_power_batch);
+  table.set_scientific("tp_batch", true);
+  table.add_value("tp_sequential", dofs_ / time_sequential);
+  table.set_scientific("tp_sequential", true);
 }
 
 template <int dim, typename T>
 void
-run_number(const Parameters &params)
+run_number(const Parameters &params, ConvergenceTable &table)
 {
   unsigned int n_lanes = params.n_lanes;
 
@@ -492,22 +520,22 @@ run_number(const Parameters &params)
   AssertThrow(n_lanes <= n_lanes_max, ExcNotImplemented());
 
   if (n_lanes == 1)
-    run<dim, T, std::min<std::size_t>(1, n_lanes_max)>(params);
+    run<dim, T, std::min<std::size_t>(1, n_lanes_max)>(params, table);
   else if (n_lanes == 2)
-    run<dim, T, std::min<std::size_t>(2, n_lanes_max)>(params);
+    run<dim, T, std::min<std::size_t>(2, n_lanes_max)>(params, table);
   else if (n_lanes == 4)
-    run<dim, T, std::min<std::size_t>(4, n_lanes_max)>(params);
+    run<dim, T, std::min<std::size_t>(4, n_lanes_max)>(params, table);
   else if (n_lanes == 8)
-    run<dim, T, std::min<std::size_t>(8, n_lanes_max)>(params);
+    run<dim, T, std::min<std::size_t>(8, n_lanes_max)>(params, table);
   else if (n_lanes == 16)
-    run<dim, T, std::min<std::size_t>(16, n_lanes_max)>(params);
+    run<dim, T, std::min<std::size_t>(16, n_lanes_max)>(params, table);
   else
     AssertThrow(false, ExcNotImplemented());
 }
 
 template <int dim>
 void
-run_dim(const Parameters &params)
+run_dim(const Parameters &params, ConvergenceTable &table)
 {
   unsigned int n_lanes = params.n_lanes;
 
@@ -523,13 +551,13 @@ run_dim(const Parameters &params)
       AssertThrow(n_lanes <= n_lanes_max, ExcNotImplemented());
 
       if (n_lanes == 1)
-        run<dim, T, std::min<std::size_t>(1, n_lanes_max)>(params);
+        run<dim, T, std::min<std::size_t>(1, n_lanes_max)>(params, table);
       else if (n_lanes == 2)
-        run<dim, T, std::min<std::size_t>(2, n_lanes_max)>(params);
+        run<dim, T, std::min<std::size_t>(2, n_lanes_max)>(params, table);
       else if (n_lanes == 4)
-        run<dim, T, std::min<std::size_t>(4, n_lanes_max)>(params);
+        run<dim, T, std::min<std::size_t>(4, n_lanes_max)>(params, table);
       else if (n_lanes == 8)
-        run<dim, T, std::min<std::size_t>(8, n_lanes_max)>(params);
+        run<dim, T, std::min<std::size_t>(8, n_lanes_max)>(params, table);
       else
         AssertThrow(false, ExcNotImplemented());
     }
@@ -545,13 +573,13 @@ run_dim(const Parameters &params)
       AssertThrow(n_lanes <= n_lanes_max, ExcNotImplemented());
 
       if (n_lanes == 1)
-        run<dim, T, std::min<std::size_t>(1, n_lanes_max)>(params);
+        run<dim, T, std::min<std::size_t>(1, n_lanes_max)>(params, table);
       else if (n_lanes == 4)
-        run<dim, T, std::min<std::size_t>(4, n_lanes_max)>(params);
+        run<dim, T, std::min<std::size_t>(4, n_lanes_max)>(params, table);
       else if (n_lanes == 8)
-        run<dim, T, std::min<std::size_t>(8, n_lanes_max)>(params);
+        run<dim, T, std::min<std::size_t>(8, n_lanes_max)>(params, table);
       else if (n_lanes == 16)
-        run<dim, T, std::min<std::size_t>(16, n_lanes_max)>(params);
+        run<dim, T, std::min<std::size_t>(16, n_lanes_max)>(params, table);
       else
         AssertThrow(false, ExcNotImplemented());
     }
@@ -569,6 +597,9 @@ main(int argc, char **argv)
   LIKWID_MARKER_THREADINIT;
 #endif
 
+  const bool is_root = Utilities::MPI::this_mpi_process(MPI_COMM_WORLD) == 0;
+  const bool verbose = true;
+
   std::vector<std::string> input_files;
 
   for (int i = 1; i < argc; ++i)
@@ -577,8 +608,12 @@ main(int argc, char **argv)
   if (input_files.empty())
     input_files.push_back("");
 
-  for (const auto file_name : input_files)
+  ConvergenceTable table;
+
+  for (unsigned int i = 0; i < input_files.size(); ++i)
     {
+      const auto file_name = input_files[i];
+
       Parameters params;
 
       if (file_name != "")
@@ -587,11 +622,17 @@ main(int argc, char **argv)
       params.print();
 
       if (params.dim == 2)
-        run_dim<2>(params);
+        run_dim<2>(params, table);
       else if (params.dim == 3)
-        run_dim<3>(params);
+        run_dim<3>(params, table);
       else
         AssertThrow(false, ExcNotImplemented());
+
+      if (is_root && (verbose || ((i + 1) == input_files.size())))
+        {
+          table.write_text(std::cout, ConvergenceTable::org_mode_table);
+          std::cout << std::endl;
+        }
     }
 
 #ifdef LIKWID_PERFMON
