@@ -27,6 +27,8 @@
 
 using namespace dealii;
 
+static unsigned int likwid_counter = 0;
+
 struct Parameters
 {
   unsigned int dim              = 3;
@@ -37,6 +39,7 @@ struct Parameters
   unsigned int cell_granularity = 0;
   unsigned int n_repetitions    = 10;
   bool         dof_renumbering  = true;
+  bool         use_dg           = false;
 
   std::string number_type = "double";
 
@@ -67,6 +70,7 @@ private:
     prm.add_parameter("cell granularity", cell_granularity);
     prm.add_parameter("n repetitions", n_repetitions);
     prm.add_parameter("dof renumbering", dof_renumbering);
+    prm.add_parameter("use dg", dof_renumbering);
     prm.add_parameter("number type",
                       number_type,
                       "",
@@ -259,6 +263,9 @@ determine_pre_post(const Fu &         matrix_free_cell_loop,
   std::tie(result.pre_indices, result.pre_indices_ptr)   = process(min_vector);
   std::tie(result.post_indices, result.post_indices_ptr) = process(max_vector);
 
+  // std::cout << result.post_indices.size() << " " <<
+  // result.post_indices_ptr.size() << std::endl;
+
   return result;
 }
 
@@ -278,12 +285,15 @@ run(const Parameters &params, ConvergenceTable &table)
   create_grid(tria, params.subdivisions);
 
   MappingQ1<dim>   mapping;
-  FE_Q<dim>        fe_scalar(fe_degree);
-  FESystem<dim>    fe_q(fe_scalar, n_components);
   QGaussLobatto<1> quad(fe_degree + 1);
 
   DoFHandler<dim> dof_handler(tria);
-  dof_handler.distribute_dofs(fe_q);
+  if (params.use_dg)
+    dof_handler.distribute_dofs(
+      FESystem<dim>{FE_DGQ<dim>(fe_degree), n_components});
+  else
+    dof_handler.distribute_dofs(
+      FESystem<dim>{FE_Q<dim>(fe_degree), n_components});
 
   AffineConstraints<Number> constraints;
 
@@ -358,9 +368,20 @@ run(const Parameters &params, ConvergenceTable &table)
     };
 
   // helper function to run performance study
-  const auto run = [&](const auto &fu, const std::string label) {
+  const auto run = [&](const auto &fu, const std::string prefix) {
     dst_0 = 0.0;
     dst_1 = 0.0;
+
+    std::string label = prefix + "_";
+
+    if (likwid_counter < 10)
+      label = label + "000" + std::to_string(likwid_counter);
+    else if (likwid_counter < 100)
+      label = label + "00" + std::to_string(likwid_counter);
+    else if (likwid_counter < 1000)
+      label = label + "0" + std::to_string(likwid_counter);
+    else
+      AssertThrow(false, ExcNotImplemented());
 
     MPI_Barrier(MPI_COMM_WORLD);
 
@@ -504,6 +525,8 @@ run(const Parameters &params, ConvergenceTable &table)
   table.set_scientific("tp_batch", true);
   table.add_value("tp_sequential", dofs_ / time_sequential);
   table.set_scientific("tp_sequential", true);
+
+  likwid_counter++;
 }
 
 template <int dim, typename T>
