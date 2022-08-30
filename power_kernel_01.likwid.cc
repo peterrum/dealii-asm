@@ -93,6 +93,100 @@ create_grid(Triangulation<dim> &tria, const unsigned int s)
   tria.refine_global(n_refine);
 }
 
+
+template <typename Fu>
+std::tuple<std::vector<std::vector<unsigned int>>,
+           std::vector<std::vector<unsigned int>>>
+determine_pre_post(const Fu &         matrix_free_cell_loop,
+                   const unsigned int batch_size)
+{
+  unsigned int n_vertices     = 0;
+  unsigned int n_cell_batches = 0;
+
+  matrix_free_cell_loop(
+    [&](const auto &data, auto &, const auto &, const auto) {
+      n_vertices     = data.get_dof_handler().get_triangulation().n_vertices();
+      n_cell_batches = data.n_cell_batches();
+    });
+
+  std::vector<std::pair<unsigned int, unsigned int>> vertex_tracker(
+    n_vertices,
+    std::pair<unsigned int, unsigned int>(numbers::invalid_unsigned_int, 0));
+
+  unsigned int counter = 0;
+
+  matrix_free_cell_loop([&](const auto &data,
+                            auto &,
+                            const auto &,
+                            const auto cells) {
+    for (unsigned int cell = cells.first; cell < cells.second; ++cell)
+      {
+        const auto n_active_entries_per_cell_batch =
+          data.n_active_entries_per_cell_batch(cell);
+
+        for (unsigned int v = 0; v < n_active_entries_per_cell_batch; ++v)
+          {
+            const auto cell_iterator = data.get_cell_iterator(cell, v);
+
+            for (const auto i : cell_iterator->vertex_indices())
+              {
+                vertex_tracker[cell_iterator->vertex_index(i)].first =
+                  std::min(vertex_tracker[cell_iterator->vertex_index(i)].first,
+                           counter);
+                vertex_tracker[cell_iterator->vertex_index(i)].second =
+                  std::max(
+                    vertex_tracker[cell_iterator->vertex_index(i)].second,
+                    counter);
+              }
+          }
+      }
+    counter++;
+  });
+
+  std::vector<unsigned int> min_vector(n_cell_batches * batch_size,
+                                       numbers::invalid_unsigned_int);
+  std::vector<unsigned int> max_vector(n_cell_batches * batch_size, 0);
+
+  counter = 0;
+  matrix_free_cell_loop(
+    [&](const auto &data, auto &, const auto &, const auto cells) {
+      for (unsigned int cell = cells.first; cell < cells.second; ++cell)
+        {
+          const auto n_active_entries_per_cell_batch =
+            data.n_active_entries_per_cell_batch(cell);
+
+          for (unsigned int v = 0; v < n_active_entries_per_cell_batch; ++v)
+            {
+              const auto cell_iterator = data.get_cell_iterator(cell, v);
+
+              for (const auto i : cell_iterator->vertex_indices())
+                {
+                  min_vector[cell * batch_size + v] = std::min(
+                    min_vector[cell * batch_size + v],
+                    vertex_tracker[cell_iterator->vertex_index(i)].first);
+
+                  max_vector[cell * batch_size + v] = std::max(
+                    max_vector[cell * batch_size + v],
+                    vertex_tracker[cell_iterator->vertex_index(i)].second);
+                }
+            }
+        }
+      counter++;
+    });
+
+  const auto process = [counter](const auto &ids) {
+    std::vector<std::vector<unsigned int>> temp(counter);
+
+    for (unsigned int i = 0; i < ids.size(); ++i)
+      if (ids[i] != numbers::invalid_unsigned_int)
+        temp[ids[i]].push_back(i);
+
+    return temp;
+  };
+
+  return {process(min_vector), process(max_vector)};
+}
+
 template <int dim, typename Number, std::size_t n_lanes>
 void
 run(const Parameters &params)
@@ -142,96 +236,8 @@ run(const Parameters &params)
       }
   };
 
-  std::vector<unsigned int> min_vector(matrix_free.n_cell_batches() *
-                                         VectorizedArrayType::size(),
-                                       numbers::invalid_unsigned_int);
-  std::vector<unsigned int> max_vector(matrix_free.n_cell_batches() *
-                                         VectorizedArrayType::size(),
-                                       0);
-
-
-  std::vector<std::pair<unsigned int, unsigned int>> vertex_tracker(
-    tria.n_vertices(),
-    std::pair<unsigned int, unsigned int>(numbers::invalid_unsigned_int, 0));
-
-  unsigned int counter = 0;
-
-  matrix_free_cell_loop([&](const auto &data,
-                            auto &,
-                            const auto &,
-                            const auto cells) {
-    (void)data;
-
-    for (unsigned int cell = cells.first; cell < cells.second; ++cell)
-      {
-        const auto n_active_entries_per_cell_batch =
-          data.n_active_entries_per_cell_batch(cell);
-
-        for (unsigned int v = 0; v < n_active_entries_per_cell_batch; ++v)
-          {
-            const auto cell_iterator = matrix_free.get_cell_iterator(cell, v);
-
-            for (const auto i : cell_iterator->vertex_indices())
-              {
-                vertex_tracker[cell_iterator->vertex_index(i)].first =
-                  std::min(vertex_tracker[cell_iterator->vertex_index(i)].first,
-                           counter);
-                vertex_tracker[cell_iterator->vertex_index(i)].second =
-                  std::max(
-                    vertex_tracker[cell_iterator->vertex_index(i)].second,
-                    counter);
-              }
-          }
-      }
-    counter++;
-  });
-
-  std::vector<std::vector<unsigned int>> my_indices(counter);
-
-  counter = 0;
-  matrix_free_cell_loop(
-    [&](const auto &data, auto &, const auto &, const auto cells) {
-      (void)data;
-
-      for (unsigned int cell = cells.first; cell < cells.second; ++cell)
-        {
-          const auto n_active_entries_per_cell_batch =
-            data.n_active_entries_per_cell_batch(cell);
-
-          for (unsigned int v = 0; v < n_active_entries_per_cell_batch; ++v)
-            {
-              my_indices[counter].push_back(cell * VectorizedArrayType::size() +
-                                            v);
-
-              const auto cell_iterator = matrix_free.get_cell_iterator(cell, v);
-
-              for (const auto i : cell_iterator->vertex_indices())
-                {
-                  min_vector[cell * VectorizedArrayType::size() + v] = std::min(
-                    min_vector[cell * VectorizedArrayType::size() + v],
-                    vertex_tracker[cell_iterator->vertex_index(i)].first);
-
-                  max_vector[cell * VectorizedArrayType::size() + v] = std::max(
-                    max_vector[cell * VectorizedArrayType::size() + v],
-                    vertex_tracker[cell_iterator->vertex_index(i)].second);
-                }
-            }
-        }
-      counter++;
-    });
-
-  const auto process = [counter](const auto &ids) {
-    std::vector<std::vector<unsigned int>> temp(counter);
-
-    for (unsigned int i = 0; i < ids.size(); ++i)
-      if (ids[i] != numbers::invalid_unsigned_int)
-        temp[ids[i]].push_back(i);
-
-    return temp;
-  };
-
-  const auto pre_indices  = process(min_vector);
-  const auto post_indices = process(max_vector);
+  const auto [pre_indices, post_indices] =
+    determine_pre_post(matrix_free_cell_loop, VectorizedArrayType::size());
 
   // intialize vectors
   VectorType src, dst_0, dst_1;
