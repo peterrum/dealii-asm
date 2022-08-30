@@ -23,10 +23,6 @@
 #  include <likwid.h>
 #endif
 
-//#include "../common_code/curved_manifold.h"
-//#include "../common_code/diagonal_matrix_blocked.h"
-//#include "../common_code/poisson_operator.h"
-
 using namespace dealii;
 
 struct Parameters
@@ -98,7 +94,8 @@ template <typename Fu>
 std::tuple<std::vector<std::vector<unsigned int>>,
            std::vector<std::vector<unsigned int>>>
 determine_pre_post(const Fu &         matrix_free_cell_loop,
-                   const unsigned int batch_size)
+                   const unsigned int batch_size,
+                   const bool         track_individual_cell)
 {
   unsigned int n_vertices     = 0;
   unsigned int n_cell_batches = 0;
@@ -143,9 +140,12 @@ determine_pre_post(const Fu &         matrix_free_cell_loop,
     counter++;
   });
 
-  std::vector<unsigned int> min_vector(n_cell_batches * batch_size,
+  const unsigned n_entities_to_track =
+    track_individual_cell ? (n_cell_batches * batch_size) : n_cell_batches;
+
+  std::vector<unsigned int> min_vector(n_entities_to_track,
                                        numbers::invalid_unsigned_int);
-  std::vector<unsigned int> max_vector(n_cell_batches * batch_size, 0);
+  std::vector<unsigned int> max_vector(n_entities_to_track, 0);
 
   counter = 0;
   matrix_free_cell_loop(
@@ -161,12 +161,15 @@ determine_pre_post(const Fu &         matrix_free_cell_loop,
 
               for (const auto i : cell_iterator->vertex_indices())
                 {
-                  min_vector[cell * batch_size + v] = std::min(
-                    min_vector[cell * batch_size + v],
+                  const unsigned int index =
+                    track_individual_cell ? (cell * batch_size + v) : cell;
+
+                  min_vector[index] = std::min(
+                    min_vector[index],
                     vertex_tracker[cell_iterator->vertex_index(i)].first);
 
-                  max_vector[cell * batch_size + v] = std::max(
-                    max_vector[cell * batch_size + v],
+                  max_vector[index] = std::max(
+                    max_vector[index],
                     vertex_tracker[cell_iterator->vertex_index(i)].second);
                 }
             }
@@ -236,8 +239,15 @@ run(const Parameters &params)
       }
   };
 
-  const auto [pre_indices, post_indices] =
-    determine_pre_post(matrix_free_cell_loop, VectorizedArrayType::size());
+  const auto [pre_indices_own, post_indices_own] =
+    determine_pre_post(matrix_free_cell_loop,
+                       VectorizedArrayType::size(),
+                       true);
+
+  const auto [pre_indices_batch, post_indices_batch] =
+    determine_pre_post(matrix_free_cell_loop,
+                       VectorizedArrayType::size(),
+                       false);
 
   // intialize vectors
   VectorType src, dst_0, dst_1;
@@ -270,7 +280,7 @@ run(const Parameters &params)
     MPI_Barrier(MPI_COMM_WORLD);
 
     if (label != "")
-      LIKWID_MARKER_START("power");
+      LIKWID_MARKER_START(label.c_str());
 
     auto temp_time = std::chrono::system_clock::now();
 
@@ -280,7 +290,7 @@ run(const Parameters &params)
     MPI_Barrier(MPI_COMM_WORLD);
 
     if (label != "")
-      LIKWID_MARKER_STOP("power");
+      LIKWID_MARKER_STOP(label.c_str());
 
     if (Utilities::MPI::this_mpi_process(MPI_COMM_WORLD) == 0)
       std::cout << src.l2_norm() << " " << dst_0.l2_norm() << " "
@@ -292,8 +302,8 @@ run(const Parameters &params)
            1e9;
   };
 
-  // version 1: power kernel
-  const auto time_power = run(
+  // version 1: power kernel (use own batches)
+  const auto time_power_own = run(
     [&]() {
       unsigned int counter = 0;
 
@@ -307,7 +317,7 @@ run(const Parameters &params)
             process_batch_vmult(cell, phi_0, dst_0, src);
 
           // post vmult
-          for (unsigned int i = 0; i < post_indices[counter].size();
+          for (unsigned int i = 0; i < post_indices_own[counter].size();
                i += VectorizedArrayType::size())
             {
               std::array<unsigned int, VectorizedArrayType::size()> ids = {};
@@ -315,9 +325,9 @@ run(const Parameters &params)
 
               for (unsigned int v = 0;
                    v < std::min(VectorizedArrayType::size(),
-                                post_indices[counter].size() - i);
+                                post_indices_own[counter].size() - i);
                    ++v)
-                ids[v] = post_indices[counter][i + v];
+                ids[v] = post_indices_own[counter][i + v];
 
               process_batch_post(ids, phi_1, dst_1, dst_0);
             }
@@ -325,9 +335,35 @@ run(const Parameters &params)
           counter++;
         });
     },
-    "power");
+    "powero");
 
-  // version 2: run sequentially
+  // version 2: power kernel (use matrix-free batches)
+  const auto time_power_batch = run(
+    [&]() {
+      unsigned int counter = 0;
+
+      matrix_free_cell_loop(
+        [&](const auto &data, auto &, const auto &, const auto cells) {
+          FECellIntegrator phi_0(data);
+          FECellIntegrator phi_1(data);
+
+          // vmult
+          for (unsigned int cell = cells.first; cell < cells.second; ++cell)
+            process_batch_vmult(cell, phi_0, dst_0, src);
+
+          // post vmult
+          for (unsigned int i = 0; i < post_indices_batch[counter].size(); ++i)
+            process_batch_post(post_indices_batch[counter][i],
+                               phi_1,
+                               dst_1,
+                               dst_0);
+
+          counter++;
+        });
+    },
+    "powerb");
+
+  // version 3: run sequentially
   const auto time_sequential = run(
     [&]() {
       matrix_free_cell_loop(
@@ -351,8 +387,9 @@ run(const Parameters &params)
 
   if (Utilities::MPI::this_mpi_process(MPI_COMM_WORLD) == 0)
     std::cout << tria.n_active_cells() << " " << dof_handler.n_dofs() << " "
-              << (time_power / time_sequential) << " " << time_power << " "
-              << time_sequential << std::endl;
+              << (time_power_own / time_sequential) << " "
+              << (time_power_batch / time_sequential) << " " << time_power_own
+              << " " << time_power_batch << " " << time_sequential << std::endl;
 }
 
 template <int dim, typename T>
