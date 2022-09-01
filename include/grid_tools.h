@@ -128,14 +128,18 @@ namespace dealii
       for (const auto &cell : tria.active_cell_iterators())
         if (cell->is_locally_owned())
           for (const auto f : cell->face_indices())
-            if (cell->at_boundary(f) == false)
+            if ((cell->at_boundary(f) == false) ||
+                cell->has_periodic_neighbor(f))
               {
-                const auto cell_neighbor = cell->neighbor(f);
+                const auto cell_neighbor =
+                  cell->neighbor_or_periodic_neighbor(f);
 
                 const unsigned int fo = f ^ 1;
 
-                is_structured &= ((cell_neighbor->at_boundary(fo) == false) &&
-                                  (cell_neighbor->neighbor(fo) == cell));
+                is_structured &=
+                  (((cell_neighbor->at_boundary(fo) == false) ||
+                    cell_neighbor->has_periodic_neighbor(fo)) &&
+                   (cell_neighbor->neighbor_or_periodic_neighbor(fo) == cell));
               }
 
       return Utilities::MPI::min(static_cast<double>(is_structured),
@@ -221,30 +225,36 @@ namespace dealii
       if (level >= 1)
         {
           for (const auto f0 : cell->face_indices())
-            if (cell->at_boundary(f0) == false)
+            if ((cell->at_boundary(f0) == false) ||
+                cell->has_periodic_neighbor(f0))
               {
-                const auto cell_neighbor = cell->neighbor(f0);
+                const auto cell_neighbor =
+                  cell->neighbor_or_periodic_neighbor(f0);
 
                 set_entry({f0}, cell_neighbor);
 
                 if (level >= 2)
                   for (const auto f1 : cell_neighbor->face_indices())
                     if ((f0 / 2 != f1 / 2) &&
-                        (cell_neighbor->at_boundary(f1) == false))
+                        ((cell_neighbor->at_boundary(f1) == false) ||
+                         cell_neighbor->has_periodic_neighbor(f1)))
                       {
                         const auto cell_neighbor_neigbor =
-                          cell_neighbor->neighbor(f1);
+                          cell_neighbor->neighbor_or_periodic_neighbor(f1);
                         set_entry({f0, f1}, cell_neighbor_neigbor);
 
                         if (level >= 3)
                           for (const auto f2 :
                                cell_neighbor_neigbor->face_indices())
                             if (((f0 / 2 != f2 / 2) && (f1 / 2 != f2 / 2)) &&
-                                (cell_neighbor_neigbor->at_boundary(f2) ==
-                                 false))
+                                ((cell_neighbor_neigbor->at_boundary(f2) ==
+                                  false) ||
+                                 cell_neighbor_neigbor->has_periodic_neighbor(
+                                   f2)))
                               {
                                 const auto cell_neighbor_neigbor_neigbor =
-                                  cell_neighbor_neigbor->neighbor(f2);
+                                  cell_neighbor_neigbor
+                                    ->neighbor_or_periodic_neighbor(f2);
                                 set_entry({f0, f1, f2},
                                           cell_neighbor_neigbor_neigbor);
                               }
