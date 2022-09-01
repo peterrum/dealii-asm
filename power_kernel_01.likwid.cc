@@ -40,6 +40,7 @@ struct Parameters
   unsigned int n_repetitions    = 10;
   bool         dof_renumbering  = true;
   bool         use_dg           = false;
+  bool         do_computation   = false;
 
   std::string number_type = "double";
 
@@ -70,7 +71,8 @@ private:
     prm.add_parameter("cell granularity", cell_granularity);
     prm.add_parameter("n repetitions", n_repetitions);
     prm.add_parameter("dof renumbering", dof_renumbering);
-    prm.add_parameter("use dg", dof_renumbering);
+    prm.add_parameter("use dg", use_dg);
+    prm.add_parameter("do computation", do_computation);
     prm.add_parameter("number type",
                       number_type,
                       "",
@@ -156,7 +158,8 @@ template <typename Fu>
 PrePost
 determine_pre_post(const Fu &         matrix_free_cell_loop,
                    const unsigned int batch_size,
-                   const bool         track_individual_cell)
+                   const bool         track_individual_cell,
+                   const unsigned int cell_granularity)
 {
   unsigned int n_vertices     = 0;
   unsigned int n_cell_batches = 0;
@@ -238,12 +241,46 @@ determine_pre_post(const Fu &         matrix_free_cell_loop,
       counter++;
     });
 
-  const auto process = [counter](const auto &ids) {
+  const auto process = [&](const auto &ids) {
     std::vector<std::vector<unsigned int>> temp(counter);
 
     for (unsigned int i = 0; i < ids.size(); ++i)
       if (ids[i] != numbers::invalid_unsigned_int)
-        temp[ids[i]].push_back(i);
+        {
+          if (false)
+            {
+              if ((static_cast<int>(ids[i]) - 0) <=
+                  static_cast<int>(i / (track_individual_cell ?
+                                          (cell_granularity) :
+                                          (cell_granularity / batch_size))))
+                temp[ids[i]].push_back(i);
+              else
+                temp.back().push_back(i);
+            }
+          else
+            {
+              temp[ids[i]].push_back(i);
+            }
+        }
+
+    if (false)
+      for (auto &vector : temp)
+        {
+          std::sort(
+            vector.begin(), vector.end(), [&](const auto &a, const auto &b) {
+              const auto a_batch =
+                a / (track_individual_cell ? (cell_granularity) :
+                                             (cell_granularity / batch_size));
+              const auto b_batch =
+                b / (track_individual_cell ? (cell_granularity) :
+                                             (cell_granularity / batch_size));
+
+              if (a_batch != b_batch)
+                return b_batch < a_batch;
+
+              return a < b;
+            });
+        }
 
     std::vector<unsigned int> indices;
     std::vector<unsigned int> ptr = {0};
@@ -263,8 +300,44 @@ determine_pre_post(const Fu &         matrix_free_cell_loop,
   std::tie(result.pre_indices, result.pre_indices_ptr)   = process(min_vector);
   std::tie(result.post_indices, result.post_indices_ptr) = process(max_vector);
 
-  // std::cout << result.post_indices.size() << " " <<
-  // result.post_indices_ptr.size() << std::endl;
+  if (Utilities::MPI::this_mpi_process(MPI_COMM_WORLD) == 0)
+    {
+      std::cout << result.post_indices.size() << " "
+                << result.post_indices_ptr.size() << std::endl;
+
+      for (unsigned int i = 0; i < result.post_indices_ptr.size() - 1; ++i)
+        {
+          printf("%4d %4d ",
+                 i,
+                 result.post_indices_ptr[i + 1] - result.post_indices_ptr[i]);
+
+          unsigned int counter_total = 0;
+
+          for (unsigned int k = 0;
+               counter_total !=
+               result.post_indices_ptr[i + 1] - result.post_indices_ptr[i];
+               ++k)
+            {
+              unsigned int counter = 0;
+
+              for (unsigned int j = result.post_indices_ptr[i];
+                   j < result.post_indices_ptr[i + 1];
+                   ++j)
+                if ((i - k) == result.post_indices[j] /
+                                 (track_individual_cell ?
+                                    (cell_granularity) :
+                                    (cell_granularity / batch_size)))
+                  counter++;
+
+              printf("%d ", counter);
+
+              counter_total += counter;
+            }
+
+          printf("\n");
+        }
+      std::cout << std::endl;
+    }
 
   return result;
 }
@@ -338,11 +411,13 @@ run(const Parameters &params, ConvergenceTable &table)
 
   const auto pre_post_own = determine_pre_post(matrix_free_cell_loop,
                                                VectorizedArrayType::size(),
-                                               true);
+                                               true,
+                                               params.cell_granularity);
 
   const auto pre_post_batch = determine_pre_post(matrix_free_cell_loop,
                                                  VectorizedArrayType::size(),
-                                                 false);
+                                                 false,
+                                                 params.cell_granularity);
 
   // intialize vectors
   VectorType src, dst_0, dst_1;
@@ -353,17 +428,39 @@ run(const Parameters &params, ConvergenceTable &table)
 
   // define vmult operations and ...
   const auto process_batch_vmult =
-    [](const auto &id, auto &phi, auto &dst, const auto &src) {
+    [&](const auto &id, auto &phi, auto &dst, const auto &src) {
       phi.reinit(id);
       phi.read_dof_values(src);
+
+      if (params.do_computation)
+        {
+          phi.evaluate(EvaluationFlags::gradients);
+
+          for (unsigned int q = 0; q < phi.n_q_points; ++q)
+            phi.submit_gradient(phi.get_gradient(q), q);
+
+          phi.integrate(EvaluationFlags::gradients);
+        }
+
       phi.distribute_local_to_global(dst);
     };
 
   // ... post operation
   const auto process_batch_post =
-    [](const auto &id, auto &phi, auto &dst, const auto &src) {
+    [&](const auto &id, auto &phi, auto &dst, const auto &src) {
       phi.reinit(id);
       phi.read_dof_values(src);
+
+      if (params.do_computation)
+        {
+          phi.evaluate(EvaluationFlags::values);
+
+          for (unsigned int q = 0; q < phi.n_q_points; ++q)
+            phi.submit_value(phi.get_value(q), q);
+
+          phi.integrate(EvaluationFlags::values);
+        }
+
       phi.distribute_local_to_global(dst);
     };
 
@@ -383,6 +480,9 @@ run(const Parameters &params, ConvergenceTable &table)
     else
       AssertThrow(false, ExcNotImplemented());
 
+    for (unsigned int c = 0; c < params.n_repetitions; ++c)
+      fu();
+
     MPI_Barrier(MPI_COMM_WORLD);
 
     if (label != "")
@@ -395,6 +495,11 @@ run(const Parameters &params, ConvergenceTable &table)
 
     MPI_Barrier(MPI_COMM_WORLD);
 
+    const auto time = std::chrono::duration_cast<std::chrono::nanoseconds>(
+                        std::chrono::system_clock::now() - temp_time)
+                        .count() /
+                      1e9;
+
     if (label != "")
       LIKWID_MARKER_STOP(label.c_str());
 
@@ -402,10 +507,7 @@ run(const Parameters &params, ConvergenceTable &table)
       std::cout << src.l2_norm() << " " << dst_0.l2_norm() << " "
                 << dst_1.l2_norm() << std::endl;
 
-    return std::chrono::duration_cast<std::chrono::nanoseconds>(
-             std::chrono::system_clock::now() - temp_time)
-             .count() /
-           1e9;
+    return time;
   };
 
   // version 1: power kernel (use own batches)
@@ -451,20 +553,28 @@ run(const Parameters &params, ConvergenceTable &table)
       matrix_free_cell_loop(
         [&](const auto &data, auto &, const auto &, const auto cells) {
           FECellIntegrator phi_0(data);
-          FECellIntegrator phi_1(data);
+          // FECellIntegrator phi_1(data);
 
           // vmult
           for (unsigned int cell = cells.first; cell < cells.second; ++cell)
             process_batch_vmult(cell, phi_0, dst_0, src);
 
           // post vmult
-          for (unsigned int i = pre_post_batch.post_indices_ptr[counter];
-               i < pre_post_batch.post_indices_ptr[counter + 1];
-               ++i)
-            process_batch_post(pre_post_batch.post_indices[i],
-                               phi_1,
-                               dst_1,
-                               dst_0);
+          if (pre_post_batch.post_indices_ptr.size() == 2)
+            {
+              for (unsigned int cell = cells.first; cell < cells.second; ++cell)
+                process_batch_post(cell, phi_0, dst_1, dst_0);
+            }
+          else
+            {
+              for (unsigned int i = pre_post_batch.post_indices_ptr[counter];
+                   i < pre_post_batch.post_indices_ptr[counter + 1];
+                   ++i)
+                process_batch_post(pre_post_batch.post_indices[i],
+                                   phi_0,
+                                   dst_1,
+                                   dst_0);
+            }
 
           counter++;
         });
@@ -474,20 +584,50 @@ run(const Parameters &params, ConvergenceTable &table)
   // version 3: run sequentially
   const auto time_sequential = run(
     [&]() {
+      unsigned int counter = 0;
       matrix_free_cell_loop(
         [&](const auto &data, auto &, const auto &, const auto cells) {
           FECellIntegrator phi(data);
 
-          for (unsigned int cell = cells.first; cell < cells.second; ++cell)
-            process_batch_vmult(cell, phi, dst_0, src);
+          if (true)
+            {
+              for (unsigned int cell = cells.first; cell < cells.second; ++cell)
+                process_batch_vmult(cell, phi, dst_0, src);
+            }
+          else
+            {
+              for (unsigned int i = pre_post_batch.post_indices_ptr[counter];
+                   i < pre_post_batch.post_indices_ptr[counter + 1];
+                   ++i)
+                process_batch_post(pre_post_batch.post_indices[i],
+                                   phi,
+                                   dst_0,
+                                   src);
+              counter++;
+            }
         });
 
+      counter = 0;
       matrix_free_cell_loop(
         [&](const auto &data, auto &, const auto &, const auto cells) {
           FECellIntegrator phi(data);
 
-          for (unsigned int cell = cells.first; cell < cells.second; ++cell)
-            process_batch_post(cell, phi, dst_1, dst_0);
+          if (true)
+            {
+              for (unsigned int cell = cells.first; cell < cells.second; ++cell)
+                process_batch_post(cell, phi, dst_1, dst_0);
+            }
+          else
+            {
+              for (unsigned int i = pre_post_batch.post_indices_ptr[counter];
+                   i < pre_post_batch.post_indices_ptr[counter + 1];
+                   ++i)
+                process_batch_post(pre_post_batch.post_indices[i],
+                                   phi,
+                                   dst_1,
+                                   dst_0);
+              counter++;
+            }
         });
     },
     "sequential");
