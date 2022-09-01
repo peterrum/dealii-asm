@@ -86,6 +86,7 @@ public:
                 ExcNotImplemented());
 
     const auto &dof_handler = matrix_free.get_dof_handler();
+    const auto &constraints = matrix_free.get_affine_constraints();
 
     // set up ConstraintInfo
     // ... allocate memory
@@ -112,11 +113,45 @@ public:
                     dim>(matrix_free.get_cell_iterator(cell, v),
                          n_overlap <= 1 ? 0 : sub_mesh_approximation);
 
-                const auto local_dofs =
+                auto local_dofs =
                   dealii::DoFTools::get_dof_indices_cell_with_overlap(
                     dof_handler, cells, n_overlap, true);
 
-                for (const auto i : local_dofs)
+                for (auto &i : local_dofs)
+                  {
+                    const auto *entries_ptr =
+                      constraints.get_constraint_entries(i);
+
+                    if (entries_ptr != nullptr)
+                      {
+                        const auto &                  entries = *entries_ptr;
+                        const types::global_dof_index n_entries =
+                          entries.size();
+                        if (n_entries == 1 &&
+                            std::abs(entries[0].second - 1.) <
+                              100 * std::numeric_limits<double>::epsilon())
+                          {
+                            i = entries[0].first; // identity constraint
+                          }
+                        else if (n_entries == 0)
+                          {
+                            i = numbers::invalid_dof_index; // homogeneous
+                                                            // Dirichlet
+                          }
+                        else
+                          {
+                            // other constraints, e.g., hanging-node
+                            // constraints; not implemented yet
+                            AssertThrow(false, ExcNotImplemented());
+                          }
+                      }
+                    else
+                      {
+                        // not constrained -> nothing to do
+                      }
+                  }
+
+                for (const auto &i : local_dofs)
                   if ((locally_owned_dofs.is_element(i) == false) &&
                       (i != numbers::invalid_unsigned_int))
                     ghost_indices.push_back(i);
