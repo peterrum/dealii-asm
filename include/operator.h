@@ -203,7 +203,7 @@ public:
     : matrix_free(matrix_free)
     , pcout(std::cout,
             Utilities::MPI::this_mpi_process(
-              dof_handler_internal.get_communicator()) == 0)
+              matrix_free.get_dof_handler().get_communicator()) == 0)
   {}
 
   static constexpr bool
