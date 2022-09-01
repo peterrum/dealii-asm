@@ -229,7 +229,8 @@ namespace dealii
             }
 
         // left neighbor or left boundary
-        if (cell->at_boundary(2 * d) == false)
+        if ((cell->at_boundary(2 * d) == false) ||
+            cell->has_periodic_neighbor(2 * d))
           {
             // left neighbor
             Assert(cell_extend[d][0] > 0.0, ExcInternalError());
@@ -256,7 +257,8 @@ namespace dealii
           }
 
         // reight neighbor or right boundary
-        if (cell->at_boundary(2 * d + 1) == false)
+        if ((cell->at_boundary(2 * d + 1) == false) ||
+            cell->has_periodic_neighbor(2 * d + 1))
           {
             Assert(cell_extend[d][2] > 0.0, ExcInternalError());
 
@@ -351,11 +353,19 @@ namespace dealii
           }
 
         const auto less = [](const auto a, const auto b) -> bool {
-          return (b - a) > 1e-10; // TODO
+          return (b - a) >
+                 std::abs(a + b) *
+                   std::numeric_limits<
+                     typename VectorizedArrayType::value_type>::epsilon() *
+                   10; // TODO
         };
 
         const auto greater = [](const auto a, const auto b) -> bool {
-          return (a - b) > 1e-10; // TODO
+          return (a - b) >
+                 std::abs(a + b) *
+                   std::numeric_limits<
+                     typename VectorizedArrayType::value_type>::epsilon() *
+                   10; // TODO
         };
 
         for (unsigned int v = 0; v < NN; ++v)
@@ -436,6 +446,15 @@ namespace dealii
       return MemoryConsumption::memory_consumption(vector);
     }
 
+    std::size_t
+    size() const
+    {
+      if (compressed_vector.size() != 0)
+        return compressed_vector.size();
+
+      return vector.size();
+    }
+
     void
     finalize()
     {
@@ -446,9 +465,6 @@ namespace dealii
           indices.clear();
           compressed_vector.clear();
         }
-
-      // std::cout << compressed_vector.size() << " " << vector.size() <<
-      // std::endl;
     }
 
   private:

@@ -351,6 +351,13 @@ public:
     return partitioner_for_fdm;
   }
 
+  unsigned int
+  n_fdm_instances() const
+  {
+   return fdm.size();
+  }
+
+
 private:
   void
   vmult_internal(VectorType &      dst,
