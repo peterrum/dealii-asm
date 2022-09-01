@@ -244,16 +244,24 @@ namespace dealii
                   K[i][j] += K_ref[i0][j0] / cell_extend[d][0];
                 }
           }
-        else if (cell->face(2 * d)->boundary_id() == 1 /*DBC*/)
-          {
-            // left DBC
-            const unsigned i0 = n_overlap - 1;
-            clear_row_and_column(i0, M);
-            clear_row_and_column(i0, K);
-          }
         else
           {
-            // left NBC -> nothing to do
+            const auto bid = cell->face(2 * d)->boundary_id();
+            if (bid == 1 /*DBC*/)
+              {
+                // left DBC
+                const unsigned i0 = n_overlap - 1;
+                clear_row_and_column(i0, M);
+                clear_row_and_column(i0, K);
+              }
+            else if (bid == 2 /*NBC*/)
+              {
+                // left NBC -> nothing to do
+              }
+            else
+              {
+                AssertThrow(false, ExcNotImplemented());
+              }
           }
 
         // reight neighbor or right boundary
@@ -271,16 +279,24 @@ namespace dealii
                   K[i0][j0] += K_ref[i][j] / cell_extend[d][2];
                 }
           }
-        else if (cell->face(2 * d + 1)->boundary_id() == 1 /*DBC*/)
-          {
-            // right DBC
-            const unsigned i0 = n_overlap + n_dofs_1D - 2;
-            clear_row_and_column(i0, M);
-            clear_row_and_column(i0, K);
-          }
         else
           {
-            // right NBC -> nothing to do
+            const auto bid = cell->face(2 * d + 1)->boundary_id();
+            if (bid == 1 /*DBC*/)
+              {
+                // right DBC
+                const unsigned i0 = n_overlap + n_dofs_1D - 2;
+                clear_row_and_column(i0, M);
+                clear_row_and_column(i0, K);
+              }
+            else if (bid == 2 /*NBC*/)
+              {
+                // right NBC -> nothing to do
+              }
+            else
+              {
+                AssertThrow(false, ExcNotImplemented());
+              }
           }
 
         // set zero diagonal entries to one so that the matrices are
