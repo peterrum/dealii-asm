@@ -331,6 +331,25 @@ namespace dealii
 
         const unsigned int NN = VectorizedArrayType::size();
 
+        std::array<bool, NN> mask;
+
+        using Number = typename VectorizedArrayType::value_type;
+
+        for (unsigned int v = 0; v < NN; ++v)
+          {
+            Number a = 0.0;
+            Number b = 0.0;
+
+            for (unsigned int d = 0; d < dim; ++d)
+              for (unsigned int i = 0; i < eigenvalues_0.size(); ++i)
+                {
+                  a += eigenvalues_0[d][i][v];
+                  b += eigenvalues_1[d][i][v];
+                }
+
+            mask[v] = (a != 0.0) && (b != 0.0);
+          }
+
         const auto less = [](const auto a, const auto b) -> bool {
           return (b - a) > 1e-10; // TODO
         };
@@ -340,31 +359,35 @@ namespace dealii
         };
 
         for (unsigned int v = 0; v < NN; ++v)
-          for (unsigned int d = 0; d < dim; ++d)
-            for (unsigned int i = 0; i < eigenvalues_0[d].size(); ++i)
-              if (less(eigenvalues_0[d][i][v], eigenvalues_1[d][i][v]))
-                return true;
-              else if (greater(eigenvalues_0[d][i][v], eigenvalues_1[d][i][v]))
-                return false;
-
-        for (unsigned int v = 0; v < NN; ++v)
-          for (unsigned int d = 0; d < dim; ++d)
-            for (unsigned int i = 0; i < eigenvectors_0[d].size(0); ++i)
-              for (unsigned int j = 0; j < eigenvectors_0[d].size(1); ++j)
-                if (less(eigenvectors_0[d][i][j][v],
-                         eigenvectors_1[d][i][j][v]))
+          if (mask[v])
+            for (unsigned int d = 0; d < dim; ++d)
+              for (unsigned int i = 0; i < eigenvalues_0[d].size(); ++i)
+                if (less(eigenvalues_0[d][i][v], eigenvalues_1[d][i][v]))
                   return true;
-                else if (greater(eigenvectors_0[d][i][j][v],
-                                 eigenvectors_1[d][i][j][v]))
+                else if (greater(eigenvalues_0[d][i][v],
+                                 eigenvalues_1[d][i][v]))
                   return false;
 
         for (unsigned int v = 0; v < NN; ++v)
-          for (unsigned int d = 0; d < dim; ++d)
-            for (unsigned int i = 0; i < masks_0[d].size(); ++i)
-              if (less(masks_0[d][i][v], masks_1[d][i][v]))
-                return true;
-              else if (greater(masks_0[d][i][v], masks_1[d][i][v]))
-                return false;
+          if (mask[v])
+            for (unsigned int d = 0; d < dim; ++d)
+              for (unsigned int i = 0; i < eigenvectors_0[d].size(0); ++i)
+                for (unsigned int j = 0; j < eigenvectors_0[d].size(1); ++j)
+                  if (less(eigenvectors_0[d][i][j][v],
+                           eigenvectors_1[d][i][j][v]))
+                    return true;
+                  else if (greater(eigenvectors_0[d][i][j][v],
+                                   eigenvectors_1[d][i][j][v]))
+                    return false;
+
+        for (unsigned int v = 0; v < NN; ++v)
+          if (mask[v])
+            for (unsigned int d = 0; d < dim; ++d)
+              for (unsigned int i = 0; i < masks_0[d].size(); ++i)
+                if (less(masks_0[d][i][v], masks_1[d][i][v]))
+                  return true;
+                else if (greater(masks_0[d][i][v], masks_1[d][i][v]))
+                  return false;
 
         return false;
       }

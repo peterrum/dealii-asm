@@ -172,25 +172,39 @@ public:
                             const Triangulation<dim> &tria,
                             const FiniteElement<dim> &fe,
                             const Quadrature<dim> &   quadrature)
-    : dof_handler(tria)
+    : dof_handler_internal(tria)
+    , matrix_free(matrix_free_internal)
     , pcout(std::cout,
-            Utilities::MPI::this_mpi_process(dof_handler.get_communicator()) ==
-              0)
+            Utilities::MPI::this_mpi_process(
+              dof_handler_internal.get_communicator()) == 0)
   {
-    dof_handler.distribute_dofs(fe);
+    dof_handler_internal.distribute_dofs(fe);
 
-    DoFTools::make_zero_boundary_constraints(dof_handler, 1, constraints);
-    constraints.close();
+    DoFTools::make_zero_boundary_constraints(dof_handler_internal,
+                                             1,
+                                             constraints_internal);
+    constraints_internal.close();
 
-    matrix_free.reinit(mapping, dof_handler, constraints, quadrature);
+    matrix_free_internal.reinit(mapping,
+                                dof_handler_internal,
+                                constraints_internal,
+                                quadrature);
 
     pcout << "- Create operator:" << std::endl;
     pcout << "  - n cells: "
-          << dof_handler.get_triangulation().n_global_active_cells()
+          << dof_handler_internal.get_triangulation().n_global_active_cells()
           << std::endl;
-    pcout << "  - n dofs:  " << dof_handler.n_dofs() << std::endl;
+    pcout << "  - n dofs:  " << dof_handler_internal.n_dofs() << std::endl;
     pcout << std::endl;
   }
+
+  LaplaceOperatorMatrixFree(
+    const MatrixFree<dim, Number, VectorizedArrayType> &matrix_free)
+    : matrix_free(matrix_free)
+    , pcout(std::cout,
+            Utilities::MPI::this_mpi_process(
+              dof_handler_internal.get_communicator()) == 0)
+  {}
 
   static constexpr bool
   is_matrix_free()
@@ -253,7 +267,7 @@ public:
             for (auto &dof : dofs)
               if (dof != numbers::invalid_unsigned_int)
                 {
-                  if (constraints.is_constrained(dof))
+                  if (get_constraints().is_constrained(dof))
                     dof = numbers::invalid_unsigned_int;
                   else if (locally_owned_indices.is_element(dof) == false)
                     relevant_dofs.push_back(dof);
@@ -560,7 +574,7 @@ public:
   const AffineConstraints<Number> &
   get_constraints() const
   {
-    return constraints;
+    return get_matrix_free().get_affine_constraints();
   }
 
   const Quadrature<dim> &
@@ -597,23 +611,25 @@ private:
 
     DoFTools::make_sparsity_pattern(dof_handler,
                                     sparsity_pattern,
-                                    this->constraints);
+                                    get_constraints());
 
     sparsity_pattern.compress();
     sparse_matrix.reinit(sparsity_pattern);
 
     MatrixFreeTools::compute_matrix(
       matrix_free,
-      constraints,
+      get_constraints(),
       sparse_matrix,
       &LaplaceOperatorMatrixFree::do_cell_integral_local,
       this);
   }
 
   // internal matrix-free
-  DoFHandler<dim>                              dof_handler;
-  AffineConstraints<Number>                    constraints;
-  MatrixFree<dim, Number, VectorizedArrayType> matrix_free;
+  DoFHandler<dim>                              dof_handler_internal;
+  AffineConstraints<Number>                    constraints_internal;
+  MatrixFree<dim, Number, VectorizedArrayType> matrix_free_internal;
+
+  const MatrixFree<dim, Number, VectorizedArrayType> &matrix_free;
 
   // for own partitioner
   mutable std::shared_ptr<const Utilities::MPI::Partitioner> vector_partitioner;
