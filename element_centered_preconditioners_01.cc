@@ -156,54 +156,77 @@ solve(const MatrixType &                              A,
   const auto dispatch = [&]() {
     x = 0;
 
-    if (type == "CG")
+    try
       {
-        SolverCG<VectorType> solver(*reduction_control);
-        solver.solve(A, x, b, *preconditioner);
-      }
-    else if (type == "FCG")
-      {
-        SolverFlexibleCG<VectorType> solver(*reduction_control);
-        solver.solve(A, x, b, *preconditioner);
-      }
-    else if (type == "GMRES")
-      {
-        typename SolverGMRES<VectorType>::AdditionalData additional_data;
-        additional_data.right_preconditioning = true;
+        if (type == "CG")
+          {
+            SolverCG<VectorType> solver(*reduction_control);
+            solver.solve(A, x, b, *preconditioner);
+          }
+        else if (type == "FCG")
+          {
+            SolverFlexibleCG<VectorType> solver(*reduction_control);
+            solver.solve(A, x, b, *preconditioner);
+          }
+        else if (type == "GMRES")
+          {
+            typename SolverGMRES<VectorType>::AdditionalData additional_data;
+            additional_data.right_preconditioning = true;
 
-        SolverGMRES<VectorType> solver(*reduction_control, additional_data);
-        solver.solve(A, x, b, *preconditioner);
+            SolverGMRES<VectorType> solver(*reduction_control, additional_data);
+            solver.solve(A, x, b, *preconditioner);
+          }
+        else if (type == "FGMRES")
+          {
+            SolverFGMRES<VectorType> solver(*reduction_control);
+            solver.solve(A, x, b, *preconditioner);
+          }
+        else
+          {
+            AssertThrow(false,
+                        ExcMessage("Solver <" + type + "> is not known!"))
+          }
       }
-    else if (type == "FGMRES")
+    catch (...)
       {
-        SolverFGMRES<VectorType> solver(*reduction_control);
-        solver.solve(A, x, b, *preconditioner);
+        return false;
       }
-    else
-      {
-        AssertThrow(false, ExcMessage("Solver <" + type + "> is not known!"))
-      }
+
+    return true;
   };
 
-  dispatch(); // warm up
+  const bool converged = dispatch(); // warm up
 
-  if constexpr (has_timing_functionality<PreconditionerType>)
-    preconditioner->clear_timings();
+  double time = 999.0;
 
-  const auto timer = std::chrono::system_clock::now();
-  dispatch();
-  const double time = std::chrono::duration_cast<std::chrono::nanoseconds>(
-                        std::chrono::system_clock::now() - timer)
-                        .count() /
-                      1e9;
+  if (converged)
+    {
+      if constexpr (has_timing_functionality<PreconditionerType>)
+        preconditioner->clear_timings();
 
-  pcout << "   - n iterations:   " << reduction_control->last_step()
-        << std::endl;
-  pcout << "   - time:           " << time << " #" << std::endl;
-  pcout << std::endl;
+      const auto timer = std::chrono::system_clock::now();
+      dispatch();
+      time = std::chrono::duration_cast<std::chrono::nanoseconds>(
+               std::chrono::system_clock::now() - timer)
+               .count() /
+             1e9;
+
+      pcout << "   - n iterations:   " << reduction_control->last_step()
+            << std::endl;
+      pcout << "   - time:           " << time << " #" << std::endl;
+      pcout << std::endl;
+    }
+  else
+    {
+      pcout << "   - DID NOT CONVERGE!" << std::endl;
+      pcout << std::endl;
+    }
 
 
-  table.add_value("it", reduction_control->last_step());
+  if (converged)
+    table.add_value("it", reduction_control->last_step());
+  else
+    table.add_value("it", 999);
 
   if (print_timings)
     {
@@ -700,6 +723,62 @@ create_system_preconditioner(const OperatorType &              op,
             << std::endl;
 
       using RestictorType = Restrictors::ElementCenteredRestrictor<VectorType>;
+      using MatrixType0   = RestrictedMatrixView<Number>;
+      using MatrixType1   = SubMeshMatrixView<Number>;
+      using InverseMatrixType = CGMatrixView<MatrixType0, MatrixType1>;
+      using PreconditionerType =
+        RestrictedPreconditioner<VectorType, InverseMatrixType, RestictorType>;
+
+      typename MatrixType1::AdditionalData preconditioner_ad; // TODO
+
+      preconditioner_ad.sub_mesh_approximation =
+        params.get<unsigned int>("sub mesh approximation",
+                                 OperatorType::dimension);
+
+      // approximate matrix
+      const auto op_approx = get_approximation(op, params);
+
+      // restrictor
+      typename RestictorType::AdditionalData restrictor_ad;
+
+      restrictor_ad.n_overlap      = params.get<unsigned int>("n overlap", 1);
+      restrictor_ad.weighting_type = get_weighting_type(params);
+
+      AssertThrow((preconditioner_ad.sub_mesh_approximation ==
+                   OperatorType::dimension) ||
+                    (restrictor_ad.n_overlap == 1),
+                  ExcNotImplemented());
+
+      const auto restrictor =
+        std::make_shared<const RestictorType>(op_approx->get_dof_handler(),
+                                              restrictor_ad);
+
+      // inverse matrix
+      const auto matrix =
+        std::make_shared<MatrixType0>(restrictor,
+                                      op.get_sparse_matrix(),
+                                      op.get_sparsity_pattern());
+
+      const auto precon =
+        std::make_shared<MatrixType1>(op_approx, restrictor, preconditioner_ad);
+      precon->invert();
+
+      typename InverseMatrixType::AdditionalData cg_ad;
+
+      cg_ad.n_iterations = params.get<unsigned int>("n iterations", 1);
+
+      const auto cg =
+        std::make_shared<InverseMatrixType>(matrix, precon, cg_ad);
+
+      // preconditioner
+      return std::make_shared<const PreconditionerType>(cg, restrictor);
+    }
+  else if (type == "CGPreconditioner")
+    {
+      pcout << "- Create system preconditioner: CGPreconditioner" << std::endl
+            << std::endl;
+
+      using RestictorType = Restrictors::ElementCenteredRestrictor<VectorType>;
       using MatrixType0   = SubMeshMatrixView<Number>;
       using MatrixType1   = DiagonalMatrixView<Number>;
       using InverseMatrixType = CGMatrixView<MatrixType0, MatrixType1>;
@@ -737,7 +816,12 @@ create_system_preconditioner(const OperatorType &              op,
       const auto precon = std::make_shared<MatrixType1>(matrix);
       precon->invert();
 
-      const auto cg = std::make_shared<InverseMatrixType>(matrix, precon);
+      typename InverseMatrixType::AdditionalData cg_ad;
+
+      cg_ad.n_iterations = params.get<unsigned int>("n iterations", 1);
+
+      const auto cg =
+        std::make_shared<InverseMatrixType>(matrix, precon, cg_ad);
 
       // preconditioner
       return std::make_shared<const PreconditionerType>(cg, restrictor);

@@ -287,20 +287,32 @@ private:
   };
 
 public:
+  struct AdditionalData
+  {
+    AdditionalData(const unsigned int n_iterations = 1)
+      : n_iterations(n_iterations)
+    {}
+
+    unsigned int n_iterations;
+  };
+
   CGMatrixView() = default;
 
   CGMatrixView(const std::shared_ptr<const MatrixType0> &matrix_0,
-               const std::shared_ptr<const MatrixType1> &matrix_1)
+               const std::shared_ptr<const MatrixType1> &matrix_1,
+               const AdditionalData &additional_data = AdditionalData())
   {
-    this->initialize(matrix_0, matrix_1);
+    this->initialize(matrix_0, matrix_1, additional_data);
   }
 
   void
   initialize(const std::shared_ptr<const MatrixType0> &matrix_0,
-             const std::shared_ptr<const MatrixType1> &matrix_1)
+             const std::shared_ptr<const MatrixType1> &matrix_1,
+             const AdditionalData &additional_data = AdditionalData())
   {
-    this->matrix_0 = matrix_0;
-    this->matrix_1 = matrix_1;
+    this->matrix_0     = matrix_0;
+    this->matrix_1     = matrix_1;
+    this->n_iterations = additional_data.n_iterations;
   }
 
   void
@@ -311,7 +323,7 @@ public:
     MatrixWrapper<MatrixType0> matrix(*matrix_0, c);
     MatrixWrapper<MatrixType1> precon(*matrix_1, c);
 
-    IterationNumberControl   solver_control(10 /*TODO*/);
+    IterationNumberControl   solver_control(n_iterations);
     SolverCG<Vector<Number>> solver_cg(solver_control);
     solver_cg.solve(matrix, dst, src, precon);
   }
@@ -333,6 +345,7 @@ public:
 private:
   std::shared_ptr<const MatrixType0> matrix_0;
   std::shared_ptr<const MatrixType1> matrix_1;
+  unsigned int                       n_iterations;
 };
 
 
