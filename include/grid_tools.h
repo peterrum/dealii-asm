@@ -64,7 +64,7 @@ namespace dealii
                                                 quadrature);
 
       // 2) accumulate for each face the normal extend for the
-      // neigboring cell(s)
+      // neigboring cell(s); here we also consider periodicies
       std::vector<double> face_extend(triangulation.n_faces(), 0.0);
 
       for (const auto &cell : triangulation.active_cell_iterators())
@@ -74,11 +74,22 @@ namespace dealii
               const auto extend =
                 harmonic_cell_extends[cell->active_cell_index()][d];
 
-              face_extend[cell->face(2 * d + 0)->index()] += extend;
-              face_extend[cell->face(2 * d + 1)->index()] += extend;
+              const auto add_extend_to_faces = [&](const unsigned int face_no) {
+                face_extend[cell->face(face_no)->index()] += extend;
+
+                if (cell->has_periodic_neighbor(face_no) &&
+                    (cell->periodic_neighbor(face_no)->is_artificial() ==
+                     false))
+                  face_extend[cell->periodic_neighbor(face_no)
+                                ->face(cell->periodic_neighbor_face_no(face_no))
+                                ->index()] += extend;
+              };
+
+              add_extend_to_faces(2 * d + 0); // face 0
+              add_extend_to_faces(2 * d + 1); // face 1
             }
 
-      // 3) cellect cell extend including those of the neighboring
+      // 3) collect cell extend including those of the neighboring
       // cells, which corrsponds to the difference of extend of the
       // current cell and the face extend
       std::vector<dealii::ndarray<double, dim, 3>> result(
