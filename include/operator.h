@@ -172,9 +172,7 @@ public:
                             const Triangulation<dim> &tria,
                             const FiniteElement<dim> &fe,
                             const Quadrature<dim> &   quadrature)
-    : mapping(mapping)
-    , dof_handler(tria)
-    , quadrature(quadrature)
+    : dof_handler(tria)
     , pcout(std::cout,
             Utilities::MPI::this_mpi_process(dof_handler.get_communicator()) ==
               0)
@@ -209,7 +207,7 @@ public:
   types::global_dof_index
   m() const
   {
-    return dof_handler.n_dofs();
+    return get_dof_handler().n_dofs();
   }
 
   Number
@@ -250,7 +248,7 @@ public:
                 cell_iterator, 0);
 
             auto dofs = dealii::DoFTools::get_dof_indices_cell_with_overlap(
-              dof_handler, cells, 1, false);
+              get_dof_handler(), cells, 1, false);
 
             for (auto &dof : dofs)
               if (dof != numbers::invalid_unsigned_int)
@@ -511,25 +509,25 @@ public:
   const Mapping<dim> &
   get_mapping() const
   {
-    return mapping;
+    return *matrix_free.get_mapping_info().mapping;
   }
 
   const FiniteElement<dim> &
   get_fe() const
   {
-    return dof_handler.get_fe();
+    return get_dof_handler().get_fe();
   }
 
   const Triangulation<dim> &
   get_triangulation() const
   {
-    return dof_handler.get_triangulation();
+    return get_dof_handler().get_triangulation();
   }
 
   const DoFHandler<dim> &
   get_dof_handler() const
   {
-    return dof_handler;
+    return matrix_free.get_dof_handler();
   }
 
   const TrilinosWrappers::SparseMatrix &
@@ -568,7 +566,7 @@ public:
   const Quadrature<dim> &
   get_quadrature() const
   {
-    return quadrature;
+    return matrix_free.get_quadrature();
   }
 
   void
@@ -592,6 +590,8 @@ private:
     Assert((sparse_matrix.m() == 0 && sparse_matrix.n() == 0),
            ExcNotImplemented());
 
+    const auto &dof_handler = get_dof_handler();
+
     sparsity_pattern.reinit(dof_handler.locally_owned_dofs(),
                             dof_handler.get_triangulation().get_communicator());
 
@@ -610,11 +610,9 @@ private:
       this);
   }
 
-  const Mapping<dim> &      mapping;
-  DoFHandler<dim>           dof_handler;
-  AffineConstraints<Number> constraints;
-  Quadrature<dim>           quadrature;
-
+  // internal matrix-free
+  DoFHandler<dim>                              dof_handler;
+  AffineConstraints<Number>                    constraints;
   MatrixFree<dim, Number, VectorizedArrayType> matrix_free;
 
   // for own partitioner
