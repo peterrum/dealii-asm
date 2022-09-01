@@ -94,6 +94,36 @@ public:
 
     partitioner_for_fdm = matrix_free.get_vector_partitioner();
 
+    const auto resolve_constraint = [&](auto &i) {
+      const auto *entries_ptr = constraints.get_constraint_entries(i);
+
+      if (entries_ptr != nullptr)
+        {
+          const auto &                  entries   = *entries_ptr;
+          const types::global_dof_index n_entries = entries.size();
+          if (n_entries == 1 && std::abs(entries[0].second - 1.) <
+                                  100 * std::numeric_limits<double>::epsilon())
+            {
+              i = entries[0].first; // identity constraint
+            }
+          else if (n_entries == 0)
+            {
+              i = numbers::invalid_dof_index; // homogeneous
+                                              // Dirichlet
+            }
+          else
+            {
+              // other constraints, e.g., hanging-node
+              // constraints; not implemented yet
+              AssertThrow(false, ExcNotImplemented());
+            }
+        }
+      else
+        {
+          // not constrained -> nothing to do
+        }
+    };
+
     if (n_overlap > 1)
       {
         const auto &locally_owned_dofs = dof_handler.locally_owned_dofs();
@@ -118,38 +148,7 @@ public:
                     dof_handler, cells, n_overlap, true);
 
                 for (auto &i : local_dofs)
-                  {
-                    const auto *entries_ptr =
-                      constraints.get_constraint_entries(i);
-
-                    if (entries_ptr != nullptr)
-                      {
-                        const auto &                  entries = *entries_ptr;
-                        const types::global_dof_index n_entries =
-                          entries.size();
-                        if (n_entries == 1 &&
-                            std::abs(entries[0].second - 1.) <
-                              100 * std::numeric_limits<double>::epsilon())
-                          {
-                            i = entries[0].first; // identity constraint
-                          }
-                        else if (n_entries == 0)
-                          {
-                            i = numbers::invalid_dof_index; // homogeneous
-                                                            // Dirichlet
-                          }
-                        else
-                          {
-                            // other constraints, e.g., hanging-node
-                            // constraints; not implemented yet
-                            AssertThrow(false, ExcNotImplemented());
-                          }
-                      }
-                    else
-                      {
-                        // not constrained -> nothing to do
-                      }
-                  }
+                  resolve_constraint(i);
 
                 for (const auto &i : local_dofs)
                   if ((locally_owned_dofs.is_element(i) == false) &&
@@ -198,11 +197,18 @@ public:
               dealii::GridTools::extract_all_surrounding_cells_cartesian<dim>(
                 cell_iterator, n_overlap <= 1 ? 0 : sub_mesh_approximation);
 
-            constraint_info.read_dof_indices(
-              cell_counter,
-              dealii::DoFTools::get_dof_indices_cell_with_overlap(
-                dof_handler, cells, n_overlap, true),
-              partitioner_for_fdm);
+            auto local_dofs =
+              dealii::DoFTools::get_dof_indices_cell_with_overlap(dof_handler,
+                                                                  cells,
+                                                                  n_overlap,
+                                                                  true);
+
+            for (auto &i : local_dofs)
+              resolve_constraint(i);
+
+            constraint_info.read_dof_indices(cell_counter,
+                                             local_dofs,
+                                             partitioner_for_fdm);
 
             scalar_fdm[v] = setup_fdm<dim, Number, n_rows_1d>(
               cell_iterator,
