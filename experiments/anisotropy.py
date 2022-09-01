@@ -14,6 +14,9 @@ def run_instance(counter, d, l, k, sweep, solver, preconditioner, sequence, s, e
     datastore["n refinements"]   = l
     datastore["degree"]          = k
 
+    # ... solver
+    datastore["solver"]["type"] = solver
+
     # ... multigrid
     datastore["preconditioner"]["mg p sequence"]      = sequence
     datastore["preconditioner"]["mg smoother"]["degree"] = s

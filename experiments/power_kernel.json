@@ -1,0 +1,11 @@
+{
+    "dim" : 3,
+    "fe degree" : 1,
+    "n components" : 1,
+    "n subdivisions" : 1,
+    "n lanes" : 0,
+    "cell granularity" : 0,
+    "n repetitions" : 100,
+    "dof renumbering" : true,
+    "number type" : "double"
+}
