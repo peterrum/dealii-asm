@@ -226,7 +226,158 @@ public:
       }
 
 
-    // TODO: mapping
+    if (true /*TODO*/)
+      {
+        const auto data = &this->matrix_free;
+
+        const auto &quad_1d =
+          matrix_free.get_quadrature().get_tensor_basis()[0];
+
+        cell_vertex_coefficients.resize(data->n_cell_batches());
+        cell_quadratic_coefficients.resize(data->n_cell_batches());
+        const std::size_t n_q_points =
+          Utilities::fixed_power<dim>(quad_1d.size());
+        merged_coefficients.resize(n_q_points * data->n_cell_batches());
+        quadrature_points.resize(n_q_points * dim * data->n_cell_batches());
+
+        FE_Nothing<dim>                      dummy_fe;
+        FEValues<dim>                        fe_values(dummy_fe,
+                                Quadrature<dim>(quad_1d),
+                                update_quadrature_points | update_jacobians |
+                                  update_JxW_values);
+        std::vector<types::global_dof_index> dof_indices(
+          data->get_dof_handler().get_fe().dofs_per_cell);
+
+        constexpr unsigned int    n_lanes = VectorizedArrayType::size();
+        std::vector<unsigned int> renumber_lex =
+          FETools::hierarchic_to_lexicographic_numbering<dim>(2);
+        for (auto &i : renumber_lex)
+          i *= n_lanes;
+
+        for (unsigned int c = 0; c < data->n_cell_batches(); ++c)
+          {
+            for (unsigned int l = 0;
+                 l < data->n_active_entries_per_cell_batch(c);
+                 ++l)
+              {
+                const typename DoFHandler<dim>::cell_iterator cell =
+                  data->get_cell_iterator(c, l);
+                if (dim == 2)
+                  {
+                    std::array<Tensor<1, dim>, 4> v{{cell->vertex(0),
+                                                     cell->vertex(1),
+                                                     cell->vertex(2),
+                                                     cell->vertex(3)}};
+                    for (unsigned int d = 0; d < dim; ++d)
+                      {
+                        cell_vertex_coefficients[c][0][d][l] = v[0][d];
+                        cell_vertex_coefficients[c][1][d][l] =
+                          v[1][d] - v[0][d];
+                        cell_vertex_coefficients[c][2][d][l] =
+                          v[2][d] - v[0][d];
+                        cell_vertex_coefficients[c][3][d][l] =
+                          v[3][d] - v[2][d] - (v[1][d] - v[0][d]);
+
+                        // for now use only constant and linear term for the
+                        // quadratic approximation
+                        cell_quadratic_coefficients[c][0][d][l] =
+                          cell_vertex_coefficients[c][0][d][l];
+                        cell_quadratic_coefficients[c][1][d][l] =
+                          cell_vertex_coefficients[c][1][d][l];
+                        cell_quadratic_coefficients[c][3][d][l] =
+                          cell_vertex_coefficients[c][2][d][l];
+                        cell_quadratic_coefficients[c][4][d][l] =
+                          cell_vertex_coefficients[c][3][d][l];
+                      }
+                  }
+                else if (dim == 3)
+                  {
+                    std::array<Tensor<1, dim>, 8> v{{cell->vertex(0),
+                                                     cell->vertex(1),
+                                                     cell->vertex(2),
+                                                     cell->vertex(3),
+                                                     cell->vertex(4),
+                                                     cell->vertex(5),
+                                                     cell->vertex(6),
+                                                     cell->vertex(7)}};
+                    for (unsigned int d = 0; d < dim; ++d)
+                      {
+                        cell_vertex_coefficients[c][0][d][l] = v[0][d];
+                        cell_vertex_coefficients[c][1][d][l] =
+                          v[1][d] - v[0][d];
+                        cell_vertex_coefficients[c][2][d][l] =
+                          v[2][d] - v[0][d];
+                        cell_vertex_coefficients[c][3][d][l] =
+                          v[4][d] - v[0][d];
+                        cell_vertex_coefficients[c][4][d][l] =
+                          v[3][d] - v[2][d] - (v[1][d] - v[0][d]);
+                        cell_vertex_coefficients[c][5][d][l] =
+                          v[5][d] - v[4][d] - (v[1][d] - v[0][d]);
+                        cell_vertex_coefficients[c][6][d][l] =
+                          v[6][d] - v[4][d] - (v[2][d] - v[0][d]);
+                        cell_vertex_coefficients[c][7][d][l] =
+                          (v[7][d] - v[6][d] - (v[5][d] - v[4][d]) -
+                           (v[3][d] - v[2][d] - (v[1][d] - v[0][d])));
+
+                        // for now use only constant and linear term for the
+                        // quadratic approximation
+                        cell_quadratic_coefficients[c][0][d][l] =
+                          cell_vertex_coefficients[c][0][d][l];
+                        cell_quadratic_coefficients[c][1][d][l] =
+                          cell_vertex_coefficients[c][1][d][l];
+                        cell_quadratic_coefficients[c][3][d][l] =
+                          cell_vertex_coefficients[c][2][d][l];
+                        cell_quadratic_coefficients[c][4][d][l] =
+                          cell_vertex_coefficients[c][4][d][l];
+                        cell_quadratic_coefficients[c][9][d][l] =
+                          cell_vertex_coefficients[c][3][d][l];
+                        cell_quadratic_coefficients[c][10][d][l] =
+                          cell_vertex_coefficients[c][5][d][l];
+                        cell_quadratic_coefficients[c][12][d][l] =
+                          cell_vertex_coefficients[c][6][d][l];
+                        cell_quadratic_coefficients[c][13][d][l] =
+                          cell_vertex_coefficients[c][7][d][l];
+                      }
+                  }
+                else
+                  AssertThrow(false, ExcNotImplemented());
+
+                // compute coefficients for other methods
+                fe_values.reinit(
+                  typename Triangulation<dim>::cell_iterator(cell));
+                for (unsigned int q = 0; q < n_q_points; ++q)
+                  {
+                    Tensor<2, dim> merged_coefficient =
+                      fe_values.JxW(q) *
+                      (invert(Tensor<2, dim>(fe_values.jacobian(q))) *
+                       transpose(
+                         invert(Tensor<2, dim>(fe_values.jacobian(q)))));
+                    for (unsigned int d = 0, cc = 0; d < dim; ++d)
+                      for (unsigned int e = d; e < dim; ++e, ++cc)
+                        merged_coefficients[c * n_q_points + q][cc][l] =
+                          merged_coefficient[d][e];
+                    for (unsigned int d = 0; d < dim; ++d)
+                      quadrature_points[c * dim * n_q_points + d * n_q_points +
+                                        q][l] =
+                        fe_values.quadrature_point(q)[d];
+                  }
+              }
+            // insert dummy entries to prevent geometry from degeneration and
+            // subsequent division by zero, assuming a Cartesian geometry
+            for (unsigned int l = data->n_active_entries_per_cell_batch(c);
+                 l < VectorizedArrayType::size();
+                 ++l)
+              {
+                for (unsigned int d = 0; d < dim; ++d)
+                  cell_vertex_coefficients[c][d + 1][d][l] = 1.;
+                cell_quadratic_coefficients[c][1][0][l] = 1.;
+                if (dim > 1)
+                  cell_quadratic_coefficients[c][3][1][l] = 1.;
+                if (dim > 2)
+                  cell_quadratic_coefficients[c][9][2][l] = 1.;
+              }
+          }
+      }
   }
 
   static constexpr bool
