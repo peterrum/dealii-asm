@@ -225,7 +225,7 @@ public:
         this->compressed_rw = compressed_rw;
       }
 
-    const std::string mapping_type = "";
+    const std::string mapping_type = ""; // TODO
 
 
     // lineare geometry
@@ -301,6 +301,69 @@ public:
     if (mapping_type == "quadratic geometry")
       {
         cell_quadratic_coefficients.resize(matrix_free.n_cell_batches());
+
+        FEValues<dim> fe_values(*matrix_free.get_mapping_info().mapping,
+                                matrix_free.get_dof_handler().get_fe(),
+                                QGaussLobatto<dim>(3),
+                                update_quadrature_points);
+
+        for (unsigned int c = 0; c < matrix_free.n_cell_batches(); ++c)
+          {
+            unsigned int l = 0;
+
+            for (; l < matrix_free.n_active_entries_per_cell_batch(c); ++l)
+              {
+                fe_values.reinit(typename Triangulation<dim>::cell_iterator(
+                  matrix_free.get_cell_iterator(c, l)));
+
+                const double coeff[9] = {
+                  1.0, -3.0, 2.0, 0.0, 4.0, -4.0, 0.0, -1.0, 2.0};
+                constexpr unsigned int size_dim = Utilities::pow(3, dim);
+                std::array<Tensor<1, dim>, size_dim> points;
+                for (unsigned int i2 = 0; i2 < (dim > 2 ? 3 : 1); ++i2)
+                  {
+                    for (unsigned int i1 = 0; i1 < 3; ++i1)
+                      for (unsigned int i0 = 0, i = 9 * i2 + 3 * i1; i0 < 3;
+                           ++i0)
+                        points[i + i0] =
+                          coeff[i0] * fe_values.quadrature_point(i) +
+                          coeff[i0 + 3] * fe_values.quadrature_point(i + 1) +
+                          coeff[i0 + 6] * fe_values.quadrature_point(i + 2);
+                    for (unsigned int i1 = 0; i1 < 3; ++i1)
+                      {
+                        const unsigned int            i   = 9 * i2 + i1;
+                        std::array<Tensor<1, dim>, 3> tmp = {
+                          {points[i], points[i + 3], points[i + 6]}};
+                        for (unsigned int i0 = 0; i0 < 3; ++i0)
+                          points[i + 3 * i0] = coeff[i0] * tmp[0] +
+                                               coeff[i0 + 3] * tmp[1] +
+                                               coeff[i0 + 6] * tmp[2];
+                      }
+                  }
+                if (dim == 3)
+                  for (unsigned int i = 0; i < 9; ++i)
+                    {
+                      std::array<Tensor<1, dim>, 3> tmp = {
+                        {points[i], points[i + 9], points[i + 18]}};
+                      for (unsigned int i0 = 0; i0 < 3; ++i0)
+                        points[i + 9 * i0] = coeff[i0] * tmp[0] +
+                                             coeff[i0 + 3] * tmp[1] +
+                                             coeff[i0 + 6] * tmp[2];
+                    }
+                for (unsigned int i = 0; i < points.size(); ++i)
+                  for (unsigned int d = 0; d < dim; ++d)
+                    cell_quadratic_coefficients[c][i][d][l] = points[i][d];
+              }
+
+            for (; l < VectorizedArrayType::size(); ++l)
+              {
+                cell_quadratic_coefficients[c][1][0][l] = 1.;
+                if (dim > 1)
+                  cell_quadratic_coefficients[c][3][1][l] = 1.;
+                if (dim > 2)
+                  cell_quadratic_coefficients[c][9][2][l] = 1.;
+              }
+          }
       }
 
     if (mapping_type == "merged")
