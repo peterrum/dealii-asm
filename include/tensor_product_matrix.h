@@ -13,21 +13,17 @@ namespace dealii
     internal_reinit(const std::array<Table<2, Number>, dim> mass_matrix,
                     const std::array<Table<2, Number>, dim> derivative_matrix,
                     const std::array<Table<2, Number>, dim> eigenvectors,
-                    const std::array<AlignedVector<Number>, dim> eigenvalues,
-                    const std::array<AlignedVector<Number>, dim> masks)
+                    const std::array<AlignedVector<Number>, dim> eigenvalues)
     {
       this->mass_matrix       = mass_matrix;
       this->derivative_matrix = derivative_matrix;
       this->eigenvectors      = eigenvectors;
       this->eigenvalues       = eigenvalues;
-      this->masks             = masks;
     }
 
     void
     set_mask(const std::array<AlignedVector<Number>, dim> masks)
     {
-      this->masks = masks;
-
       const unsigned int n_dofs_1D = this->eigenvalues[0].size();
 
       for (unsigned int d = 0; d < dim; ++d)
@@ -48,12 +44,6 @@ namespace dealii
       return this->eigenvectors;
     }
 
-    const std::array<AlignedVector<Number>, dim> &
-    get_masks() const
-    {
-      return this->masks;
-    }
-
     template <std::size_t N>
     static MyTensorProductMatrixSymmetricSum<dim,
                                              VectorizedArray<Number, N>,
@@ -67,7 +57,6 @@ namespace dealii
       std::array<Table<2, VectorizedArray<Number, N>>, dim> derivative_matrix;
       std::array<Table<2, VectorizedArray<Number, N>>, dim> eigenvectors;
       std::array<AlignedVector<VectorizedArray<Number, N>>, dim> eigenvalues;
-      std::array<AlignedVector<VectorizedArray<Number, N>>, dim> masks;
 
       for (unsigned int d = 0; d < dim; ++d)
         {
@@ -79,7 +68,6 @@ namespace dealii
           eigenvectors[d].reinit(in[0].eigenvectors[d].size(0),
                                  in[0].eigenvectors[d].size(1));
           eigenvalues[d].resize(in[0].eigenvalues[d].size());
-          masks[d].resize(in[0].masks[d].size());
 
           // do actual transpose
           for (unsigned int v = 0; v < NN; ++v)
@@ -103,24 +91,21 @@ namespace dealii
           for (unsigned int v = 0; v < NN; ++v)
             for (unsigned int i = 0; i < in[0].eigenvalues[d].size(); ++i)
               eigenvalues[d][i][v] = in[v].eigenvalues[d][i];
-
-          for (unsigned int v = 0; v < NN; ++v)
-            for (unsigned int i = 0; i < in[0].masks[d].size(); ++i)
-              masks[d][i][v] = in[v].masks[d][i];
         }
 
       MyTensorProductMatrixSymmetricSum<dim,
                                         VectorizedArray<Number, N>,
                                         n_rows_1d>
         out;
-      out.internal_reinit(
-        mass_matrix, derivative_matrix, eigenvectors, eigenvalues, masks);
+      out.internal_reinit(mass_matrix,
+                          derivative_matrix,
+                          eigenvectors,
+                          eigenvalues);
 
       return out;
     }
 
   private:
-    std::array<AlignedVector<Number>, dim> masks;
   };
 
 
@@ -342,10 +327,8 @@ namespace dealii
       {
         const auto &eigenvalues_0  = left.get_eigenvalues();
         const auto &eigenvectors_0 = left.get_eigenvectors();
-        const auto &masks_0        = left.get_masks();
         const auto &eigenvalues_1  = right.get_eigenvalues();
         const auto &eigenvectors_1 = right.get_eigenvectors();
-        const auto &masks_1        = right.get_masks();
 
         const unsigned int NN = VectorizedArrayType::size();
 
@@ -368,20 +351,19 @@ namespace dealii
             mask[v] = (a != 0.0) && (b != 0.0);
           }
 
-        const auto less = [](const auto a, const auto b) -> bool {
-          return (b - a) >
-                 std::abs(a + b) *
-                   std::numeric_limits<
-                     typename VectorizedArrayType::value_type>::epsilon() *
-                   10; // TODO
+
+        const auto eps = std::pow<Number>(
+          static_cast<Number>(10.0),
+          static_cast<Number>(
+            std::log10(std::numeric_limits<Number>::epsilon()) / 2.0));
+        std::cout << eps << std::endl;
+
+        const auto less = [eps](const auto a, const auto b) -> bool {
+          return (b - a) > std::max(eps, std::abs(a + b) * eps);
         };
 
-        const auto greater = [](const auto a, const auto b) -> bool {
-          return (a - b) >
-                 std::abs(a + b) *
-                   std::numeric_limits<
-                     typename VectorizedArrayType::value_type>::epsilon() *
-                   10; // TODO
+        const auto greater = [eps](const auto a, const auto b) -> bool {
+          return (a - b) > std::max(eps, std::abs(a + b) * eps);
         };
 
         for (unsigned int v = 0; v < NN; ++v)
@@ -405,15 +387,6 @@ namespace dealii
                   else if (greater(eigenvectors_0[d][i][j][v],
                                    eigenvectors_1[d][i][j][v]))
                     return false;
-
-        for (unsigned int v = 0; v < NN; ++v)
-          if (mask[v])
-            for (unsigned int d = 0; d < dim; ++d)
-              for (unsigned int i = 0; i < masks_0[d].size(); ++i)
-                if (less(masks_0[d][i][v], masks_1[d][i][v]))
-                  return true;
-                else if (greater(masks_0[d][i][v], masks_1[d][i][v]))
-                  return false;
 
         return false;
       }
