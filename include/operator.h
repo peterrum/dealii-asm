@@ -630,13 +630,68 @@ public:
   void
   do_cell_integral_local_merged(FECellIntegrator &phi) const
   {
-    (void)phi; // TODO
+    phi.evaluate(EvaluationFlags::gradients);
+
+    const unsigned int cell = phi.get_current_cell_index();
+
+    const auto &       quad       = matrix_free.get_quadrature();
+    const unsigned int n_q_points = quad.size();
+
+    VectorizedArrayType *phi_grads = phi.begin_gradients();
+    for (unsigned int q = 0; q < n_q_points; ++q)
+      {
+        if (dim == 2)
+          {
+            for (unsigned int c = 0; c < n_components; ++c)
+              {
+                const unsigned int  offset = c * dim * n_q_points;
+                VectorizedArrayType tmp    = phi_grads[q + offset];
+                phi_grads[q + offset] =
+                  merged_coefficients[cell * n_q_points + q][0] * tmp +
+                  merged_coefficients[cell * n_q_points + q][1] *
+                    phi_grads[q + n_q_points + offset];
+                phi_grads[q + n_q_points + offset] =
+                  merged_coefficients[cell * n_q_points + q][1] * tmp +
+                  merged_coefficients[cell * n_q_points + q][2] *
+                    phi_grads[q + n_q_points + offset];
+              }
+          }
+        else if (dim == 3)
+          {
+            for (unsigned int c = 0; c < n_components; ++c)
+              {
+                const unsigned int  offset = c * dim * n_q_points;
+                VectorizedArrayType tmp0   = phi_grads[q + offset];
+                VectorizedArrayType tmp1   = phi_grads[q + n_q_points + offset];
+                phi_grads[q + offset] =
+                  (merged_coefficients[cell * n_q_points + q][0] * tmp0 +
+                   merged_coefficients[cell * n_q_points + q][1] * tmp1 +
+                   merged_coefficients[cell * n_q_points + q][2] *
+                     phi_grads[q + 2 * n_q_points + offset]);
+                phi_grads[q + n_q_points + offset] =
+                  (merged_coefficients[cell * n_q_points + q][1] * tmp0 +
+                   merged_coefficients[cell * n_q_points + q][3] * tmp1 +
+                   merged_coefficients[cell * n_q_points + q][4] *
+                     phi_grads[q + 2 * n_q_points + offset]);
+                phi_grads[q + 2 * n_q_points + offset] =
+                  (merged_coefficients[cell * n_q_points + q][2] * tmp0 +
+                   merged_coefficients[cell * n_q_points + q][4] * tmp1 +
+                   merged_coefficients[cell * n_q_points + q][5] *
+                     phi_grads[q + 2 * n_q_points + offset]);
+              }
+          }
+      }
+    phi.integrate(EvaluationFlags::gradients);
   }
 
   void
   do_cell_integral_local_construct_q(FECellIntegrator &phi) const
   {
-    (void)phi; // TODO
+    // not implemented since we need the number of quadrature points
+    // as template arguments
+    AssertThrow(false, ExcNotImplemented());
+
+    (void)phi;
   }
 
   void
