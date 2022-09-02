@@ -34,6 +34,10 @@
 #include <deal.II/numerics/matrix_creator.h>
 #include <deal.II/numerics/vector_tools.h>
 
+#ifdef LIKWID_PERFMON
+#  include <likwid.h>
+#endif
+
 #include "include/dof_tools.h"
 #include "include/grid_tools.h"
 #include "include/restrictors.h"
@@ -43,14 +47,33 @@ using namespace dealii;
 #include "include/matrix_free.h"
 #include "include/operator.h"
 
-template <int dim>
+#define MAX_N_ROWS_FDM 10
+
+// clang-format off
+#define EXPAND_OPERATIONS(OPERATION)                                     \
+  switch (n_rows)                                                        \
+    {                                                                    \
+      case  2: OPERATION((( 2 <= MAX_N_ROWS_FDM) ?  2 : -1), -1); break; \
+      case  3: OPERATION((( 3 <= MAX_N_ROWS_FDM) ?  3 : -1), -1); break; \
+      case  4: OPERATION((( 4 <= MAX_N_ROWS_FDM) ?  4 : -1), -1); break; \
+      case  5: OPERATION((( 5 <= MAX_N_ROWS_FDM) ?  5 : -1), -1); break; \
+      case  6: OPERATION((( 6 <= MAX_N_ROWS_FDM) ?  6 : -1), -1); break; \
+      case  7: OPERATION((( 7 <= MAX_N_ROWS_FDM) ?  7 : -1), -1); break; \
+      case  8: OPERATION((( 8 <= MAX_N_ROWS_FDM) ?  8 : -1), -1); break; \
+      case  9: OPERATION((( 9 <= MAX_N_ROWS_FDM) ?  9 : -1), -1); break; \
+      case 10: OPERATION(((10 <= MAX_N_ROWS_FDM) ? 10 : -1), -1); break; \
+      default:                                                           \
+        OPERATION(-1, -1);                                               \
+    }
+// clang-format on
+
+template <int dim, typename Number>
 void
 test(const unsigned int fe_degree,
      const unsigned int n_global_refinements,
      const unsigned int n_overlap,
      const bool         use_cartesian_mesh)
 {
-  using Number              = float;
   using VectorizedArrayType = VectorizedArray<Number>;
   using VectorType          = LinearAlgebra::distributed::Vector<Number>;
 
@@ -85,6 +108,8 @@ test(const unsigned int fe_degree,
 
   DoFHandler<dim> dof_handler(tria);
   dof_handler.distribute_dofs(FE_Q<dim>(fe_degree));
+
+  pcout << "- n dofs: " << dof_handler.n_dofs() << std::endl;
 
   MappingQ<dim>      mapping(mapping_degree);
   MappingQCache<dim> mapping_q_cache(mapping_degree);
@@ -123,16 +148,43 @@ test(const unsigned int fe_degree,
 
   LaplaceOperatorMatrixFree<dim, Number, VectorizedArrayType> op(matrix_free);
 
-  ASPoissonPreconditioner<dim, Number, VectorizedArrayType, -1> fdm(
-    matrix_free,
-    n_overlap,
-    dim,
-    mapping_q_cache,
-    fe_1D,
-    quadrature_face,
-    quadrature_1D);
+  std::shared_ptr<ASPoissonPreconditionerBase<VectorType>> precon_fdm;
 
-  std::cout << fdm.n_fdm_instances() << std::endl;
+  const unsigned int n_rows = fe_degree + 2 * n_overlap - 1;
+
+#define OPERATION(c, d)                                            \
+  if (c == -1)                                                     \
+    pcout << "Warning: FDM with <" + std::to_string(n_rows) +      \
+               "> is not precompiled!"                             \
+          << std::endl;                                            \
+                                                                   \
+  precon_fdm = std::make_shared<                                   \
+    ASPoissonPreconditioner<dim, Number, VectorizedArrayType, c>>( \
+    matrix_free,                                                   \
+    n_overlap,                                                     \
+    dim,                                                           \
+    mapping_q_cache,                                               \
+    fe_1D,                                                         \
+    quadrature_face,                                               \
+    quadrature_1D,                                                 \
+    Restrictors::WeightingType::none);
+
+  EXPAND_OPERATIONS(OPERATION);
+#undef OPERATION
+
+  op.set_partitioner(precon_fdm->get_partitioner());
+
+  VectorType src, dst;
+
+  op.initialize_dof_vector(src);
+  op.initialize_dof_vector(dst);
+
+  src = 1;
+
+  LIKWID_MARKER_START("fdm");
+  for (unsigned int i = 0; i < 10; ++i)
+    precon_fdm->vmult(dst, src);
+  LIKWID_MARKER_STOP("fdm");
 }
 
 
@@ -142,16 +194,31 @@ main(int argc, char *argv[])
 {
   Utilities::MPI::MPI_InitFinalize mpi_initialization(argc, argv, 1);
 
-  const unsigned int dim       = (argc >= 2) ? std::atoi(argv[1]) : 2;
-  const unsigned int fe_degree = (argc >= 3) ? std::atoi(argv[2]) : 1;
-  const unsigned int n_global_refinements =
-    (argc >= 4) ? std::atoi(argv[3]) : 6;
-  const unsigned int n_overlap          = (argc >= 5) ? std::atoi(argv[4]) : 1;
-  const bool         use_cartesian_mesh = (argc >= 6) ? std::atoi(argv[5]) : 1;
+#ifdef LIKWID_PERFMON
+  LIKWID_MARKER_INIT;
+  LIKWID_MARKER_THREADINIT;
+#endif
+
+  const unsigned int dim            = (argc >= 2) ? std::atoi(argv[1]) : 2;
+  const unsigned int fe_degree      = (argc >= 3) ? std::atoi(argv[2]) : 1;
+  const unsigned int n_refinements  = (argc >= 4) ? std::atoi(argv[3]) : 6;
+  const unsigned int n_overlap      = (argc >= 5) ? std::atoi(argv[4]) : 1;
+  const bool         cartesian_mesh = (argc >= 6) ? std::atoi(argv[5]) : 1;
+  const bool         use_float      = (argc >= 7) ? std::atoi(argv[6]) : 1;
 
 
-  if (dim == 2)
-    test<2>(fe_degree, n_global_refinements, n_overlap, use_cartesian_mesh);
+  if (dim == 2 && use_float)
+    test<2, float>(fe_degree, n_refinements, n_overlap, cartesian_mesh);
+  else if (dim == 3 && use_float)
+    test<3, float>(fe_degree, n_refinements, n_overlap, cartesian_mesh);
+  else if (dim == 2)
+    test<2, double>(fe_degree, n_refinements, n_overlap, cartesian_mesh);
+  else if (dim == 3)
+    test<3, double>(fe_degree, n_refinements, n_overlap, cartesian_mesh);
   else
     AssertThrow(false, ExcInternalError());
+
+#ifdef LIKWID_PERFMON
+  LIKWID_MARKER_CLOSE;
+#endif
 }
