@@ -391,6 +391,9 @@ public:
   void
   do_cell_integral_local_linear_geometry(FECellIntegrator &phi) const
   {
+    // adopted from:
+    // https://github.com/kronbichler/ceed_benchmarks_dealii/blob/e3da3c50d9d49666b324282255cdcb7ab25c128c/common_code/poisson_operator.h#L712
+
     phi.evaluate(EvaluationFlags::gradients);
 
     const std::array<Tensor<1, dim, VectorizedArrayType>,
@@ -507,6 +510,9 @@ public:
   void
   do_cell_integral_local_quadratic_geometry(FECellIntegrator &phi) const
   {
+    // adopted from:
+    // https://github.com/kronbichler/ceed_benchmarks_dealii/blob/e3da3c50d9d49666b324282255cdcb7ab25c128c/common_code/poisson_operator.h#L860
+
     phi.evaluate(EvaluationFlags::gradients);
 
     using TensorType = Tensor<1, dim, VectorizedArrayType>;
@@ -630,6 +636,9 @@ public:
   void
   do_cell_integral_local_merged(FECellIntegrator &phi) const
   {
+    // adopted from:
+    // https://github.com/kronbichler/ceed_benchmarks_dealii/blob/e3da3c50d9d49666b324282255cdcb7ab25c128c/common_code/poisson_operator.h#L1003
+
     phi.evaluate(EvaluationFlags::gradients);
 
     const unsigned int cell = phi.get_current_cell_index();
@@ -687,6 +696,9 @@ public:
   void
   do_cell_integral_local_construct_q(FECellIntegrator &phi) const
   {
+    // adopted from:
+    // https://github.com/kronbichler/ceed_benchmarks_dealii/blob/e3da3c50d9d49666b324282255cdcb7ab25c128c/common_code/poisson_operator.h#L1065
+
     // not implemented since we need the number of quadrature points
     // as template arguments
     AssertThrow(false, ExcNotImplemented());
