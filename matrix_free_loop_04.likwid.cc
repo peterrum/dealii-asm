@@ -46,6 +46,7 @@ using namespace dealii;
 
 #include "include/matrix_free.h"
 #include "include/operator.h"
+#include "include/vector_access_reduced.h"
 
 #define MAX_N_ROWS_FDM 10
 
@@ -142,6 +143,10 @@ test(const unsigned int fe_degree,
   typename MatrixFree<dim, Number, VectorizedArrayType>::AdditionalData
     additional_data;
 
+  DoFRenumbering::matrix_free_data_locality(dof_handler,
+                                            constraints,
+                                            additional_data);
+
   MatrixFree<dim, Number, VectorizedArrayType> matrix_free;
   matrix_free.reinit(
     mapping_q_cache, dof_handler, constraints, quadrature, additional_data);
@@ -185,6 +190,16 @@ test(const unsigned int fe_degree,
   for (unsigned int i = 0; i < 10; ++i)
     precon_fdm->vmult(dst, src);
   LIKWID_MARKER_STOP("fdm");
+
+  ConstraintInfoReduced rw;
+  rw.initialize(matrix_free);
+
+  if (false)
+    {
+      FEEvaluation<dim, -1, 0, 1, Number, VectorizedArrayType> phi(matrix_free);
+      rw.read_dof_values(src, phi);
+      rw.distribute_local_to_global(dst, phi);
+    }
 }
 
 

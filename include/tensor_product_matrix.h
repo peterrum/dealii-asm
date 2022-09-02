@@ -356,7 +356,6 @@ namespace dealii
           static_cast<Number>(10.0),
           static_cast<Number>(
             std::log10(std::numeric_limits<Number>::epsilon()) / 2.0));
-        std::cout << eps << std::endl;
 
         const auto less = [eps](const auto a, const auto b) -> bool {
           return (b - a) > std::max(eps, std::abs(a + b) * eps);

@@ -11,6 +11,7 @@
 #include "preconditioners.h"
 #include "restrictors.h"
 #include "tensor_product_matrix.h"
+#include "vector_access_reduced.h"
 
 template <typename VectorType>
 class ASPoissonPreconditionerBase : public PreconditionerBase<VectorType>
@@ -124,7 +125,13 @@ public:
         }
     };
 
-    if (n_overlap > 1)
+    if (n_overlap == 1)
+      {
+        auto compressed_rw = std::make_shared<ConstraintInfoReduced>();
+        compressed_rw->initialize(matrix_free);
+        this->compressed_rw = compressed_rw;
+      }
+    else
       {
         const auto &locally_owned_dofs = dof_handler.locally_owned_dofs();
 
@@ -354,7 +361,7 @@ public:
   unsigned int
   n_fdm_instances() const
   {
-   return fdm.size();
+    return fdm.size();
   }
 
 
@@ -505,7 +512,10 @@ private:
             phi_src.reinit(cell);
             phi_dst.reinit(cell);
 
-            phi_src.read_dof_values(src);
+            if (compressed_rw)
+              compressed_rw->read_dof_values(src, phi_src);
+            else
+              phi_src.read_dof_values(src);
 
             if (weight_type == Restrictors::WeightingType::symm ||
                 weight_type == Restrictors::WeightingType::pre)
@@ -532,7 +542,10 @@ private:
                     phi_weights.begin_dof_values()[i];
               }
 
-            phi_dst.distribute_local_to_global(dst);
+            if (compressed_rw)
+              compressed_rw->distribute_local_to_global(dst, phi_dst);
+            else
+              phi_dst.distribute_local_to_global(dst);
           }
       },
       dst,
@@ -572,6 +585,8 @@ private:
   mutable VectorType dst_;
 
   VectorType weights;
+
+  std::shared_ptr<ConstraintInfoReduced> compressed_rw;
 };
 
 
