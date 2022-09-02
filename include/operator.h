@@ -200,14 +200,7 @@ public:
     pcout << "  - n dofs:  " << dof_handler_internal.n_dofs() << std::endl;
     pcout << std::endl;
 
-    const bool compress_indices = true; // TODO
-
-    if (compress_indices)
-      {
-        auto compressed_rw = std::make_shared<ConstraintInfoReduced>();
-        compressed_rw->initialize(matrix_free);
-        this->compressed_rw = compressed_rw;
-      }
+    setup_mapping_and_indices();
   }
 
   LaplaceOperatorMatrixFree(
@@ -217,6 +210,12 @@ public:
             Utilities::MPI::this_mpi_process(
               matrix_free.get_dof_handler().get_communicator()) == 0)
   {
+    setup_mapping_and_indices();
+  }
+
+  void
+  setup_mapping_and_indices()
+  {
     const bool compress_indices = true; // TODO
 
     if (compress_indices)
@@ -225,6 +224,9 @@ public:
         compressed_rw->initialize(matrix_free);
         this->compressed_rw = compressed_rw;
       }
+
+
+    // TODO: mapping
   }
 
   static constexpr bool
