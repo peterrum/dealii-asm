@@ -235,9 +235,9 @@ public:
 
         for (unsigned int c = 0; c < matrix_free.n_cell_batches(); ++c)
           {
-            for (unsigned int l = 0;
-                 l < matrix_free.n_active_entries_per_cell_batch(c);
-                 ++l)
+            unsigned int l = 0;
+
+            for (; l < matrix_free.n_active_entries_per_cell_batch(c); ++l)
               {
                 const typename DoFHandler<dim>::cell_iterator cell =
                   matrix_free.get_cell_iterator(c, l);
@@ -292,10 +292,7 @@ public:
                   AssertThrow(false, ExcNotImplemented());
               }
 
-            for (unsigned int l =
-                   matrix_free.n_active_entries_per_cell_batch(c);
-                 l < VectorizedArrayType::size();
-                 ++l)
+            for (; l < VectorizedArrayType::size(); ++l)
               {
                 for (unsigned int d = 0; d < dim; ++d)
                   cell_vertex_coefficients[c][d + 1][d][l] = 1.;
@@ -315,7 +312,8 @@ public:
         merged_coefficients.resize(n_q_points * matrix_free.n_cell_batches());
 
         FE_Nothing<dim> dummy_fe;
-        FEValues<dim>   fe_values(dummy_fe,
+        FEValues<dim>   fe_values(*matrix_free.get_mapping_info().mapping,
+                                dummy_fe,
                                 quadrature,
                                 update_jacobians | update_JxW_values);
 
@@ -351,7 +349,8 @@ public:
 
             FE_Nothing<dim> dummy_fe;
 
-            FEValues<dim> fe_values(dummy_fe,
+            FEValues<dim> fe_values(*matrix_free.get_mapping_info().mapping,
+                                    dummy_fe,
                                     quadrature,
                                     update_quadrature_points);
 
