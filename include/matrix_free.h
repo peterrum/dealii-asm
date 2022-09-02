@@ -86,6 +86,8 @@ public:
                                       fe_1D.degree + 2 * n_overlap - 1),
                 ExcNotImplemented());
 
+    const bool compress_indices = true;
+
     const auto &dof_handler = matrix_free.get_dof_handler();
     const auto &constraints = matrix_free.get_affine_constraints();
 
@@ -127,9 +129,12 @@ public:
 
     if (n_overlap == 1)
       {
-        auto compressed_rw = std::make_shared<ConstraintInfoReduced>();
-        compressed_rw->initialize(matrix_free);
-        this->compressed_rw = compressed_rw;
+        if (compress_indices)
+          {
+            auto compressed_rw = std::make_shared<ConstraintInfoReduced>();
+            compressed_rw->initialize(matrix_free);
+            this->compressed_rw = compressed_rw;
+          }
       }
     else
       {
