@@ -233,20 +233,26 @@ public:
       {
         cell_vertex_coefficients.resize(matrix_free.n_cell_batches());
 
+        FE_Nothing<dim> dummy_fe;
+
+        FEValues<dim> fe_values(*matrix_free.get_mapping_info().mapping,
+                                dummy_fe,
+                                QGaussLobatto<dim>(2),
+                                update_quadrature_points);
+
         for (unsigned int c = 0; c < matrix_free.n_cell_batches(); ++c)
           {
             unsigned int l = 0;
 
             for (; l < matrix_free.n_active_entries_per_cell_batch(c); ++l)
               {
-                const typename DoFHandler<dim>::cell_iterator cell =
-                  matrix_free.get_cell_iterator(c, l);
+                fe_values.reinit(typename Triangulation<dim>::cell_iterator(
+                  matrix_free.get_cell_iterator(c, l)));
+
+                const auto &v = fe_values.get_quadrature_points();
+
                 if (dim == 2)
                   {
-                    std::array<Tensor<1, dim>, 4> v{{cell->vertex(0),
-                                                     cell->vertex(1),
-                                                     cell->vertex(2),
-                                                     cell->vertex(3)}};
                     for (unsigned int d = 0; d < dim; ++d)
                       {
                         cell_vertex_coefficients[c][0][d][l] = v[0][d];
@@ -260,14 +266,6 @@ public:
                   }
                 else if (dim == 3)
                   {
-                    std::array<Tensor<1, dim>, 8> v{{cell->vertex(0),
-                                                     cell->vertex(1),
-                                                     cell->vertex(2),
-                                                     cell->vertex(3),
-                                                     cell->vertex(4),
-                                                     cell->vertex(5),
-                                                     cell->vertex(6),
-                                                     cell->vertex(7)}};
                     for (unsigned int d = 0; d < dim; ++d)
                       {
                         cell_vertex_coefficients[c][0][d][l] = v[0][d];
