@@ -318,12 +318,9 @@ public:
                           VectorType &      dst,
                           const VectorType &src) const
   {
-    integrator.gather_evaluate(src, EvaluationFlags::gradients);
-
-    for (unsigned int q = 0; q < integrator.n_q_points; ++q)
-      integrator.submit_gradient(integrator.get_gradient(q), q);
-
-    integrator.integrate_scatter(EvaluationFlags::gradients, dst);
+    integrator.read_dof_values(src);
+    do_cell_integral_local(integrator);
+    integrator.distribute_local_to_global(dst);
   }
 
   void
