@@ -430,39 +430,39 @@ public:
                   }
               }
           }
+      }
 
-        if (mapping_type == "generate q")
+    if (mapping_type == "generate q")
+      {
+        // adopted from
+        // https://github.com/kronbichler/ceed_benchmarks_dealii/blob/e3da3c50d9d49666b324282255cdcb7ab25c128c/common_code/poisson_operator.h#L278-L280
+
+        const auto &quadrature = matrix_free.get_quadrature();
+        const auto  n_q_points = quadrature.size();
+        quadrature_points.resize(n_q_points * dim *
+                                 matrix_free.n_cell_batches());
+
+        FE_Nothing<dim> dummy_fe;
+
+        FEValues<dim> fe_values(*matrix_free.get_mapping_info().mapping,
+                                dummy_fe,
+                                quadrature,
+                                update_quadrature_points);
+
+        for (unsigned int c = 0; c < matrix_free.n_cell_batches(); ++c)
           {
-            // adopted from
-            // https://github.com/kronbichler/ceed_benchmarks_dealii/blob/e3da3c50d9d49666b324282255cdcb7ab25c128c/common_code/poisson_operator.h#L278-L280
-
-            const auto &quadrature = matrix_free.get_quadrature();
-            const auto  n_q_points = quadrature.size();
-            quadrature_points.resize(n_q_points * dim *
-                                     matrix_free.n_cell_batches());
-
-            FE_Nothing<dim> dummy_fe;
-
-            FEValues<dim> fe_values(*matrix_free.get_mapping_info().mapping,
-                                    dummy_fe,
-                                    quadrature,
-                                    update_quadrature_points);
-
-            for (unsigned int c = 0; c < matrix_free.n_cell_batches(); ++c)
+            for (unsigned int l = 0;
+                 l < matrix_free.n_active_entries_per_cell_batch(c);
+                 ++l)
               {
-                for (unsigned int l = 0;
-                     l < matrix_free.n_active_entries_per_cell_batch(c);
-                     ++l)
+                fe_values.reinit(typename Triangulation<dim>::cell_iterator(
+                  matrix_free.get_cell_iterator(c, l)));
+                for (unsigned int q = 0; q < n_q_points; ++q)
                   {
-                    fe_values.reinit(typename Triangulation<dim>::cell_iterator(
-                      matrix_free.get_cell_iterator(c, l)));
-                    for (unsigned int q = 0; q < n_q_points; ++q)
-                      {
-                        for (unsigned int d = 0; d < dim; ++d)
-                          quadrature_points[c * dim * n_q_points +
-                                            d * n_q_points + q][l] =
-                            fe_values.quadrature_point(q)[d];
-                      }
+                    for (unsigned int d = 0; d < dim; ++d)
+                      quadrature_points[c * dim * n_q_points + d * n_q_points +
+                                        q][l] =
+                        fe_values.quadrature_point(q)[d];
                   }
               }
           }
