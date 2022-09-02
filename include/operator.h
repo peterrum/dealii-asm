@@ -166,8 +166,10 @@ public:
 
   using VectorType = vector_type;
 
+  static const unsigned int n_components = 1;
+
   using FECellIntegrator =
-    FEEvaluation<dim, -1, 0, 1, Number, VectorizedArrayType>;
+    FEEvaluation<dim, -1, 0, n_components, Number, VectorizedArrayType>;
 
   LaplaceOperatorMatrixFree(const Mapping<dim> &      mapping,
                             const Triangulation<dim> &tria,
@@ -324,12 +326,176 @@ public:
   void
   do_cell_integral_local(FECellIntegrator &integrator) const
   {
+    if (!cell_vertex_coefficients.empty())
+      do_cell_integral_local_linear_geometry(integrator);
+    else
+      do_cell_integral_local_base(integrator);
+  }
+
+  void
+  do_cell_integral_local_base(FECellIntegrator &integrator) const
+  {
     integrator.evaluate(EvaluationFlags::gradients);
 
     for (unsigned int q = 0; q < integrator.n_q_points; ++q)
       integrator.submit_gradient(integrator.get_gradient(q), q);
 
     integrator.integrate(EvaluationFlags::gradients);
+  }
+
+  template <typename T>
+  static inline DEAL_II_ALWAYS_INLINE T
+  do_invert(Tensor<2, 2, T> &t)
+  {
+    const T det     = t[0][0] * t[1][1] - t[1][0] * t[0][1];
+    const T inv_det = 1.0 / det;
+    const T tmp     = inv_det * t[0][0];
+    t[0][0]         = inv_det * t[1][1];
+    t[0][1]         = -inv_det * t[0][1];
+    t[1][0]         = -inv_det * t[1][0];
+    t[1][1]         = tmp;
+    return det;
+  }
+
+  template <typename T>
+  static inline DEAL_II_ALWAYS_INLINE T
+  do_invert(Tensor<2, 3, T> &t)
+  {
+    const T tr00    = t[1][1] * t[2][2] - t[1][2] * t[2][1];
+    const T tr10    = t[1][2] * t[2][0] - t[1][0] * t[2][2];
+    const T tr20    = t[1][0] * t[2][1] - t[1][1] * t[2][0];
+    const T det     = t[0][0] * tr00 + t[0][1] * tr10 + t[0][2] * tr20;
+    const T inv_det = 1.0 / det;
+    const T tr01    = t[0][2] * t[2][1] - t[0][1] * t[2][2];
+    const T tr02    = t[0][1] * t[1][2] - t[0][2] * t[1][1];
+    const T tr11    = t[0][0] * t[2][2] - t[0][2] * t[2][0];
+    const T tr12    = t[0][2] * t[1][0] - t[0][0] * t[1][2];
+    t[2][1]         = inv_det * (t[0][1] * t[2][0] - t[0][0] * t[2][1]);
+    t[2][2]         = inv_det * (t[0][0] * t[1][1] - t[0][1] * t[1][0]);
+    t[0][0]         = inv_det * tr00;
+    t[0][1]         = inv_det * tr01;
+    t[0][2]         = inv_det * tr02;
+    t[1][0]         = inv_det * tr10;
+    t[1][1]         = inv_det * tr11;
+    t[1][2]         = inv_det * tr12;
+    t[2][0]         = inv_det * tr20;
+    return det;
+  }
+
+  void
+  do_cell_integral_local_linear_geometry(FECellIntegrator &phi) const
+  {
+    phi.evaluate(EvaluationFlags::gradients);
+
+    const std::array<Tensor<1, dim, VectorizedArrayType>,
+                     GeometryInfo<dim>::vertices_per_cell> &v =
+      cell_vertex_coefficients[phi.get_current_cell_index()];
+
+    const auto &       quad       = matrix_free.get_quadrature();
+    const unsigned int n_q_points = quad.size();
+
+    const auto &quad_1d = matrix_free.get_quadrature().get_tensor_basis()[0];
+    const unsigned int n_q_points_1d = quad_1d.size();
+
+    VectorizedArrayType *phi_grads = phi.begin_gradients();
+    if (dim == 2)
+      {
+        for (unsigned int q = 0, qy = 0; qy < n_q_points_1d; ++qy)
+          {
+            // x-derivative, already complete
+            Tensor<1, dim, VectorizedArrayType> x_con =
+              v[1] + quad_1d.point(qy)[0] * v[3];
+            for (unsigned int qx = 0; qx < n_q_points_1d; ++qx, ++q)
+              {
+                const double q_weight = quad_1d.weight(qy) * quad_1d.weight(qx);
+                Tensor<2, dim, VectorizedArrayType> jac;
+                jac[1] = v[2] + quad_1d.point(qx)[0] * v[3];
+                for (unsigned int d = 0; d < 2; ++d)
+                  jac[0][d] = x_con[d];
+                const VectorizedArrayType det = do_invert(jac);
+
+                for (unsigned int c = 0; c < n_components; ++c)
+                  {
+                    const unsigned int  offset = c * dim * n_q_points;
+                    VectorizedArrayType tmp[dim];
+                    for (unsigned int d = 0; d < dim; ++d)
+                      {
+                        tmp[d] = jac[d][0] * phi_grads[q + offset];
+                        for (unsigned int e = 1; e < dim; ++e)
+                          tmp[d] +=
+                            jac[d][e] * phi_grads[q + e * n_q_points + offset];
+                        tmp[d] *= det * q_weight;
+                      }
+                    for (unsigned int d = 0; d < dim; ++d)
+                      {
+                        phi_grads[q + d * n_q_points + offset] =
+                          jac[0][d] * tmp[0];
+                        for (unsigned int e = 1; e < dim; ++e)
+                          phi_grads[q + d * n_q_points + offset] +=
+                            jac[e][d] * tmp[e];
+                      }
+                  }
+              }
+          }
+      }
+    else if (dim == 3)
+      {
+        for (unsigned int q = 0, qz = 0; qz < n_q_points_1d; ++qz)
+          {
+            for (unsigned int qy = 0; qy < n_q_points_1d; ++qy)
+              {
+                const auto z = quad_1d.point(qz)[0];
+                const auto y = quad_1d.point(qy)[0];
+                // x-derivative, already complete
+                Tensor<1, dim, VectorizedArrayType> x_con = v[1] + z * v[5];
+                x_con += y * (v[4] + z * v[7]);
+                // y-derivative, constant part
+                Tensor<1, dim, VectorizedArrayType> y_con = v[2] + z * v[6];
+                // y-derivative, xi-dependent part
+                Tensor<1, dim, VectorizedArrayType> y_var = v[4] + z * v[7];
+                // z-derivative, constant part
+                Tensor<1, dim, VectorizedArrayType> z_con = v[3] + y * v[6];
+                // z-derivative, variable part
+                Tensor<1, dim, VectorizedArrayType> z_var = v[5] + y * v[7];
+                double q_weight_tmp = quad_1d.weight(qz) * quad_1d.weight(qy);
+                for (unsigned int qx = 0; qx < n_q_points_1d; ++qx, ++q)
+                  {
+                    const Number x = quad_1d.point(qx)[0];
+                    Tensor<2, dim, VectorizedArrayType> jac;
+                    jac[1] = y_con + x * y_var;
+                    jac[2] = z_con + x * z_var;
+                    for (unsigned int d = 0; d < dim; ++d)
+                      jac[0][d] = x_con[d];
+                    VectorizedArrayType det = do_invert(jac);
+                    det = det * (q_weight_tmp * quad_1d.weight(qx));
+
+                    for (unsigned int c = 0; c < n_components; ++c)
+                      {
+                        const unsigned int  offset = c * dim * n_q_points;
+                        VectorizedArrayType tmp[dim];
+                        for (unsigned int d = 0; d < dim; ++d)
+                          {
+                            tmp[d] = jac[d][0] * phi_grads[q + offset];
+                            for (unsigned int e = 1; e < dim; ++e)
+                              tmp[d] += jac[d][e] *
+                                        phi_grads[q + e * n_q_points + offset];
+                            tmp[d] *= det;
+                          }
+                        for (unsigned int d = 0; d < dim; ++d)
+                          {
+                            phi_grads[q + d * n_q_points + offset] =
+                              jac[0][d] * tmp[0];
+                            for (unsigned int e = 1; e < dim; ++e)
+                              phi_grads[q + d * n_q_points + offset] +=
+                                jac[e][d] * tmp[e];
+                          }
+                      }
+                  }
+              }
+          }
+      }
+
+    phi.integrate(EvaluationFlags::gradients);
   }
 
   void
@@ -670,5 +836,11 @@ private:
   mutable TrilinosWrappers::SparsityPattern sparsity_pattern;
   mutable TrilinosWrappers::SparseMatrix    sparse_matrix;
 
+  // compressed indices
   std::shared_ptr<ConstraintInfoReduced> compressed_rw;
+
+  // mapping
+  AlignedVector<std::array<Tensor<1, dim, VectorizedArrayType>,
+                           GeometryInfo<dim>::vertices_per_cell>>
+    cell_vertex_coefficients;
 };
