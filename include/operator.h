@@ -231,6 +231,9 @@ public:
     // lineare geometry
     if (mapping_type == "linear geometry")
       {
+        // adopted from
+        // https://github.com/kronbichler/ceed_benchmarks_dealii/blob/e3da3c50d9d49666b324282255cdcb7ab25c128c/common_code/poisson_operator.h#L194-L266
+
         cell_vertex_coefficients.resize(matrix_free.n_cell_batches());
 
         FE_Nothing<dim> dummy_fe;
@@ -309,6 +312,9 @@ public:
 
     if (mapping_type == "quadratic geometry")
       {
+        // adopted from
+        // https://github.com/kronbichler/mf_data_locality/blob/de47ea43e7e705a71742885493a2f5c441824a73/common_code/poisson_operator.h#L136-L169
+
         cell_quadratic_coefficients.resize(matrix_free.n_cell_batches());
 
         FE_Nothing<dim> dummy_fe;
@@ -389,6 +395,9 @@ public:
 
     if (mapping_type == "merged")
       {
+        // adpoted from
+        // https://github.com/kronbichler/ceed_benchmarks_dealii/blob/e3da3c50d9d49666b324282255cdcb7ab25c128c/common_code/poisson_operator.h#L272-L277
+
         const auto &quadrature = matrix_free.get_quadrature();
         const auto  n_q_points = quadrature.size();
         merged_coefficients.resize(n_q_points * matrix_free.n_cell_batches());
@@ -424,6 +433,9 @@ public:
 
         if (mapping_type == "generate q")
           {
+            // adopted from
+            // https://github.com/kronbichler/ceed_benchmarks_dealii/blob/e3da3c50d9d49666b324282255cdcb7ab25c128c/common_code/poisson_operator.h#L278-L280
+
             const auto &quadrature = matrix_free.get_quadrature();
             const auto  n_q_points = quadrature.size();
             quadrature_points.resize(n_q_points * dim *
