@@ -1,5 +1,6 @@
 #pragma once
 
+#include "vector_access_reduced.h"
 
 template <int dim, typename Number>
 class LaplaceOperatorMatrixBased : public Subscriptor
@@ -196,6 +197,15 @@ public:
           << std::endl;
     pcout << "  - n dofs:  " << dof_handler_internal.n_dofs() << std::endl;
     pcout << std::endl;
+
+    const bool compress_indices = true; // TODO
+
+    if (compress_indices)
+      {
+        auto compressed_rw = std::make_shared<ConstraintInfoReduced>();
+        compressed_rw->initialize(matrix_free);
+        this->compressed_rw = compressed_rw;
+      }
   }
 
   LaplaceOperatorMatrixFree(
@@ -204,7 +214,16 @@ public:
     , pcout(std::cout,
             Utilities::MPI::this_mpi_process(
               matrix_free.get_dof_handler().get_communicator()) == 0)
-  {}
+  {
+    const bool compress_indices = true; // TODO
+
+    if (compress_indices)
+      {
+        auto compressed_rw = std::make_shared<ConstraintInfoReduced>();
+        compressed_rw->initialize(matrix_free);
+        this->compressed_rw = compressed_rw;
+      }
+  }
 
   static constexpr bool
   is_matrix_free()
@@ -318,9 +337,17 @@ public:
                           VectorType &      dst,
                           const VectorType &src) const
   {
-    integrator.read_dof_values(src);
+    if (compressed_rw)
+      compressed_rw->read_dof_values(src, integrator);
+    else
+      integrator.read_dof_values(src);
+
     do_cell_integral_local(integrator);
-    integrator.distribute_local_to_global(dst);
+
+    if (compressed_rw)
+      compressed_rw->distribute_local_to_global(dst, integrator);
+    else
+      integrator.distribute_local_to_global(dst);
   }
 
   void
@@ -642,4 +669,6 @@ private:
   // only set up if required
   mutable TrilinosWrappers::SparsityPattern sparsity_pattern;
   mutable TrilinosWrappers::SparseMatrix    sparse_matrix;
+
+  std::shared_ptr<ConstraintInfoReduced> compressed_rw;
 };
