@@ -235,7 +235,16 @@ public:
 
         FE_Nothing<dim> dummy_fe;
 
-        FEValues<dim> fe_values(*matrix_free.get_mapping_info().mapping,
+        const auto &mapping   = *matrix_free.get_mapping_info().mapping;
+        const auto  mapping_q = dynamic_cast<const MappingQ<dim> *>(&mapping);
+
+        AssertThrow(mapping_q,
+                    ExcMessage(
+                      "This function expects a mapping of type MappingQ!"));
+        AssertThrow(mapping_q->get_degree() == 1,
+                    ExcMessage("This function expects a linear mapping!"));
+
+        FEValues<dim> fe_values(mapping,
                                 dummy_fe,
                                 QGaussLobatto<dim>(2),
                                 update_quadrature_points);
@@ -302,8 +311,20 @@ public:
       {
         cell_quadratic_coefficients.resize(matrix_free.n_cell_batches());
 
-        FEValues<dim> fe_values(*matrix_free.get_mapping_info().mapping,
-                                matrix_free.get_dof_handler().get_fe(),
+        FE_Nothing<dim> dummy_fe;
+
+        const auto &mapping   = *matrix_free.get_mapping_info().mapping;
+        const auto  mapping_q = dynamic_cast<const MappingQ<dim> *>(&mapping);
+
+        AssertThrow(mapping_q,
+                    ExcMessage(
+                      "This function expects a mapping of type MappingQ!"));
+        AssertThrow(mapping_q->get_degree() <= 2,
+                    ExcMessage(
+                      "This function expects at most a quadratic mapping!"));
+
+        FEValues<dim> fe_values(mapping,
+                                dummy_fe,
                                 QGaussLobatto<dim>(3),
                                 update_quadrature_points);
 
