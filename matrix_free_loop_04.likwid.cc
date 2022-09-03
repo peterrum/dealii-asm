@@ -73,7 +73,9 @@ void
 test(const unsigned int fe_degree,
      const unsigned int n_global_refinements,
      const unsigned int n_overlap,
-     const bool         use_cartesian_mesh)
+     const bool         use_cartesian_mesh,
+     const bool         compress_indices,
+     const unsigned int mapping_type)
 {
   using VectorizedArrayType = VectorizedArray<Number>;
   using VectorType          = LinearAlgebra::distributed::Vector<Number>;
@@ -81,7 +83,7 @@ test(const unsigned int fe_degree,
   using FECellIntegrator =
     FEEvaluation<dim, -1, 0, 1, Number, VectorizedArrayType>;
 
-  const unsigned int mapping_degree = fe_degree;
+  const unsigned int mapping_degree = 1;
 
   FE_Q<dim> fe(fe_degree);
   FE_Q<1>   fe_1D(fe_degree);
@@ -151,7 +153,26 @@ test(const unsigned int fe_degree,
   matrix_free.reinit(
     mapping_q_cache, dof_handler, constraints, quadrature, additional_data);
 
-  LaplaceOperatorMatrixFree<dim, Number, VectorizedArrayType> op(matrix_free);
+  typename LaplaceOperatorMatrixFree<dim, Number, VectorizedArrayType>::
+    AdditionalData op_as;
+
+  op_as.compress_indices = compress_indices;
+
+  if (mapping_type == 0)
+    op_as.mapping_type = "";
+  else if (mapping_type == 1)
+    op_as.mapping_type = "linear geometry";
+  else if (mapping_type == 2)
+    op_as.mapping_type = "quadratic geometry";
+  else if (mapping_type == 3)
+    op_as.mapping_type = "merged";
+  else if (mapping_type == 4)
+    op_as.mapping_type = "construct q";
+  else
+    AssertThrow(false, ExcNotImplemented());
+
+  LaplaceOperatorMatrixFree<dim, Number, VectorizedArrayType> op(matrix_free,
+                                                                 op_as);
 
   std::shared_ptr<ASPoissonPreconditionerBase<VectorType>> precon_fdm;
 
@@ -186,19 +207,19 @@ test(const unsigned int fe_degree,
 
   src = 1;
 
-  LIKWID_MARKER_START("fdm");
-  for (unsigned int i = 0; i < 10; ++i)
-    precon_fdm->vmult(dst, src);
-  LIKWID_MARKER_STOP("fdm");
-
-  ConstraintInfoReduced rw;
-  rw.initialize(matrix_free);
-
   if (false)
     {
-      FEEvaluation<dim, -1, 0, 1, Number, VectorizedArrayType> phi(matrix_free);
-      rw.read_dof_values(src, phi);
-      rw.distribute_local_to_global(dst, phi);
+      LIKWID_MARKER_START("fdm");
+      for (unsigned int i = 0; i < 10; ++i)
+        precon_fdm->vmult(dst, src);
+      LIKWID_MARKER_STOP("fdm");
+    }
+  else
+    {
+      LIKWID_MARKER_START("vmult");
+      for (unsigned int i = 0; i < 10; ++i)
+        op.vmult(dst, src);
+      LIKWID_MARKER_STOP("vmult");
     }
 }
 
@@ -214,22 +235,44 @@ main(int argc, char *argv[])
   LIKWID_MARKER_THREADINIT;
 #endif
 
-  const unsigned int dim            = (argc >= 2) ? std::atoi(argv[1]) : 2;
-  const unsigned int fe_degree      = (argc >= 3) ? std::atoi(argv[2]) : 1;
-  const unsigned int n_refinements  = (argc >= 4) ? std::atoi(argv[3]) : 6;
-  const unsigned int n_overlap      = (argc >= 5) ? std::atoi(argv[4]) : 1;
-  const bool         cartesian_mesh = (argc >= 6) ? std::atoi(argv[5]) : 1;
-  const bool         use_float      = (argc >= 7) ? std::atoi(argv[6]) : 1;
+  const unsigned int dim              = (argc >= 2) ? std::atoi(argv[1]) : 2;
+  const unsigned int fe_degree        = (argc >= 3) ? std::atoi(argv[2]) : 1;
+  const unsigned int n_refinements    = (argc >= 4) ? std::atoi(argv[3]) : 6;
+  const unsigned int n_overlap        = (argc >= 5) ? std::atoi(argv[4]) : 1;
+  const bool         cartesian_mesh   = (argc >= 6) ? std::atoi(argv[5]) : 1;
+  const bool         use_float        = (argc >= 7) ? std::atoi(argv[6]) : 1;
+  const bool         compress_indices = (argc >= 8) ? std::atoi(argv[7]) : 1;
+  const unsigned int mapping_type     = (argc >= 9) ? std::atoi(argv[8]) : 0;
 
 
   if (dim == 2 && use_float)
-    test<2, float>(fe_degree, n_refinements, n_overlap, cartesian_mesh);
+    test<2, float>(fe_degree,
+                   n_refinements,
+                   n_overlap,
+                   cartesian_mesh,
+                   compress_indices,
+                   mapping_type);
   else if (dim == 3 && use_float)
-    test<3, float>(fe_degree, n_refinements, n_overlap, cartesian_mesh);
+    test<3, float>(fe_degree,
+                   n_refinements,
+                   n_overlap,
+                   cartesian_mesh,
+                   compress_indices,
+                   mapping_type);
   else if (dim == 2)
-    test<2, double>(fe_degree, n_refinements, n_overlap, cartesian_mesh);
+    test<2, double>(fe_degree,
+                    n_refinements,
+                    n_overlap,
+                    cartesian_mesh,
+                    compress_indices,
+                    mapping_type);
   else if (dim == 3)
-    test<3, double>(fe_degree, n_refinements, n_overlap, cartesian_mesh);
+    test<3, double>(fe_degree,
+                    n_refinements,
+                    n_overlap,
+                    cartesian_mesh,
+                    compress_indices,
+                    mapping_type);
   else
     AssertThrow(false, ExcInternalError());
 
