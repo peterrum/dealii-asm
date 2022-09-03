@@ -963,10 +963,10 @@ test(const boost::property_tree::ptree params, ConvergenceTable &table)
     preconditioner_parameters.get<std::string>("type", "");
 
   const auto op_mapping_type =
-    preconditioner_parameters.get<std::string>("operator mapping type", "");
+    params.get<std::string>("operator mapping type", "");
 
   const auto op_compress_indices =
-    preconditioner_parameters.get<bool>("operator compress indices", false);
+    params.get<bool>("operator compress indices", false);
 
   using OperatorType      = typename OperatorTrait::OperatorType;
   using LevelOperatorType = typename OperatorTrait::LevelOperatorType;
@@ -985,7 +985,7 @@ test(const boost::property_tree::ptree params, ConvergenceTable &table)
 
   const std::string geometry_name =
     mesh_parameters.get<std::string>("name", "hypercube");
-  unsigned int mapping_degree = 1;
+  unsigned int mapping_degree = params.get<unsigned int>("mapping degree", 10);
 
   std::function<Point<dim>(const typename Triangulation<dim>::cell_iterator &,
                            const Point<dim> &)>
@@ -997,7 +997,7 @@ test(const boost::property_tree::ptree params, ConvergenceTable &table)
       pcout << std::endl;
 
       GridGenerator::hyper_cube(tria);
-      mapping_degree = 1;
+      mapping_degree = std::min(mapping_degree, 1u);
     }
   else if (geometry_name == "anisotropy")
     {
@@ -1008,7 +1008,7 @@ test(const boost::property_tree::ptree params, ConvergenceTable &table)
       pcout << std::endl;
 
       GridGenerator::hyper_cube(tria);
-      mapping_degree          = 1;
+      mapping_degree          = std::min(mapping_degree, 1u);
       transformation_function = [stratch](const auto &, const auto &old_point) {
         auto new_point = old_point;
 
@@ -1042,7 +1042,7 @@ test(const boost::property_tree::ptree params, ConvergenceTable &table)
       GridGenerator::subdivided_hyper_cube(tria, 3);
       tria.refine_global(1);
 
-      mapping_degree = 3; // TODO
+      mapping_degree = std::min(mapping_degree, 3u /*TODO*/);
 
       transformation_function = [epsy, epsz](const auto &,
                                              const auto &in_point) {
@@ -1057,7 +1057,7 @@ test(const boost::property_tree::ptree params, ConvergenceTable &table)
   else if (geometry_name == "hyperball")
     {
       GridGenerator::hyper_ball_balanced(tria);
-      mapping_degree = 2;
+      mapping_degree = std::min(mapping_degree, 2u);
     }
   else
     {

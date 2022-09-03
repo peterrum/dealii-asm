@@ -224,10 +224,14 @@ public:
                                 quadrature);
 
     pcout << "- Create operator:" << std::endl;
-    pcout << "  - n cells: "
+    pcout << "  - n cells:          "
           << dof_handler_internal.get_triangulation().n_global_active_cells()
           << std::endl;
-    pcout << "  - n dofs:  " << dof_handler_internal.n_dofs() << std::endl;
+    pcout << "  - n dofs:           " << dof_handler_internal.n_dofs()
+          << std::endl;
+    pcout << "  - compress indices: "
+          << (ad.compress_indices ? "true" : "false") << std::endl;
+    pcout << "  - mapping type:     " << ad.mapping_type << std::endl;
     pcout << std::endl;
 
     setup_mapping_and_indices(ad.compress_indices, ad.mapping_type);
@@ -241,6 +245,12 @@ public:
             Utilities::MPI::this_mpi_process(
               matrix_free.get_dof_handler().get_communicator()) == 0)
   {
+    pcout << "- Create operator:" << std::endl;
+    pcout << "  - compress indices: "
+          << (ad.compress_indices ? "true" : "false") << std::endl;
+    pcout << "  - mapping type:     " << ad.mapping_type << std::endl;
+    pcout << std::endl;
+
     setup_mapping_and_indices(ad.compress_indices, ad.mapping_type);
   }
 
