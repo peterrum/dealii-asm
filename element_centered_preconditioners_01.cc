@@ -962,6 +962,12 @@ test(const boost::property_tree::ptree params, ConvergenceTable &table)
   const auto preconditioner_type =
     preconditioner_parameters.get<std::string>("type", "");
 
+  const auto op_mapping_type =
+    preconditioner_parameters.get<std::string>("operator mapping type", "");
+
+  const auto op_compress_indices =
+    preconditioner_parameters.get<bool>("operator compress indices", false);
+
   using OperatorType      = typename OperatorTrait::OperatorType;
   using LevelOperatorType = typename OperatorTrait::LevelOperatorType;
   const int dim           = OperatorType::dimension;
@@ -1079,7 +1085,12 @@ test(const boost::property_tree::ptree params, ConvergenceTable &table)
   const FE_Q<dim>   fe(fe_degree);
   const QGauss<dim> quadrature(fe_degree + 1);
 
-  OperatorType op(mapping, tria, fe, quadrature);
+  OperatorType op(mapping,
+                  tria,
+                  fe,
+                  quadrature,
+                  typename OperatorType::AdditionalData(op_compress_indices,
+                                                        op_mapping_type));
 
   table.add_value("n_cells", tria.n_global_active_cells());
   table.add_value("L", tria.n_global_levels());
@@ -1253,10 +1264,13 @@ test(const boost::property_tree::ptree params, ConvergenceTable &table)
           else
             mg_mapping[l]->initialize(mapping_q1, tria);
 
-          mg_operators[l] = std::make_shared<LevelOperatorType>(*mg_mapping[l],
-                                                                mg_tria,
-                                                                mg_fe,
-                                                                mg_quadrature);
+          mg_operators[l] = std::make_shared<LevelOperatorType>(
+            *mg_mapping[l],
+            mg_tria,
+            mg_fe,
+            mg_quadrature,
+            typename LevelOperatorType::AdditionalData(op_compress_indices,
+                                                       op_mapping_type));
         }
 
       for (auto l = min_level; l <= max_level; ++l)

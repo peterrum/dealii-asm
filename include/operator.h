@@ -12,14 +12,31 @@ public:
 
   using VectorType = vector_type;
 
+  // not used
+  struct AdditionalData
+  {
+    AdditionalData(const bool        compress_indices = false,
+                   const std::string mapping_type     = "")
+      : compress_indices(compress_indices)
+      , mapping_type(mapping_type)
+    {}
+
+    bool        compress_indices;
+    std::string mapping_type;
+  };
+
   LaplaceOperatorMatrixBased(const Mapping<dim> &      mapping,
                              const Triangulation<dim> &tria,
                              const FiniteElement<dim> &fe,
-                             const Quadrature<dim> &   quadrature)
+                             const Quadrature<dim> &   quadrature,
+                             const AdditionalData &    ad = AdditionalData())
     : mapping(mapping)
     , dof_handler(tria)
     , quadrature(quadrature)
   {
+    AssertThrow(ad.compress_indices == false, ExcNotImplemented());
+    AssertThrow(ad.mapping_type == "", ExcNotImplemented());
+
     dof_handler.distribute_dofs(fe);
 
     DoFTools::make_zero_boundary_constraints(dof_handler, 1, constraints);
@@ -171,10 +188,23 @@ public:
   using FECellIntegrator =
     FEEvaluation<dim, -1, 0, n_components, Number, VectorizedArrayType>;
 
+  struct AdditionalData
+  {
+    AdditionalData(const bool        compress_indices = false,
+                   const std::string mapping_type     = "")
+      : compress_indices(compress_indices)
+      , mapping_type(mapping_type)
+    {}
+
+    bool        compress_indices;
+    std::string mapping_type;
+  };
+
   LaplaceOperatorMatrixFree(const Mapping<dim> &      mapping,
                             const Triangulation<dim> &tria,
                             const FiniteElement<dim> &fe,
-                            const Quadrature<dim> &   quadrature)
+                            const Quadrature<dim> &   quadrature,
+                            const AdditionalData &    ad = AdditionalData())
     : dof_handler_internal(tria)
     , matrix_free(matrix_free_internal)
     , pcout(std::cout,
@@ -200,24 +230,24 @@ public:
     pcout << "  - n dofs:  " << dof_handler_internal.n_dofs() << std::endl;
     pcout << std::endl;
 
-    setup_mapping_and_indices();
+    setup_mapping_and_indices(ad.compress_indices, ad.mapping_type);
   }
 
   LaplaceOperatorMatrixFree(
-    const MatrixFree<dim, Number, VectorizedArrayType> &matrix_free)
+    const MatrixFree<dim, Number, VectorizedArrayType> &matrix_free,
+    const AdditionalData &                              ad = AdditionalData())
     : matrix_free(matrix_free)
     , pcout(std::cout,
             Utilities::MPI::this_mpi_process(
               matrix_free.get_dof_handler().get_communicator()) == 0)
   {
-    setup_mapping_and_indices();
+    setup_mapping_and_indices(ad.compress_indices, ad.mapping_type);
   }
 
   void
-  setup_mapping_and_indices()
+  setup_mapping_and_indices(const bool        compress_indices,
+                            const std::string mapping_type)
   {
-    const bool compress_indices = true; // TODO
-
     if (compress_indices)
       {
         auto compressed_rw = std::make_shared<ConstraintInfoReduced>();
@@ -225,11 +255,12 @@ public:
         this->compressed_rw = compressed_rw;
       }
 
-    const std::string mapping_type = ""; // TODO
 
-
-    // lineare geometry
-    if (mapping_type == "linear geometry")
+    if (mapping_type == "")
+      {
+        // nothing to do
+      }
+    else if (mapping_type == "linear geometry")
       {
         // adopted from
         // https://github.com/kronbichler/ceed_benchmarks_dealii/blob/e3da3c50d9d49666b324282255cdcb7ab25c128c/common_code/poisson_operator.h#L194-L266
@@ -309,8 +340,7 @@ public:
               }
           }
       }
-
-    if (mapping_type == "quadratic geometry")
+    else if (mapping_type == "quadratic geometry")
       {
         // adopted from
         // https://github.com/kronbichler/mf_data_locality/blob/de47ea43e7e705a71742885493a2f5c441824a73/common_code/poisson_operator.h#L136-L169
@@ -392,8 +422,7 @@ public:
               }
           }
       }
-
-    if (mapping_type == "merged")
+    else if (mapping_type == "merged")
       {
         // adpoted from
         // https://github.com/kronbichler/ceed_benchmarks_dealii/blob/e3da3c50d9d49666b324282255cdcb7ab25c128c/common_code/poisson_operator.h#L272-L277
@@ -431,8 +460,7 @@ public:
               }
           }
       }
-
-    if (mapping_type == "generate q")
+    else if (mapping_type == "generate q")
       {
         // adopted from
         // https://github.com/kronbichler/ceed_benchmarks_dealii/blob/e3da3c50d9d49666b324282255cdcb7ab25c128c/common_code/poisson_operator.h#L278-L280
@@ -466,6 +494,12 @@ public:
                   }
               }
           }
+      }
+    else
+      {
+        AssertThrow(false,
+                    ExcMessage("Mapping type <" + mapping_type +
+                               "> is not known!"));
       }
   }
 
