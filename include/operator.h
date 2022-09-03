@@ -470,7 +470,7 @@ public:
               }
           }
       }
-    else if (mapping_type == "generate q")
+    else if (mapping_type == "construct q")
       {
         // adopted from
         // https://github.com/kronbichler/ceed_benchmarks_dealii/blob/e3da3c50d9d49666b324282255cdcb7ab25c128c/common_code/poisson_operator.h#L278-L280
@@ -985,11 +985,113 @@ public:
     // adopted from:
     // https://github.com/kronbichler/ceed_benchmarks_dealii/blob/e3da3c50d9d49666b324282255cdcb7ab25c128c/common_code/poisson_operator.h#L1065
 
-    // not implemented since we need the number of quadrature points
-    // as template arguments
-    AssertThrow(false, ExcNotImplemented());
+    constexpr unsigned int n_q_points_1d_static = 0; // TODO
 
-    (void)phi;
+    const auto cell = phi.get_current_cell_index();
+
+    const auto &       quad       = matrix_free.get_quadrature();
+    const unsigned int n_q_points = quad.size();
+
+    const auto &quad_1d = matrix_free.get_quadrature().get_tensor_basis()[0];
+    const unsigned int n_q_points_1d = quad_1d.size();
+
+
+    AlignedVector<VectorizedArrayType> jacobians_x(dim * n_q_points_1d); // TODO
+    AlignedVector<VectorizedArrayType> jacobians_y(dim * n_q_points_1d *
+                                                   n_q_points_1d);    // TODO
+    AlignedVector<VectorizedArrayType> jacobians_z(dim * n_q_points); // TODO
+
+    phi.evaluate(EvaluationFlags::gradients);
+    VectorizedArrayType *phi_grads = phi.begin_gradients();
+    if (dim == 3)
+      for (unsigned int d = 0; d < dim; ++d)
+        dealii::internal::EvaluatorTensorProduct<
+          dealii::internal::evaluate_evenodd,
+          dim,
+          n_q_points_1d_static,
+          n_q_points_1d_static,
+          VectorizedArrayType,
+          VectorizedArrayType>({}, {}, {}, n_q_points_1d, n_q_points_1d)
+          .template apply<2, true, false, 1>(
+            matrix_free.get_shape_info()
+              .data[0]
+              .shape_gradients_collocation_eo.begin(),
+            quadrature_points.begin() + (cell * dim + d) * n_q_points,
+            jacobians_z.begin() + d * n_q_points);
+    for (unsigned int q2 = 0, q = 0; q2 < (dim == 3 ? n_q_points_1d : 1); ++q2)
+      {
+        const unsigned int n_q_points_2d = n_q_points_1d * n_q_points_1d;
+
+        for (unsigned int d = 0; d < dim; ++d)
+          dealii::internal::EvaluatorTensorProduct<
+            dealii::internal::evaluate_evenodd,
+            2,
+            n_q_points_1d_static,
+            n_q_points_1d_static,
+            VectorizedArrayType,
+            VectorizedArrayType>({}, {}, {}, n_q_points_1d, n_q_points_1d)
+            .template apply<1, true, false, 1>(
+              matrix_free.get_shape_info()
+                .data[0]
+                .shape_gradients_collocation_eo.begin(),
+              quadrature_points.begin() + (cell * dim + d) * n_q_points +
+                q2 * n_q_points_2d,
+              jacobians_y.begin() + d * n_q_points_2d);
+        for (unsigned int q1 = 0; q1 < n_q_points_1d; ++q1)
+          {
+            for (unsigned int d = 0; d < dim; ++d)
+              dealii::internal::EvaluatorTensorProduct<
+                dealii::internal::evaluate_evenodd,
+                1,
+                n_q_points_1d_static,
+                n_q_points_1d_static,
+                VectorizedArrayType,
+                VectorizedArrayType>({}, {}, {}, n_q_points_1d, n_q_points_1d)
+                .template apply<0, true, false, 1>(
+                  matrix_free.get_shape_info()
+                    .data[0]
+                    .shape_gradients_collocation_eo.begin(),
+                  quadrature_points.begin() + (cell * dim + d) * n_q_points +
+                    q2 * n_q_points_2d + q1 * n_q_points_1d,
+                  jacobians_x.begin() + d * n_q_points_1d);
+            for (unsigned int q0 = 0; q0 < n_q_points_1d; ++q0, ++q)
+              {
+                Tensor<2, dim, VectorizedArrayType> jac;
+                for (unsigned int e = 0; e < dim; ++e)
+                  jac[2][e] = jacobians_z[e * n_q_points + q];
+                for (unsigned int e = 0; e < dim; ++e)
+                  jac[1][e] =
+                    jacobians_y[e * n_q_points_2d + q1 * n_q_points_1d + q0];
+                for (unsigned int e = 0; e < dim; ++e)
+                  jac[0][e] = jacobians_x[e * n_q_points_1d + q0];
+                VectorizedArrayType det = do_invert(jac);
+                det = det * (matrix_free.get_quadrature().weight(q));
+
+                for (unsigned int c = 0; c < n_components; ++c)
+                  {
+                    const unsigned int  offset = c * dim * n_q_points;
+                    VectorizedArrayType tmp[dim];
+                    for (unsigned int d = 0; d < dim; ++d)
+                      {
+                        tmp[d] = jac[d][0] * phi_grads[q + offset];
+                        for (unsigned int e = 1; e < dim; ++e)
+                          tmp[d] +=
+                            jac[d][e] * phi_grads[q + e * n_q_points + offset];
+                        tmp[d] *= det;
+                      }
+                    for (unsigned int d = 0; d < dim; ++d)
+                      {
+                        phi_grads[q + d * n_q_points + offset] =
+                          jac[0][d] * tmp[0];
+                        for (unsigned int e = 1; e < dim; ++e)
+                          phi_grads[q + d * n_q_points + offset] +=
+                            jac[e][d] * tmp[e];
+                      }
+                  }
+              }
+          }
+      }
+    phi.integrate(EvaluationFlags::gradients);
   }
 
   void
