@@ -1,5 +1,7 @@
 #pragma once
 
+#include <deal.II/grid/grid_generator.h>
+
 namespace dealii
 {
   namespace GridGenerator
@@ -99,5 +101,60 @@ namespace dealii
             sub_cell++;
           }
     }
+
+    namespace internal
+    {
+      std::pair<unsigned int, std::vector<unsigned int>>
+      decompose_for_subdivided_hyper_cube_balanced(unsigned int dim,
+                                                   unsigned int s)
+      {
+        unsigned int       n_refine  = s / 6;
+        const unsigned int remainder = s % 6;
+
+        std::vector<unsigned int> subdivisions(dim, 1);
+        if (remainder == 1 && s > 1)
+          {
+            subdivisions[0] = 3;
+            subdivisions[1] = 2;
+            subdivisions[2] = 2;
+            n_refine -= 1;
+          }
+        if (remainder == 2)
+          subdivisions[0] = 2;
+        else if (remainder == 3)
+          subdivisions[0] = 3;
+        else if (remainder == 4)
+          subdivisions[0] = subdivisions[1] = 2;
+        else if (remainder == 5)
+          {
+            subdivisions[0] = 3;
+            subdivisions[1] = 2;
+          }
+
+        return {n_refine, subdivisions};
+      }
+
+    } // namespace internal
+
+    template <int dim>
+    unsigned int
+    subdivided_hyper_cube_balanced(Triangulation<dim> &tria,
+                                   const unsigned int  s)
+    {
+      const auto [n_refine, subdivisions] =
+        internal::decompose_for_subdivided_hyper_cube_balanced(dim, s);
+
+      Point<dim> p2;
+      for (unsigned int d = 0; d < dim; ++d)
+        p2[d] = subdivisions[d];
+
+      GridGenerator::subdivided_hyper_rectangle(tria,
+                                                subdivisions,
+                                                Point<dim>(),
+                                                p2);
+
+      return n_refine;
+    }
+
   } // namespace GridGenerator
 } // namespace dealii
