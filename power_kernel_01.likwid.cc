@@ -21,6 +21,8 @@
 
 #include <deal.II/numerics/vector_tools.h>
 
+#include "include/grid_generator.h"
+
 #ifdef LIKWID_PERFMON
 #  include <likwid.h>
 #endif
@@ -106,44 +108,6 @@ public:
     return std::sin(p[0]);
   }
 };
-
-template <int dim>
-void
-create_grid(Triangulation<dim> &tria, const unsigned int s)
-{
-  unsigned int       n_refine  = s / 6;
-  const unsigned int remainder = s % 6;
-
-  std::vector<unsigned int> subdivisions(dim, 1);
-  if (remainder == 1 && s > 1)
-    {
-      subdivisions[0] = 3;
-      subdivisions[1] = 2;
-      subdivisions[2] = 2;
-      n_refine -= 1;
-    }
-  if (remainder == 2)
-    subdivisions[0] = 2;
-  else if (remainder == 3)
-    subdivisions[0] = 3;
-  else if (remainder == 4)
-    subdivisions[0] = subdivisions[1] = 2;
-  else if (remainder == 5)
-    {
-      subdivisions[0] = 3;
-      subdivisions[1] = 2;
-    }
-
-  Point<dim> p2;
-  for (unsigned int d = 0; d < dim; ++d)
-    p2[d] = subdivisions[d];
-  GridGenerator::subdivided_hyper_rectangle(tria,
-                                            subdivisions,
-                                            Point<dim>(),
-                                            p2);
-
-  tria.refine_global(n_refine);
-}
 
 struct PrePost
 {
@@ -355,7 +319,8 @@ run(const Parameters &params, ConvergenceTable &table)
     FEEvaluation<dim, -1, 0, 1, Number, VectorizedArrayType>;
 
   Triangulation<dim> tria;
-  create_grid(tria, params.subdivisions);
+  tria.refine_global(
+    GridGenerator::subdivided_hyper_cube_balanced(tria, params.subdivisions));
 
   MappingQ1<dim>   mapping;
   QGaussLobatto<1> quad(fe_degree + 1);
