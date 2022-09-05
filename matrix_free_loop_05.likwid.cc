@@ -233,14 +233,21 @@ private:
 
 template <int dim, typename Number>
 void
-test(const unsigned int fe_degree, const unsigned int n_subdivision)
+test(const unsigned int fe_degree,
+     const unsigned int n_subdivision,
+     const std::string  preconditioner_type,
+     const unsigned int optimization_level,
+     const bool         do_vmult)
 {
   using VectorizedArrayType = VectorizedArray<Number>;
   using VectorType          = LinearAlgebra::distributed::Vector<Number>;
 
-  const std::string preconditioner_type = "chebyshev"; // TODO
-  const bool        chebyshev_degree    = 3;           // TODO
-  const bool        do_vmult            = true;        // TODO
+  const unsigned int n_repetitions = 10;
+  const unsigned int max_degree    = 5;
+
+  ConditionalOStream pcout(std::cout,
+                           Utilities::MPI::this_mpi_process(MPI_COMM_WORLD) ==
+                             0);
 
   FE_Q<dim>      fe(fe_degree);
   QGauss<dim>    quadrature(fe_degree + 1);
@@ -252,6 +259,10 @@ test(const unsigned int fe_degree, const unsigned int n_subdivision)
 
   DoFHandler<dim> dof_handler(tria);
   dof_handler.distribute_dofs(fe);
+
+  pcout << "Info" << std::endl;
+  pcout << " - n dofs: " << dof_handler.n_dofs() << std::endl;
+  pcout << std::endl << std::endl;
 
   AffineConstraints<Number> constraints;
   DoFTools::make_zero_boundary_constraints(dof_handler, 0, constraints);
@@ -289,13 +300,39 @@ test(const unsigned int fe_degree, const unsigned int n_subdivision)
     op.initialize_dof_vector(dst);
     src = 1;
 
-    if (do_vmult)
-      precon.vmult(dst, src);
-    else
-      precon.step(dst, src);
+    for (unsigned int c = 0; c < n_repetitions; ++c)
+      {
+        if (do_vmult)
+          precon.vmult(dst, src);
+        else
+          precon.step(dst, src);
+      }
+
+    static unsigned int likwid_counter = 1;
+
+    const std::string label =
+      preconditioner_type + "_" + std::to_string(likwid_counter);
+
+    MPI_Barrier(MPI_COMM_WORLD);
+    LIKWID_MARKER_START(label.c_str());
+
+    for (unsigned int c = 0; c < n_repetitions; ++c)
+      {
+        if (do_vmult)
+          precon.vmult(dst, src);
+        else
+          precon.step(dst, src);
+      }
+
+    MPI_Barrier(MPI_COMM_WORLD);
+    LIKWID_MARKER_STOP(label.c_str());
+
+    likwid_counter++;
   };
 
-  const auto run_chebyshev = [&](const auto &op, const auto &precon) {
+  const auto run_chebyshev = [&](const auto &       op,
+                                 const auto &       precon,
+                                 const unsigned int chebyshev_degree) {
     using PreconditionerType = typename std::remove_cv<
       typename std::remove_reference<decltype(*precon)>::type>::type;
 
@@ -318,7 +355,9 @@ test(const unsigned int fe_degree, const unsigned int n_subdivision)
     run(op, precon_chebyshev);
   };
 
-  const auto run_relaxation = [&](const auto &op, const auto &precon) {
+  const auto run_relaxation = [&](const auto &       op,
+                                  const auto &       precon,
+                                  const unsigned int chebyshev_degree) {
     using PreconditionerType = typename std::remove_cv<
       typename std::remove_reference<decltype(*precon)>::type>::type;
 
@@ -339,47 +378,50 @@ test(const unsigned int fe_degree, const unsigned int n_subdivision)
     run(op, precon_relaxation);
   };
 
-  if (preconditioner_type == "chebyshev")
+  for (unsigned int d = 1; d <= max_degree; ++d)
     {
-      if (true)
+      if (preconditioner_type == "chebyshev")
         {
-          run_chebyshev(op, precon_adapter);
+          if (optimization_level == 0)
+            {
+              run_chebyshev(op, precon_adapter, d);
+            }
+          else if (optimization_level == 1)
+            {
+              run_chebyshev(op, precon_pre_post, d);
+            }
+          else if (optimization_level == 2)
+            {
+              run_chebyshev(op, precon_diag, d);
+            }
+          else
+            {
+              AssertThrow(false, ExcNotImplemented());
+            }
         }
-      else if (true)
+      else if (preconditioner_type == "relaxation")
         {
-          run_chebyshev(op, precon_pre_post);
-        }
-      else if (true)
-        {
-          run_chebyshev(op, precon_diag);
+          if (optimization_level == 0)
+            {
+              run_relaxation(op, precon_adapter, d);
+            }
+          else if (optimization_level == 1)
+            {
+              run_relaxation(op, precon_pre_post, d);
+            }
+          else if (optimization_level == 2)
+            {
+              run_relaxation(op, precon_diag, d);
+            }
+          else
+            {
+              AssertThrow(false, ExcNotImplemented());
+            }
         }
       else
         {
           AssertThrow(false, ExcNotImplemented());
         }
-    }
-  else if (preconditioner_type == "relaxation")
-    {
-      if (true)
-        {
-          run_relaxation(op, precon_adapter);
-        }
-      else if (true)
-        {
-          run_relaxation(op, precon_pre_post);
-        }
-      else if (true)
-        {
-          run_relaxation(op, precon_diag);
-        }
-      else
-        {
-          AssertThrow(false, ExcNotImplemented());
-        }
-    }
-  else
-    {
-      AssertThrow(false, ExcNotImplemented());
     }
 }
 
@@ -397,18 +439,38 @@ main(int argc, char *argv[])
 
   const unsigned int dim           = (argc >= 2) ? std::atoi(argv[1]) : 2;
   const unsigned int fe_degree     = (argc >= 3) ? std::atoi(argv[2]) : 1;
-  const unsigned int n_refinements = (argc >= 4) ? std::atoi(argv[3]) : 6;
+  const unsigned int n_subdivision = (argc >= 4) ? std::atoi(argv[3]) : 6;
   const bool         use_float     = (argc >= 5) ? std::atoi(argv[4]) : 1;
+  const std::string  preconditioner_type =
+    (argc >= 6) ? std::string(argv[5]) : std::string("chebyshev");
+  const unsigned int optimization_level = (argc >= 7) ? std::atoi(argv[6]) : 2;
+  const bool         do_vmult           = (argc >= 8) ? std::atoi(argv[7]) : 1;
 
 
   if (dim == 2 && use_float)
-    test<2, float>(fe_degree, n_refinements);
+    test<2, float>(fe_degree,
+                   n_subdivision,
+                   preconditioner_type,
+                   optimization_level,
+                   do_vmult);
   else if (dim == 3 && use_float)
-    test<3, float>(fe_degree, n_refinements);
+    test<3, float>(fe_degree,
+                   n_subdivision,
+                   preconditioner_type,
+                   optimization_level,
+                   do_vmult);
   else if (dim == 2)
-    test<2, double>(fe_degree, n_refinements);
+    test<2, double>(fe_degree,
+                    n_subdivision,
+                    preconditioner_type,
+                    optimization_level,
+                    do_vmult);
   else if (dim == 3)
-    test<3, double>(fe_degree, n_refinements);
+    test<3, double>(fe_degree,
+                    n_subdivision,
+                    preconditioner_type,
+                    optimization_level,
+                    do_vmult);
   else
     AssertThrow(false, ExcInternalError());
 
