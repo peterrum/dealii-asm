@@ -231,78 +231,6 @@ private:
 
 
 
-template <typename OperatorType, typename PreconditionerType>
-void
-run_chebyshev(const OperatorType &                      op,
-              const std::shared_ptr<PreconditionerType> precon_diag)
-{
-  const bool chebyshev_degree = 3;    // TODO
-  const bool do_vmult         = true; // TODO
-
-  using VectorType = typename OperatorType::VectorType;
-
-  typename PreconditionChebyshev<OperatorType, VectorType, PreconditionerType>::
-    AdditionalData chebyshev_ad;
-
-  chebyshev_ad.preconditioner = precon_diag;
-  chebyshev_ad.constraints.copy_from(op.get_constraints());
-  chebyshev_ad.degree = chebyshev_degree;
-
-  PreconditionChebyshev<OperatorType, VectorType, PreconditionerType>
-    precon_chebyshev;
-
-  precon_chebyshev.initialize(op, chebyshev_ad);
-
-  VectorType src, dst;
-
-  op.initialize_dof_vector(src);
-  op.initialize_dof_vector(dst);
-  src = 1;
-
-  if (do_vmult)
-    precon_chebyshev.vmult(dst, src);
-  else
-    precon_chebyshev.step(dst, src);
-}
-
-
-
-template <typename OperatorType, typename PreconditionerType>
-void
-run_relaxation(const OperatorType &                      op,
-               const std::shared_ptr<PreconditionerType> precon_diag)
-{
-  const bool chebyshev_degree = 3;    // TODO
-  const bool do_vmult         = true; // TODO
-
-  using VectorType = typename OperatorType::VectorType;
-
-  typename PreconditionRelaxation<OperatorType,
-                                  PreconditionerType>::AdditionalData
-    relaxation_ad;
-
-  relaxation_ad.preconditioner = precon_diag;
-  relaxation_ad.n_iterations   = chebyshev_degree;
-  relaxation_ad.relaxation     = 1.1;
-
-  PreconditionRelaxation<OperatorType, PreconditionerType> precon_relaxation;
-
-  precon_relaxation.initialize(op, relaxation_ad);
-
-  VectorType src, dst;
-
-  op.initialize_dof_vector(src);
-  op.initialize_dof_vector(dst);
-  src = 1;
-
-  if (do_vmult)
-    precon_relaxation.vmult(dst, src);
-  else
-    precon_relaxation.step(dst, src);
-}
-
-
-
 template <int dim, typename Number>
 void
 test(const unsigned int fe_degree, const unsigned int n_subdivision)
@@ -311,6 +239,8 @@ test(const unsigned int fe_degree, const unsigned int n_subdivision)
   using VectorType          = LinearAlgebra::distributed::Vector<Number>;
 
   const std::string preconditioner_type = "chebyshev"; // TODO
+  const bool        chebyshev_degree    = 3;           // TODO
+  const bool        do_vmult            = true;        // TODO
 
   FE_Q<dim>      fe(fe_degree);
   QGauss<dim>    quadrature(fe_degree + 1);
@@ -351,6 +281,68 @@ test(const unsigned int fe_degree, const unsigned int n_subdivision)
 
   const auto precon_adapter =
     std::make_shared<DiagonalMatrixAdapter<VectorType>>(*precon_diag);
+
+  const auto run_chebyshev = [&](const auto &op, const auto precon_diag) {
+    using PreconditionerType = typename std::remove_cv<
+      typename std::remove_reference<decltype(*precon_diag)>::type>::type;
+
+    using VectorType = typename OperatorType::VectorType;
+
+    typename PreconditionChebyshev<OperatorType,
+                                   VectorType,
+                                   PreconditionerType>::AdditionalData
+      chebyshev_ad;
+
+    chebyshev_ad.preconditioner = precon_diag;
+    chebyshev_ad.constraints.copy_from(op.get_constraints());
+    chebyshev_ad.degree = chebyshev_degree;
+
+    PreconditionChebyshev<OperatorType, VectorType, PreconditionerType>
+      precon_chebyshev;
+
+    precon_chebyshev.initialize(op, chebyshev_ad);
+
+    VectorType src, dst;
+
+    op.initialize_dof_vector(src);
+    op.initialize_dof_vector(dst);
+    src = 1;
+
+    if (do_vmult)
+      precon_chebyshev.vmult(dst, src);
+    else
+      precon_chebyshev.step(dst, src);
+  };
+
+  const auto run_relaxation = [&](const auto &op, const auto precon_diag) {
+    using PreconditionerType = typename std::remove_cv<
+      typename std::remove_reference<decltype(*precon_diag)>::type>::type;
+
+    using VectorType = typename OperatorType::VectorType;
+
+    typename PreconditionRelaxation<OperatorType,
+                                    PreconditionerType>::AdditionalData
+      relaxation_ad;
+
+    relaxation_ad.preconditioner = precon_diag;
+    relaxation_ad.n_iterations   = chebyshev_degree;
+    relaxation_ad.relaxation     = 1.1;
+
+    PreconditionRelaxation<OperatorType, PreconditionerType> precon_relaxation;
+
+    precon_relaxation.initialize(op, relaxation_ad);
+
+    VectorType src, dst;
+
+    op.initialize_dof_vector(src);
+    op.initialize_dof_vector(dst);
+    src = 1;
+
+    if (do_vmult)
+      precon_relaxation.vmult(dst, src);
+    else
+      precon_relaxation.step(dst, src);
+  };
 
   if (preconditioner_type == "chebyshev")
     {
