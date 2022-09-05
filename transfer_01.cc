@@ -59,15 +59,8 @@ test(const unsigned int fe_degree_fine,
       MGLevelObject<MGTwoLevelTransfer<dim, VectorType>> transfers(0, 1);
       transfers[1].reinit(dof_handler_fine, dof_handler_coarse);
 
-      MGTransferGlobalCoarsening<dim, VectorType> transfer(
-        transfers, [&](const auto l, auto &vec) {
-          if (l == 0)
-            vec.reinit(partitioner_coarse);
-          else if (l == 1)
-            vec.reinit(partitioner_fine);
-          else
-            AssertThrow(false, ExcNotImplemented());
-        });
+      MGTransferGlobalCoarsening<dim, VectorType> transfer(transfers);
+      transfer.build({partitioner_coarse, partitioner_fine});
 
       VectorType vector_fine, vector_coarse;
       vector_fine.reinit(partitioner_fine);
@@ -138,6 +131,8 @@ test(const unsigned int fe_degree_fine,
       table.add_value("time_prolongation",
                       dof_handler_fine.n_dofs() * n_repetitions / time_p);
       table.set_scientific("time_prolongation", true);
+
+      likwid_counter++;
     }
 }
 
