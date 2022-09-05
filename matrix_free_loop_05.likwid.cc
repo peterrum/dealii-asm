@@ -310,6 +310,8 @@ test(const unsigned int fe_degree, const unsigned int n_subdivision)
   using VectorizedArrayType = VectorizedArray<Number>;
   using VectorType          = LinearAlgebra::distributed::Vector<Number>;
 
+  const std::string preconditioner_type = "chebyshev"; // TODO
+
   FE_Q<dim>      fe(fe_degree);
   QGauss<dim>    quadrature(fe_degree + 1);
   MappingQ1<dim> mapping;
@@ -350,29 +352,43 @@ test(const unsigned int fe_degree, const unsigned int n_subdivision)
   const auto precon_adapter =
     std::make_shared<DiagonalMatrixAdapter<VectorType>>(*precon_diag);
 
-  if (true)
+  if (preconditioner_type == "chebyshev")
     {
-      run_chebyshev(op, precon_adapter);
+      if (true)
+        {
+          run_chebyshev(op, precon_adapter);
+        }
+      else if (true)
+        {
+          run_chebyshev(op, precon_pre_post);
+        }
+      else if (true)
+        {
+          run_chebyshev(op, precon_diag);
+        }
+      else
+        {
+          AssertThrow(false, ExcNotImplemented());
+        }
     }
-  else if (true)
+  else if (preconditioner_type == "relaxation")
     {
-      run_chebyshev(op, precon_pre_post);
-    }
-  else if (true)
-    {
-      run_chebyshev(op, precon_diag);
-    }
-  else if (true)
-    {
-      run_relaxation(op, precon_adapter);
-    }
-  else if (true)
-    {
-      run_relaxation(op, precon_pre_post);
-    }
-  else if (true)
-    {
-      run_relaxation(op, precon_diag);
+      if (true)
+        {
+          run_relaxation(op, precon_adapter);
+        }
+      else if (true)
+        {
+          run_relaxation(op, precon_pre_post);
+        }
+      else if (true)
+        {
+          run_relaxation(op, precon_diag);
+        }
+      else
+        {
+          AssertThrow(false, ExcNotImplemented());
+        }
     }
   else
     {
