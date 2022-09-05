@@ -282,9 +282,22 @@ test(const unsigned int fe_degree, const unsigned int n_subdivision)
   const auto precon_adapter =
     std::make_shared<DiagonalMatrixAdapter<VectorType>>(*precon_diag);
 
-  const auto run_chebyshev = [&](const auto &op, const auto precon_diag) {
+  const auto run = [&](const auto &op, const auto &precon) {
+    VectorType src, dst;
+
+    op.initialize_dof_vector(src);
+    op.initialize_dof_vector(dst);
+    src = 1;
+
+    if (do_vmult)
+      precon.vmult(dst, src);
+    else
+      precon.step(dst, src);
+  };
+
+  const auto run_chebyshev = [&](const auto &op, const auto &precon) {
     using PreconditionerType = typename std::remove_cv<
-      typename std::remove_reference<decltype(*precon_diag)>::type>::type;
+      typename std::remove_reference<decltype(*precon)>::type>::type;
 
     using VectorType = typename OperatorType::VectorType;
 
@@ -293,7 +306,7 @@ test(const unsigned int fe_degree, const unsigned int n_subdivision)
                                    PreconditionerType>::AdditionalData
       chebyshev_ad;
 
-    chebyshev_ad.preconditioner = precon_diag;
+    chebyshev_ad.preconditioner = precon;
     chebyshev_ad.constraints.copy_from(op.get_constraints());
     chebyshev_ad.degree = chebyshev_degree;
 
@@ -302,21 +315,12 @@ test(const unsigned int fe_degree, const unsigned int n_subdivision)
 
     precon_chebyshev.initialize(op, chebyshev_ad);
 
-    VectorType src, dst;
-
-    op.initialize_dof_vector(src);
-    op.initialize_dof_vector(dst);
-    src = 1;
-
-    if (do_vmult)
-      precon_chebyshev.vmult(dst, src);
-    else
-      precon_chebyshev.step(dst, src);
+    run(op, precon_chebyshev);
   };
 
-  const auto run_relaxation = [&](const auto &op, const auto precon_diag) {
+  const auto run_relaxation = [&](const auto &op, const auto &precon) {
     using PreconditionerType = typename std::remove_cv<
-      typename std::remove_reference<decltype(*precon_diag)>::type>::type;
+      typename std::remove_reference<decltype(*precon)>::type>::type;
 
     using VectorType = typename OperatorType::VectorType;
 
@@ -324,7 +328,7 @@ test(const unsigned int fe_degree, const unsigned int n_subdivision)
                                     PreconditionerType>::AdditionalData
       relaxation_ad;
 
-    relaxation_ad.preconditioner = precon_diag;
+    relaxation_ad.preconditioner = precon;
     relaxation_ad.n_iterations   = chebyshev_degree;
     relaxation_ad.relaxation     = 1.1;
 
@@ -332,16 +336,7 @@ test(const unsigned int fe_degree, const unsigned int n_subdivision)
 
     precon_relaxation.initialize(op, relaxation_ad);
 
-    VectorType src, dst;
-
-    op.initialize_dof_vector(src);
-    op.initialize_dof_vector(dst);
-    src = 1;
-
-    if (do_vmult)
-      precon_relaxation.vmult(dst, src);
-    else
-      precon_relaxation.step(dst, src);
+    run(op, precon_relaxation);
   };
 
   if (preconditioner_type == "chebyshev")
