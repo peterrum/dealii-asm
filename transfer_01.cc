@@ -123,11 +123,20 @@ test(const unsigned int fe_degree_fine,
         [&]() { transfer.prolongate_and_add(1, vector_fine, vector_coarse); },
         "prolongate_and_add");
 
+      table.add_value("n_subdivision", n_subdivision);
+      table.add_value("n_cells", tria.n_global_active_cells());
+
       table.add_value("degree_fine", fe_degree_fine);
       table.add_value("degree_coarse", fe_degree_coarse);
-      table.add_value("time_restriction", time_r);
+
+      table.add_value("n_dofs_fine", dof_handler_fine.n_dofs());
+      table.add_value("n_dofs_coarse", dof_handler_coarse.n_dofs());
+
+      table.add_value("time_restriction",
+                      dof_handler_fine.n_dofs() * n_repetitions / time_r);
       table.set_scientific("time_restriction", true);
-      table.add_value("time_prolongation", time_p);
+      table.add_value("time_prolongation",
+                      dof_handler_fine.n_dofs() * n_repetitions / time_p);
       table.set_scientific("time_prolongation", true);
     }
 }
@@ -143,21 +152,37 @@ main(int argc, char *argv[])
   LIKWID_MARKER_THREADINIT;
 #endif
 
-  const unsigned int dim           = (argc >= 2) ? std::atoi(argv[1]) : 2;
-  const unsigned int fe_degree     = (argc >= 3) ? std::atoi(argv[2]) : 4;
-  const unsigned int n_subdivision = (argc >= 4) ? std::atoi(argv[3]) : 6;
+  const bool is_root = Utilities::MPI::this_mpi_process(MPI_COMM_WORLD) == 0;
+  const bool verbose = true;
+
+  const unsigned int dim               = (argc >= 2) ? std::atoi(argv[1]) : 2;
+  const unsigned int fe_degree         = (argc >= 3) ? std::atoi(argv[2]) : 4;
+  const unsigned int min_n_subdivision = (argc >= 4) ? std::atoi(argv[3]) : 6;
+  const unsigned int max_n_subdivision =
+    (argc >= 5) ? std::atoi(argv[4]) : min_n_subdivision;
+
+  std::vector<unsigned int> n_subdivisions;
+
+  for (unsigned int i = min_n_subdivision; i <= max_n_subdivision; ++i)
+    n_subdivisions.emplace_back(i);
 
   ConvergenceTable table;
 
-  if (dim == 2)
-    test<2, double>(fe_degree, n_subdivision, table);
-  else if (dim == 3)
-    test<3, double>(fe_degree, n_subdivision, table);
-  else
-    AssertThrow(false, ExcNotImplemented());
+  for (unsigned int i = 0; i < n_subdivisions.size(); ++i)
+    {
+      if (dim == 2)
+        test<2, double>(fe_degree, n_subdivisions[i], table);
+      else if (dim == 3)
+        test<3, double>(fe_degree, n_subdivisions[i], table);
+      else
+        AssertThrow(false, ExcNotImplemented());
 
-  table.write_text(std::cout, ConvergenceTable::org_mode_table);
-  std::cout << std::endl;
+      if (is_root && (verbose || ((i + 1) == n_subdivisions.size())))
+        {
+          table.write_text(std::cout, ConvergenceTable::org_mode_table);
+          std::cout << std::endl;
+        }
+    }
 
 #ifdef LIKWID_PERFMON
   LIKWID_MARKER_CLOSE;
