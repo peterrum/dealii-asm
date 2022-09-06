@@ -80,9 +80,6 @@ test(const unsigned int fe_degree,
   using VectorizedArrayType = VectorizedArray<Number>;
   using VectorType          = LinearAlgebra::distributed::Vector<Number>;
 
-  using FECellIntegrator =
-    FEEvaluation<dim, -1, 0, 1, Number, VectorizedArrayType>;
-
   const unsigned int mapping_degree = 1;
 
   FE_Q<dim> fe(fe_degree);
