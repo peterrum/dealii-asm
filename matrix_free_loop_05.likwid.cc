@@ -282,10 +282,10 @@ test(const unsigned int fe_degree,
 
   using OperatorType = MyOperator<dim, Number, VectorizedArrayType>;
 
-  const OperatorType op(matrix_free);
+  const OperatorType op_pre_post(matrix_free);
 
   const auto precon_diag = std::make_shared<DiagonalMatrix<VectorType>>();
-  op.compute_inverse_diagonal(precon_diag->get_vector());
+  op_pre_post.compute_inverse_diagonal(precon_diag->get_vector());
 
   const auto precon_pre_post =
     std::make_shared<DiagonalMatrixPrePost<VectorType>>(*precon_diag);
@@ -333,9 +333,10 @@ test(const unsigned int fe_degree,
   const auto run_chebyshev = [&](const auto &       op,
                                  const auto &       precon,
                                  const unsigned int chebyshev_degree) {
+    using OperatorType = typename std::remove_cv<
+      typename std::remove_reference<decltype(op)>::type>::type;
     using PreconditionerType = typename std::remove_cv<
       typename std::remove_reference<decltype(*precon)>::type>::type;
-
     using VectorType = typename OperatorType::VectorType;
 
     typename PreconditionChebyshev<OperatorType,
@@ -358,9 +359,10 @@ test(const unsigned int fe_degree,
   const auto run_relaxation = [&](const auto &       op,
                                   const auto &       precon,
                                   const unsigned int chebyshev_degree) {
+    using OperatorType = typename std::remove_cv<
+      typename std::remove_reference<decltype(op)>::type>::type;
     using PreconditionerType = typename std::remove_cv<
       typename std::remove_reference<decltype(*precon)>::type>::type;
-
     using VectorType = typename OperatorType::VectorType;
 
     typename PreconditionRelaxation<OperatorType,
@@ -384,15 +386,15 @@ test(const unsigned int fe_degree,
         {
           if (optimization_level == 0)
             {
-              run_chebyshev(op, precon_adapter, d);
+              run_chebyshev(op_pre_post, precon_adapter, d);
             }
           else if (optimization_level == 1)
             {
-              run_chebyshev(op, precon_pre_post, d);
+              run_chebyshev(op_pre_post, precon_pre_post, d);
             }
           else if (optimization_level == 2)
             {
-              run_chebyshev(op, precon_diag, d);
+              run_chebyshev(op_pre_post, precon_diag, d);
             }
           else
             {
@@ -403,15 +405,15 @@ test(const unsigned int fe_degree,
         {
           if (optimization_level == 0)
             {
-              run_relaxation(op, precon_adapter, d);
+              run_relaxation(op_pre_post, precon_adapter, d);
             }
           else if (optimization_level == 1)
             {
-              run_relaxation(op, precon_pre_post, d);
+              run_relaxation(op_pre_post, precon_pre_post, d);
             }
           else if (optimization_level == 2)
             {
-              run_relaxation(op, precon_diag, d);
+              run_relaxation(op_pre_post, precon_diag, d);
             }
           else
             {
