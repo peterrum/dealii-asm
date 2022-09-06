@@ -284,6 +284,8 @@ test(const unsigned int fe_degree,
 
   const OperatorType op_pre_post(matrix_free);
 
+  const auto &op = op_pre_post;
+
   const auto precon_diag = std::make_shared<DiagonalMatrix<VectorType>>();
   op_pre_post.compute_inverse_diagonal(precon_diag->get_vector());
 
@@ -386,13 +388,17 @@ test(const unsigned int fe_degree,
         {
           if (optimization_level == 0)
             {
-              run_chebyshev(op_pre_post, precon_adapter, d);
+              run_chebyshev(op, precon_adapter, d);
             }
           else if (optimization_level == 1)
             {
-              run_chebyshev(op_pre_post, precon_pre_post, d);
+              run_chebyshev(op, precon_pre_post, d);
             }
           else if (optimization_level == 2)
+            {
+              run_chebyshev(op_pre_post, precon_pre_post, d);
+            }
+          else if (optimization_level == 3)
             {
               run_chebyshev(op_pre_post, precon_diag, d);
             }
@@ -405,13 +411,17 @@ test(const unsigned int fe_degree,
         {
           if (optimization_level == 0)
             {
-              run_relaxation(op_pre_post, precon_adapter, d);
+              run_relaxation(op, precon_adapter, d);
             }
           else if (optimization_level == 1)
             {
-              run_relaxation(op_pre_post, precon_pre_post, d);
+              run_relaxation(op, precon_pre_post, d);
             }
           else if (optimization_level == 2)
+            {
+              run_relaxation(op_pre_post, precon_pre_post, d);
+            }
+          else if (optimization_level == 3)
             {
               run_relaxation(op_pre_post, precon_diag, d);
             }
