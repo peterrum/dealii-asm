@@ -18,7 +18,7 @@ gather(const std::vector<Number> &      global_vector,
 
   unsigned int counter = 0;
 
-  // bottom layer (j=0; vertex-line-vertex)
+  // bottom layer (k=0)
   {
     // vertex 0
     local_vector[counter++] = global_vector[dofs_of_cell[0]];
@@ -29,16 +29,13 @@ gather(const std::vector<Number> &      global_vector,
 
     // vertex 1
     local_vector[counter++] = global_vector[dofs_of_cell[2]];
-  }
 
-  // middle layers (0<j<k; line-quad-line)
-  {
     for (unsigned int j = 0, quad_counter = 0; j < degree - 1; ++j)
       {
         // line 0
         local_vector[counter++] = global_vector[dofs_of_cell[3] + j];
 
-        // quad 0
+        // quad 4
         for (unsigned int i = 0; i < degree - 1; ++i, ++quad_counter)
           local_vector[counter++] =
             global_vector[dofs_of_cell[4] + quad_counter];
@@ -46,10 +43,7 @@ gather(const std::vector<Number> &      global_vector,
         // line 1
         local_vector[counter++] = global_vector[dofs_of_cell[5] + j];
       }
-  }
 
-  // top layer (j=k; vertex-line-vertex)
-  {
     // vertex 2
     local_vector[counter++] = global_vector[dofs_of_cell[6]];
 
@@ -60,6 +54,12 @@ gather(const std::vector<Number> &      global_vector,
     // vertex 3
     local_vector[counter++] = global_vector[dofs_of_cell[8]];
   }
+
+  // middle layers (0<k<p)
+  {}
+
+  // top layer (k=p)
+  {}
 }
 
 int
