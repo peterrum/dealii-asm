@@ -23,7 +23,7 @@ gather(const std::vector<Number> &      global_vector,
     // vertex 0
     local_vector[counter++] = global_vector[dofs_of_cell[0]];
 
-    // line 2
+    // line 2 (TODO)
     for (unsigned int i = 0; i < degree - 1; ++i)
       local_vector[counter++] = global_vector[dofs_of_cell[1] + i];
 
@@ -32,22 +32,22 @@ gather(const std::vector<Number> &      global_vector,
 
     for (unsigned int j = 0, quad_counter = 0; j < degree - 1; ++j)
       {
-        // line 0
+        // line 0 (TODO)
         local_vector[counter++] = global_vector[dofs_of_cell[3] + j];
 
-        // quad 4
+        // quad 4 (TODO)
         for (unsigned int i = 0; i < degree - 1; ++i, ++quad_counter)
           local_vector[counter++] =
             global_vector[dofs_of_cell[4] + quad_counter];
 
-        // line 1
+        // line 1 (TODO)
         local_vector[counter++] = global_vector[dofs_of_cell[5] + j];
       }
 
     // vertex 2
     local_vector[counter++] = global_vector[dofs_of_cell[6]];
 
-    // line 3
+    // line 3 (TODO)
     for (unsigned int i = 0; i < degree - 1; ++i)
       local_vector[counter++] = global_vector[dofs_of_cell[7] + i];
 
@@ -59,7 +59,41 @@ gather(const std::vector<Number> &      global_vector,
   {}
 
   // top layer (k=p)
-  {}
+  {
+    // vertex 4
+    local_vector[counter++] = global_vector[dofs_of_cell[18]];
+
+    // line 6 (TODO)
+    for (unsigned int i = 0; i < degree - 1; ++i)
+      local_vector[counter++] = global_vector[dofs_of_cell[19] + i];
+
+    // vertex 5
+    local_vector[counter++] = global_vector[dofs_of_cell[20]];
+
+    for (unsigned int j = 0, quad_counter = 0; j < degree - 1; ++j)
+      {
+        // line 4 (TODO)
+        local_vector[counter++] = global_vector[dofs_of_cell[21] + j];
+
+        // quad 5 (TODO)
+        for (unsigned int i = 0; i < degree - 1; ++i, ++quad_counter)
+          local_vector[counter++] =
+            global_vector[dofs_of_cell[22] + quad_counter];
+
+        // line 5 (TODO)
+        local_vector[counter++] = global_vector[dofs_of_cell[23] + j];
+      }
+
+    // vertex 6
+    local_vector[counter++] = global_vector[dofs_of_cell[24]];
+
+    // line 7 (TODO)
+    for (unsigned int i = 0; i < degree - 1; ++i)
+      local_vector[counter++] = global_vector[dofs_of_cell[25] + i];
+
+    // vertex 7
+    local_vector[counter++] = global_vector[dofs_of_cell[26]];
+  }
 }
 
 int
