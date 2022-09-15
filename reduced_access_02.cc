@@ -29,7 +29,10 @@ gather(const std::vector<Number> &      global_vector,
   // .... on quads
   const auto reorientate_quad =
     [&orientation_table](const unsigned int i, const unsigned int orientation) {
-      return orientation_table[orientation][i];
+      if (orientation == 0)
+        return i;
+      else
+        return orientation_table[orientation][i];
     };
 
   unsigned int counter = 0;
