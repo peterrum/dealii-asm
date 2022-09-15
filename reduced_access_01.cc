@@ -25,7 +25,7 @@ gather(const std::vector<Number> &      global_vector,
 
   unsigned int counter = 0;
 
-  // bottom layer (vertex-line-vertex)
+  // bottom layer (j=0; vertex-line-vertex)
   {
     const bool flag = orientations[2] == 1;
 
@@ -41,33 +41,29 @@ gather(const std::vector<Number> &      global_vector,
     local_vector[counter++] = global_vector[dofs_of_cell[2]];
   }
 
-  // middle layers (line-quad-line)
+  // middle layers (0<j<k; line-quad-line)
   {
     const bool flag0 = orientations[0] == 1;
     const bool flag1 = orientations[1] == 1;
 
-    std::array<unsigned int, 3> counters{{0, 0, 0}};
-
-    for (unsigned int j = 0; j < degree - 1; ++j)
+    for (unsigned int j = 0, quad_counter = 0; j < degree - 1; ++j)
       {
         // line 0
         local_vector[counter++] =
-          global_vector[dofs_of_cell[3] +
-                        reorientate_line(counters[0]++, flag0)];
+          global_vector[dofs_of_cell[3] + reorientate_line(j, flag0)];
 
         // quad 0
-        for (unsigned int i = 0; i < degree - 1; ++i)
+        for (unsigned int i = 0; i < degree - 1; ++i, ++quad_counter)
           local_vector[counter++] =
-            global_vector[dofs_of_cell[4] + (counters[1]++)];
+            global_vector[dofs_of_cell[4] + quad_counter];
 
         // line 1
         local_vector[counter++] =
-          global_vector[dofs_of_cell[5] +
-                        reorientate_line(counters[2]++, flag1)];
+          global_vector[dofs_of_cell[5] + reorientate_line(j, flag1)];
       }
   }
 
-  // top layer (vertex-line-vertex)
+  // top layer (j=k; vertex-line-vertex)
   {
     const bool flag = orientations[3] == 1;
 
