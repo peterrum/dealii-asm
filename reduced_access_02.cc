@@ -14,28 +14,18 @@ gather(const std::vector<Number> &      global_vector,
        const std::vector<unsigned int> &orientations, // TODO: compress
        std::vector<Number> &            local_vector)
 {
-  // helper function to reorientate indices on line
-  const auto reorientate_line = [degree](const unsigned int i,
-                                         const bool         flag) {
-    if (flag)
-      return degree - i - 2;
-    else
-      return i;
-  };
+  (void)orientations; // TODO
 
   unsigned int counter = 0;
 
   // bottom layer (j=0; vertex-line-vertex)
   {
-    const bool flag = orientations[2] == 1;
-
     // vertex 0
     local_vector[counter++] = global_vector[dofs_of_cell[0]];
 
     // line 2
     for (unsigned int i = 0; i < degree - 1; ++i)
-      local_vector[counter++] =
-        global_vector[dofs_of_cell[1] + reorientate_line(i, flag)];
+      local_vector[counter++] = global_vector[dofs_of_cell[1] + i];
 
     // vertex 1
     local_vector[counter++] = global_vector[dofs_of_cell[2]];
@@ -43,14 +33,10 @@ gather(const std::vector<Number> &      global_vector,
 
   // middle layers (0<j<k; line-quad-line)
   {
-    const bool flag0 = orientations[0] == 1;
-    const bool flag1 = orientations[1] == 1;
-
     for (unsigned int j = 0, quad_counter = 0; j < degree - 1; ++j)
       {
         // line 0
-        local_vector[counter++] =
-          global_vector[dofs_of_cell[3] + reorientate_line(j, flag0)];
+        local_vector[counter++] = global_vector[dofs_of_cell[3] + j];
 
         // quad 0
         for (unsigned int i = 0; i < degree - 1; ++i, ++quad_counter)
@@ -58,22 +44,18 @@ gather(const std::vector<Number> &      global_vector,
             global_vector[dofs_of_cell[4] + quad_counter];
 
         // line 1
-        local_vector[counter++] =
-          global_vector[dofs_of_cell[5] + reorientate_line(j, flag1)];
+        local_vector[counter++] = global_vector[dofs_of_cell[5] + j];
       }
   }
 
   // top layer (j=k; vertex-line-vertex)
   {
-    const bool flag = orientations[3] == 1;
-
     // vertex 2
     local_vector[counter++] = global_vector[dofs_of_cell[6]];
 
     // line 3
     for (unsigned int i = 0; i < degree - 1; ++i)
-      local_vector[counter++] =
-        global_vector[dofs_of_cell[7] + reorientate_line(i, flag)];
+      local_vector[counter++] = global_vector[dofs_of_cell[7] + i];
 
     // vertex 3
     local_vector[counter++] = global_vector[dofs_of_cell[8]];
