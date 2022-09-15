@@ -41,7 +41,7 @@ gather(const std::vector<Number> &      global_vector,
     local_vector[counter++] = global_vector[dofs_of_cell[2]];
   }
 
-  // middle layers (0<j<k; line-quad-line)
+  // middle layers (0<j<p; line-quad-line)
   {
     const bool flag0 = orientations[0] == 1;
     const bool flag1 = orientations[1] == 1;
@@ -63,7 +63,7 @@ gather(const std::vector<Number> &      global_vector,
       }
   }
 
-  // top layer (j=k; vertex-line-vertex)
+  // top layer (j=p; vertex-line-vertex)
   {
     const bool flag = orientations[3] == 1;
 
