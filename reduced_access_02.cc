@@ -1,5 +1,7 @@
 #include <deal.II/base/exceptions.h>
 
+#include <deal.II/matrix_free/shape_info.h>
+
 #include <array>
 #include <iostream>
 #include <vector>
@@ -12,9 +14,10 @@ gather(const std::vector<Number> &      global_vector,
        const unsigned int               degree,
        const std::vector<unsigned int> &dofs_of_cell,
        const std::vector<unsigned int> &orientations, // TODO: compress
+       const Table<2, unsigned int> &   orientation_table,
        std::vector<Number> &            local_vector)
 {
-  // helper function to reorientate indices on line
+  // helper function to reorientate indices on line and ...
   const auto reorientate_line = [degree](const unsigned int i,
                                          const bool         flag) {
     if (flag)
@@ -22,6 +25,12 @@ gather(const std::vector<Number> &      global_vector,
     else
       return i;
   };
+
+  // .... on quads
+  const auto reorientate_quad =
+    [&orientation_table](const unsigned int i, const unsigned int orientation) {
+      return orientation_table[orientation][i];
+    };
 
   unsigned int counter = 0;
 
@@ -31,6 +40,8 @@ gather(const std::vector<Number> &      global_vector,
     const bool line_flag_1 = orientations[1] == 1;
     const bool line_flag_2 = orientations[2] == 1;
     const bool line_flag_3 = orientations[3] == 1;
+
+    const unsigned int quad_flag_4 = orientations[16];
 
     // vertex 0
     local_vector[counter++] = global_vector[dofs_of_cell[0]];
@@ -49,10 +60,11 @@ gather(const std::vector<Number> &      global_vector,
         local_vector[counter++] =
           global_vector[dofs_of_cell[3] + reorientate_line(j, line_flag_0)];
 
-        // quad 4 (TODO: ij)
+        // quad 4 (ij)
         for (unsigned int i = 0; i < degree - 1; ++i, ++quad_counter)
           local_vector[counter++] =
-            global_vector[dofs_of_cell[4] + quad_counter];
+            global_vector[dofs_of_cell[4] +
+                          reorientate_quad(quad_counter, quad_flag_4)];
 
         // line 1
         local_vector[counter++] =
@@ -78,6 +90,11 @@ gather(const std::vector<Number> &      global_vector,
     const bool line_flag_10 = orientations[10] == 1;
     const bool line_flag_11 = orientations[11] == 1;
 
+    const unsigned int quad_flag_0 = orientations[12];
+    const unsigned int quad_flag_1 = orientations[13];
+    const unsigned int quad_flag_2 = orientations[14];
+    const unsigned int quad_flag_3 = orientations[15];
+
     for (unsigned int k = 0, hex_counter = 0, quad_counter = 0; k < degree - 1;
          ++k, quad_counter += (degree - 1))
       {
@@ -85,10 +102,11 @@ gather(const std::vector<Number> &      global_vector,
         local_vector[counter++] =
           global_vector[dofs_of_cell[9] + reorientate_line(k, line_flag_8)];
 
-        // quad 2 (TODO: ik)
+        // quad 2 (ik)
         for (unsigned int i = 0; i < degree - 1; ++i)
           local_vector[counter++] =
-            global_vector[dofs_of_cell[10] + quad_counter + i];
+            global_vector[dofs_of_cell[10] +
+                          reorientate_quad(quad_counter + i, quad_flag_2)];
 
         // line 9
         local_vector[counter++] =
@@ -96,28 +114,31 @@ gather(const std::vector<Number> &      global_vector,
 
         for (unsigned int j = 0; j < degree - 1; ++j)
           {
-            // quad 0 (TODO: jk)
+            // quad 0 (jk)
             local_vector[counter++] =
-              global_vector[dofs_of_cell[12] + quad_counter + j];
+              global_vector[dofs_of_cell[12] +
+                            reorientate_quad(quad_counter + j, quad_flag_0)];
 
             // hex 0
             for (unsigned int i = 0; i < degree - 1; ++i, ++hex_counter)
               local_vector[counter++] =
                 global_vector[dofs_of_cell[13] + hex_counter];
 
-            // quad 1 (TODO: jk)
+            // quad 1 (jk)
             local_vector[counter++] =
-              global_vector[dofs_of_cell[14] + quad_counter + j];
+              global_vector[dofs_of_cell[14] +
+                            reorientate_quad(quad_counter + j, quad_flag_1)];
           }
 
         // line 10
         local_vector[counter++] =
           global_vector[dofs_of_cell[15] + reorientate_line(k, line_flag_10)];
 
-        // quad 3 (TODO: ik)
+        // quad 3 (ik)
         for (unsigned int i = 0; i < degree - 1; ++i)
           local_vector[counter++] =
-            global_vector[dofs_of_cell[16] + quad_counter + i];
+            global_vector[dofs_of_cell[16] +
+                          reorientate_quad(quad_counter + i, quad_flag_3)];
 
         // line 11
         local_vector[counter++] =
@@ -131,6 +152,8 @@ gather(const std::vector<Number> &      global_vector,
     const bool line_flag_5 = orientations[5] == 1;
     const bool line_flag_6 = orientations[6] == 1;
     const bool line_flag_7 = orientations[7] == 1;
+
+    const unsigned int quad_flag_5 = orientations[17];
 
     // vertex 4
     local_vector[counter++] = global_vector[dofs_of_cell[18]];
@@ -149,10 +172,11 @@ gather(const std::vector<Number> &      global_vector,
         local_vector[counter++] =
           global_vector[dofs_of_cell[21] + reorientate_line(j, line_flag_4)];
 
-        // quad 5 (TODO: ij)
+        // quad 5 (ij)
         for (unsigned int i = 0; i < degree - 1; ++i, ++quad_counter)
           local_vector[counter++] =
-            global_vector[dofs_of_cell[22] + quad_counter];
+            global_vector[dofs_of_cell[22] +
+                          reorientate_quad(quad_counter, quad_flag_5)];
 
         // line 5
         local_vector[counter++] =
@@ -172,14 +196,22 @@ gather(const std::vector<Number> &      global_vector,
   }
 }
 
+/**
+ * ./reduced_access_02 3
+ * ./reduced_access_02 3   0 0 0 0 0 0 0 0 0 0 0 0   0 0 0 0 0 1
+ */
 int
 main(int argc, char *argv[])
 {
-  AssertThrow(argc == 2, ExcNotImplemented());
+  AssertThrow(argc == 2 || argc == 20, ExcNotImplemented());
 
   const unsigned int degree = atoi(argv[1]);
 
   std::vector<unsigned int> orientations(18, 0);
+
+  if (argc == 20)
+    for (unsigned int i = 0; i < 18; ++i)
+      orientations[i] = atoi(argv[2 + i]);
 
   // setup dpo object
   std::vector<std::pair<unsigned int, unsigned int>> dpo;
@@ -219,10 +251,19 @@ main(int argc, char *argv[])
   for (unsigned int i = 0; i < dof_counter; ++i)
     global_vector.emplace_back(i);
 
+  const auto orientation_table =
+    internal::MatrixFreeFunctions::ShapeInfo<double>::compute_orientation_table(
+      degree - 1);
+
   // gather values and print to terminal
   std::vector<double> local_vector(dof_counter);
 
-  gather(global_vector, degree, dofs_of_cell, orientations, local_vector);
+  gather(global_vector,
+         degree,
+         dofs_of_cell,
+         orientations,
+         orientation_table,
+         local_vector);
 
   for (unsigned int k = 0, c = 0; k <= degree; ++k)
     {
