@@ -56,7 +56,49 @@ gather(const std::vector<Number> &      global_vector,
   }
 
   // middle layers (0<k<p)
-  {}
+  {
+    for (unsigned int k = 0, hex_counter = 0, quad_counter = 0; k < degree - 1;
+         ++k, quad_counter += (degree - 1))
+      {
+        // line 8 (TODO)
+        local_vector[counter++] = global_vector[dofs_of_cell[9] + k];
+
+        // quad 2 (TODO)
+        for (unsigned int i = 0; i < degree - 1; ++i)
+          local_vector[counter++] =
+            global_vector[dofs_of_cell[10] + quad_counter + i];
+
+        // line 9 (TODO)
+        local_vector[counter++] = global_vector[dofs_of_cell[11] + k];
+
+        for (unsigned int j = 0; j < degree - 1; ++j)
+          {
+            // quad 0 (TODO)
+            local_vector[counter++] =
+              global_vector[dofs_of_cell[12] + quad_counter + j];
+
+            // hex 0
+            for (unsigned int i = 0; i < degree - 1; ++i, ++hex_counter)
+              local_vector[counter++] =
+                global_vector[dofs_of_cell[13] + hex_counter];
+
+            // quad 1 (TODO)
+            local_vector[counter++] =
+              global_vector[dofs_of_cell[14] + quad_counter + j];
+          }
+
+        // line 10 (TODO)
+        local_vector[counter++] = global_vector[dofs_of_cell[15] + k];
+
+        // quad 3 (TODO)
+        for (unsigned int i = 0; i < degree - 1; ++i)
+          local_vector[counter++] =
+            global_vector[dofs_of_cell[16] + quad_counter + i];
+
+        // line 11 (TODO)
+        local_vector[counter++] = global_vector[dofs_of_cell[17] + k];
+      }
+  }
 
   // top layer (k=p)
   {
