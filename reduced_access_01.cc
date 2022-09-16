@@ -46,15 +46,16 @@ gather(const std::vector<Number> &      global_vector,
     const bool flag0 = orientations[0] == 1;
     const bool flag1 = orientations[1] == 1;
 
-    for (unsigned int j = 1, offset = 0; j < degree; ++j)
+    for (unsigned int j = 1; j < degree; ++j)
       {
         // line 0
         local_vector[counter++] =
           global_vector[dofs_of_cell[3] + reorientate_line(j - 1, flag0)];
 
         // quad 0
-        for (unsigned int i = 0; i < degree - 1; ++i, ++offset)
-          local_vector[counter++] = global_vector[dofs_of_cell[4] + offset];
+        for (unsigned int i = 0; i < degree - 1; ++i)
+          local_vector[counter++] =
+            global_vector[dofs_of_cell[4] + (j - 1) * (degree - 1) + i];
 
         // line 1
         local_vector[counter++] =
