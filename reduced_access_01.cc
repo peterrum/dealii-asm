@@ -31,26 +31,31 @@ gather(const std::vector<Number> &      global_vector,
     {
       const auto indices = dofs_of_cell.begin() + compressed * 3;
 
-      // bottom layer (j=0; vertex-line-vertex)
-      if ((orientations[2] == 1) && (j == 0))
-        {
-          const bool flag = orientations[2] == 1;
 
-          // vertex 0
+      if (((orientations[2] == 1) && (j == 0)) ||
+          ((orientations[3] == 1) && (j == degree)))
+        {
+          // bottom or top layer (vertex-line-vertex)
+
+          const bool flag =
+            (j == 0) ? (orientations[2] == 1) : (orientations[3] == 1);
+
+          // vertex 0 or vertex 2
           local_vector[counter++] = global_vector[indices[0]];
 
-          // line 2
+          // line 2 or line 3
           for (unsigned int i = 0; i < degree - 1; ++i)
             local_vector[counter++] =
               global_vector[indices[1] + reorientate_line(i, flag)];
 
-          // vertex 1
+          // vertex 1 or vertex 3
           local_vector[counter++] = global_vector[indices[2]];
         }
       else if ((orientations[0] == 1 || orientations[1] == 1) &&
-               ((0 < j) &&
-                (j < degree))) // middle layers (0<j<p; line-quad-line)
+               ((0 < j) && (j < degree)))
         {
+          // middle layers (0<j<p; line-quad-line)
+
           const bool flag0 = orientations[0] == 1;
           const bool flag1 = orientations[1] == 1;
 
@@ -66,22 +71,6 @@ gather(const std::vector<Number> &      global_vector,
           // line 1
           local_vector[counter++] =
             global_vector[indices[2] + reorientate_line(offset, flag1)];
-        }
-      else if ((orientations[3] == 1) &&
-               (j == degree)) // top layer (j=p; vertex-line-vertex)
-        {
-          const bool flag = orientations[3] == 1;
-
-          // vertex 2
-          local_vector[counter++] = global_vector[indices[0]];
-
-          // line 3
-          for (unsigned int i = 0; i < degree - 1; ++i)
-            local_vector[counter++] =
-              global_vector[indices[1] + reorientate_line(i, flag)];
-
-          // vertex 3
-          local_vector[counter++] = global_vector[indices[2]];
         }
       else
         {
