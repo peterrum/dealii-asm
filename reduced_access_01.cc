@@ -14,15 +14,6 @@ gather(const std::vector<Number> &      global_vector,
        const std::vector<unsigned int> &orientations, // TODO: compress
        std::vector<Number> &            local_vector)
 {
-  // helper function to reorientate indices on line
-  const auto reorientate_line = [degree](const unsigned int i,
-                                         const bool         flag) {
-    if (flag)
-      return degree - i - 2;
-    else
-      return i;
-  };
-
   unsigned int counter    = 0;
   unsigned int offset     = 0;
   unsigned int compressed = 0;
@@ -38,18 +29,19 @@ gather(const std::vector<Number> &      global_vector,
       if (orientation && (((orientation & 0b0100) && (j == 0)) ||
                           ((orientation & 0b1000) && (j == degree))))
         {
-          // bottom or top layer (vertex-line-vertex)
-
-          const bool flag =
-            (j == 0) ? (orientation & 0b0100) : (orientation & 0b1000);
+          // non-standard bottom or top layer (vertex-line-vertex)
 
           // vertex 0 or vertex 2
           local_vector[counter++] = global_vector[indices[0]];
 
           // line 2 or line 3
-          for (unsigned int i = 0; i < degree - 1; ++i)
-            local_vector[counter++] =
-              global_vector[indices[1] + reorientate_line(i, flag)];
+          if ((j == 0) ? (orientation & 0b0100) : (orientation & 0b1000))
+            for (unsigned int i = 0; i < degree - 1; ++i)
+              local_vector[counter++] =
+                global_vector[indices[1] + (degree - 2 - i)];
+          else
+            for (unsigned int i = 0; i < degree - 1; ++i)
+              local_vector[counter++] = global_vector[indices[1] + i];
 
           // vertex 1 or vertex 3
           local_vector[counter++] = global_vector[indices[2]];
@@ -57,7 +49,7 @@ gather(const std::vector<Number> &      global_vector,
       else if (orientation &&
                ((orientation & 0b0011) && ((0 < j) && (j < degree))))
         {
-          // middle layers (line-quad-line)
+          // non-standard middle layers (line-quad-line)
 
           // line 0
           if (orientation & 0b0001)
@@ -80,6 +72,8 @@ gather(const std::vector<Number> &      global_vector,
         }
       else
         {
+          // standard layer -> nothing to do
+
           local_vector[counter++] = global_vector[indices[0] + offset];
 
           for (unsigned int i = 0; i < degree - 1; ++i)
