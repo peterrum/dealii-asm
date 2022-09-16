@@ -35,12 +35,14 @@ unsigned int
 get_orientation_quad(const std::vector<types::global_dof_index> &dofs,
                      const Table<2, unsigned int> &orientation_table)
 {
+  const auto min = *std::min_element(dofs.begin(), dofs.end());
+
   for (unsigned int i = 0; i < orientation_table.n_rows(); ++i)
     {
       bool flag = true;
 
       for (unsigned int j = 0; j < orientation_table.n_cols(); ++j)
-        flag &= (dofs[j] == (dofs[0] + orientation_table[i][j]));
+        flag &= (dofs[j] == (min + orientation_table[i][j]));
 
       if (flag)
         return i;
@@ -87,8 +89,7 @@ compress_orientation(const std::vector<unsigned int> &orientations)
 int
 main(int argc, char *argv[])
 {
-  (void)argc;
-  (void)argv;
+  AssertThrow(argc == 2, ExcNotImplemented());
 
   {
     const auto quad = ReferenceCells::Quadrilateral;
@@ -110,7 +111,7 @@ main(int argc, char *argv[])
   }
 
   {
-    const unsigned int degree = 3;
+    const unsigned int degree = std::atoi(argv[1]);
     const unsigned int dim    = 3;
 
     Triangulation<dim> tria;
@@ -140,6 +141,7 @@ main(int argc, char *argv[])
       unsigned int dof_counter = 0;
 
       std::vector<unsigned int> obj_orientations;
+      std::vector<unsigned int> obj_start_indices;
 
       for (unsigned int d = 0; d <= dim; ++d)
         {
@@ -151,6 +153,10 @@ main(int argc, char *argv[])
 
               for (unsigned int j = 0; j < entry.second; ++j)
                 dofs_of_object[j] = dofs[dof_counter + j];
+
+              obj_start_indices.emplace_back(
+                *std::min_element(dofs_of_object.begin(),
+                                  dofs_of_object.end()));
 
               if (d == 2 && (i == 2 || i == 3))
                 {
@@ -168,7 +174,7 @@ main(int argc, char *argv[])
                 {
                   const auto orientation =
                     get_orientation_line(dofs_of_object, degree);
-                  printf("         -> %1u", orientation);
+                  printf(" -> %1u", orientation);
 
                   obj_orientations.emplace_back(orientation);
                 }
@@ -187,6 +193,12 @@ main(int argc, char *argv[])
             }
         }
 
+      std::cout << std::endl;
+
+      std::cout << "indices:     ";
+
+      for (const auto i : obj_start_indices)
+        std::cout << i << " ";
       std::cout << std::endl;
 
       const auto orientation = compress_orientation(obj_orientations);
