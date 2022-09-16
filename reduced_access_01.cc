@@ -23,13 +23,16 @@ gather(const std::vector<Number> &      global_vector,
       return i;
   };
 
-  unsigned int counter = 0;
-  unsigned int offset  = 0;
+  unsigned int counter    = 0;
+  unsigned int offset     = 0;
+  unsigned int compressed = 0;
 
   for (unsigned int j = 0; j <= degree; ++j)
     {
+      const auto indices = dofs_of_cell.begin() + compressed * 3;
+
       // bottom layer (j=0; vertex-line-vertex)
-      if (j == 0)
+      if ((orientations[2] == 1) && (j == 0))
         {
           const bool flag = orientations[2] == 1;
 
@@ -44,7 +47,9 @@ gather(const std::vector<Number> &      global_vector,
           // vertex 1
           local_vector[counter++] = global_vector[dofs_of_cell[2]];
         }
-      else if (j < degree) // middle layers (0<j<p; line-quad-line)
+      else if ((orientations[0] == 1 || orientations[1] == 1) &&
+               ((0 < j) &&
+                (j < degree))) // middle layers (0<j<p; line-quad-line)
         {
           const bool flag0 = orientations[0] == 1;
           const bool flag1 = orientations[1] == 1;
@@ -62,7 +67,8 @@ gather(const std::vector<Number> &      global_vector,
           local_vector[counter++] =
             global_vector[dofs_of_cell[5] + reorientate_line(offset, flag1)];
         }
-      else if (j == degree) // top layer (j=p; vertex-line-vertex)
+      else if ((orientations[3] == 1) &&
+               (j == degree)) // top layer (j=p; vertex-line-vertex)
         {
           const bool flag = orientations[3] == 1;
 
@@ -77,9 +83,22 @@ gather(const std::vector<Number> &      global_vector,
           // vertex 3
           local_vector[counter++] = global_vector[dofs_of_cell[8]];
         }
+      else
+        {
+          local_vector[counter++] = global_vector[indices[0] + offset];
+
+          for (unsigned int i = 0; i < degree - 1; ++i)
+            local_vector[counter++] =
+              global_vector[indices[1] + offset * (degree - 1) + i];
+
+          local_vector[counter++] = global_vector[indices[2] + offset];
+        }
 
       if ((j == 0) || (j == (degree - 1)))
-        offset = 0;
+        {
+          compressed++;
+          offset = 0;
+        }
       else
         offset++;
     }
