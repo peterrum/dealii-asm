@@ -59,12 +59,12 @@ gather(const std::vector<Number> &      global_vector,
         {
           // middle layers (line-quad-line)
 
-          const bool flag0 = orientation & 0b0001;
-          const bool flag1 = orientation & 0b0010;
-
           // line 0
-          local_vector[counter++] =
-            global_vector[indices[0] + reorientate_line(offset, flag0)];
+          if (orientation & 0b0001)
+            local_vector[counter++] =
+              global_vector[indices[0] + (degree - 2 - offset)];
+          else
+            local_vector[counter++] = global_vector[indices[0] + offset];
 
           // quad 0
           for (unsigned int i = 0; i < degree - 1; ++i)
@@ -72,8 +72,11 @@ gather(const std::vector<Number> &      global_vector,
               global_vector[indices[1] + offset * (degree - 1) + i];
 
           // line 1
-          local_vector[counter++] =
-            global_vector[indices[2] + reorientate_line(offset, flag1)];
+          if (orientation & 0b0010)
+            local_vector[counter++] =
+              global_vector[indices[2] + (degree - 2 - offset)];
+          else
+            local_vector[counter++] = global_vector[indices[2] + offset];
         }
       else
         {
