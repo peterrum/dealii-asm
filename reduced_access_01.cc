@@ -18,16 +18,17 @@ gather(const std::vector<Number> &      global_vector,
   unsigned int offset     = 0;
   unsigned int compressed = 0;
 
-  unsigned int orientation = 0;          // TODO
-  for (unsigned int i = 0; i < 4; ++i)   //
-    orientation += orientations[i] << i; //
+  unsigned int orientation = 0;        // TODO
+  orientation += orientations[2] << 0; //
+  orientation += orientations[0] << 1; //
+  orientation += orientations[1] << 2; //
+  orientation += orientations[3] << 3; //
 
   for (unsigned int j = 0; j <= degree; ++j)
     {
       const auto indices = dofs_of_cell.begin() + compressed * 3;
 
-      if (orientation && (((orientation & 0b0100) && (j == 0)) ||
-                          ((orientation & 0b1000) && (j == degree))))
+      if (orientation && (orientation & 0b1) && ((j == 0) || (j == degree)))
         {
           // non-standard bottom or top layer (vertex-line-vertex)
 
@@ -35,24 +36,19 @@ gather(const std::vector<Number> &      global_vector,
           local_vector[counter++] = global_vector[indices[0]];
 
           // line 2 or line 3
-          if ((j == 0) ? (orientation & 0b0100) : (orientation & 0b1000))
-            for (unsigned int i = 0; i < degree - 1; ++i)
-              local_vector[counter++] =
-                global_vector[indices[1] + (degree - 2 - i)];
-          else
-            for (unsigned int i = 0; i < degree - 1; ++i)
-              local_vector[counter++] = global_vector[indices[1] + i];
+          for (unsigned int i = 0; i < degree - 1; ++i)
+            local_vector[counter++] =
+              global_vector[indices[1] + (degree - 2 - i)];
 
           // vertex 1 or vertex 3
           local_vector[counter++] = global_vector[indices[2]];
         }
-      else if (orientation &&
-               ((orientation & 0b0011) && ((0 < j) && (j < degree))))
+      else if (orientation && (orientation & 0b11) && (0 < j) && (j < degree))
         {
           // non-standard middle layers (line-quad-line)
 
           // line 0
-          if (orientation & 0b0001)
+          if (orientation & 0b01)
             local_vector[counter++] =
               global_vector[indices[0] + (degree - 2 - offset)];
           else
@@ -64,7 +60,7 @@ gather(const std::vector<Number> &      global_vector,
               global_vector[indices[1] + offset * (degree - 1) + i];
 
           // line 1
-          if (orientation & 0b0010)
+          if (orientation & 0b10)
             local_vector[counter++] =
               global_vector[indices[2] + (degree - 2 - offset)];
           else
@@ -87,6 +83,11 @@ gather(const std::vector<Number> &      global_vector,
         {
           compressed++;
           offset = 0;
+
+          if (j == 0)
+            orientation = orientation >> 1;
+          else
+            orientation = orientation >> 2;
         }
       else
         offset++;
