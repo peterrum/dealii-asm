@@ -43,23 +43,25 @@ gather(const std::vector<Number> &      global_vector,
 
   // middle layers (0<j<p; line-quad-line)
   {
-    const bool flag0 = orientations[0] == 1;
-    const bool flag1 = orientations[1] == 1;
-
     for (unsigned int j = 1; j < degree; ++j)
       {
+        const bool flag0 = orientations[0] == 1;
+        const bool flag1 = orientations[1] == 1;
+
+        const unsigned int offset = (j - 1);
+
         // line 0
         local_vector[counter++] =
-          global_vector[dofs_of_cell[3] + reorientate_line(j - 1, flag0)];
+          global_vector[dofs_of_cell[3] + reorientate_line(offset, flag0)];
 
         // quad 0
         for (unsigned int i = 0; i < degree - 1; ++i)
           local_vector[counter++] =
-            global_vector[dofs_of_cell[4] + (j - 1) * (degree - 1) + i];
+            global_vector[dofs_of_cell[4] + offset * (degree - 1) + i];
 
         // line 1
         local_vector[counter++] =
-          global_vector[dofs_of_cell[5] + reorientate_line(j - 1, flag1)];
+          global_vector[dofs_of_cell[5] + reorientate_line(offset, flag1)];
       }
   }
 
