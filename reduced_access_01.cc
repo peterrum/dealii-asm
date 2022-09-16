@@ -27,10 +27,9 @@ gather(const std::vector<Number> &      global_vector,
   unsigned int offset     = 0;
   unsigned int compressed = 0;
 
-  unsigned int orientation = 0;
-
-  for (unsigned int i = 0; i < 4; ++i)
-    orientation += orientations[i] << i;
+  unsigned int orientation = 0;          // TODO
+  for (unsigned int i = 0; i < 4; ++i)   //
+    orientation += orientations[i] << i; //
 
   for (unsigned int j = 0; j <= degree; ++j)
     {
@@ -58,7 +57,7 @@ gather(const std::vector<Number> &      global_vector,
       else if (orientation &&
                ((orientation & 0b0011) && ((0 < j) && (j < degree))))
         {
-          // middle layers (0<j<p; line-quad-line)
+          // middle layers (line-quad-line)
 
           const bool flag0 = orientation & 0b0001;
           const bool flag1 = orientation & 0b0010;
