@@ -27,18 +27,22 @@ gather(const std::vector<Number> &      global_vector,
   unsigned int offset     = 0;
   unsigned int compressed = 0;
 
+  unsigned int orientation = 0;
+
+  for (unsigned int i = 0; i < 4; ++i)
+    orientation += orientations[i] << i;
+
   for (unsigned int j = 0; j <= degree; ++j)
     {
       const auto indices = dofs_of_cell.begin() + compressed * 3;
 
-
-      if (((orientations[2] == 1) && (j == 0)) ||
-          ((orientations[3] == 1) && (j == degree)))
+      if (orientation && (((orientation & 0b0100) && (j == 0)) ||
+                          ((orientation & 0b1000) && (j == degree))))
         {
           // bottom or top layer (vertex-line-vertex)
 
           const bool flag =
-            (j == 0) ? (orientations[2] == 1) : (orientations[3] == 1);
+            (j == 0) ? (orientation & 0b0100) : (orientation & 0b1000);
 
           // vertex 0 or vertex 2
           local_vector[counter++] = global_vector[indices[0]];
@@ -51,13 +55,13 @@ gather(const std::vector<Number> &      global_vector,
           // vertex 1 or vertex 3
           local_vector[counter++] = global_vector[indices[2]];
         }
-      else if ((orientations[0] == 1 || orientations[1] == 1) &&
-               ((0 < j) && (j < degree)))
+      else if (orientation &&
+               ((orientation & 0b0011) && ((0 < j) && (j < degree))))
         {
           // middle layers (0<j<p; line-quad-line)
 
-          const bool flag0 = orientations[0] == 1;
-          const bool flag1 = orientations[1] == 1;
+          const bool flag0 = orientation & 0b0001;
+          const bool flag1 = orientation & 0b0010;
 
           // line 0
           local_vector[counter++] =
