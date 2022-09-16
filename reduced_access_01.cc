@@ -24,62 +24,65 @@ gather(const std::vector<Number> &      global_vector,
   };
 
   unsigned int counter = 0;
+  unsigned int offset  = 0;
 
-  // bottom layer (j=0; vertex-line-vertex)
-  {
-    const bool flag = orientations[2] == 1;
+  for (unsigned int j = 0; j <= degree; ++j)
+    {
+      // bottom layer (j=0; vertex-line-vertex)
+      if (j == 0)
+        {
+          const bool flag = orientations[2] == 1;
 
-    // vertex 0
-    local_vector[counter++] = global_vector[dofs_of_cell[0]];
+          // vertex 0
+          local_vector[counter++] = global_vector[dofs_of_cell[0]];
 
-    // line 2
-    for (unsigned int i = 0; i < degree - 1; ++i)
-      local_vector[counter++] =
-        global_vector[dofs_of_cell[1] + reorientate_line(i, flag)];
+          // line 2
+          for (unsigned int i = 0; i < degree - 1; ++i)
+            local_vector[counter++] =
+              global_vector[dofs_of_cell[1] + reorientate_line(i, flag)];
 
-    // vertex 1
-    local_vector[counter++] = global_vector[dofs_of_cell[2]];
-  }
+          // vertex 1
+          local_vector[counter++] = global_vector[dofs_of_cell[2]];
+        }
+      else if (j < degree) // middle layers (0<j<p; line-quad-line)
+        {
+          const bool flag0 = orientations[0] == 1;
+          const bool flag1 = orientations[1] == 1;
 
-  // middle layers (0<j<p; line-quad-line)
-  {
-    for (unsigned int j = 1; j < degree; ++j)
-      {
-        const bool flag0 = orientations[0] == 1;
-        const bool flag1 = orientations[1] == 1;
-
-        const unsigned int offset = (j - 1);
-
-        // line 0
-        local_vector[counter++] =
-          global_vector[dofs_of_cell[3] + reorientate_line(offset, flag0)];
-
-        // quad 0
-        for (unsigned int i = 0; i < degree - 1; ++i)
+          // line 0
           local_vector[counter++] =
-            global_vector[dofs_of_cell[4] + offset * (degree - 1) + i];
+            global_vector[dofs_of_cell[3] + reorientate_line(offset, flag0)];
 
-        // line 1
-        local_vector[counter++] =
-          global_vector[dofs_of_cell[5] + reorientate_line(offset, flag1)];
-      }
-  }
+          // quad 0
+          for (unsigned int i = 0; i < degree - 1; ++i)
+            local_vector[counter++] =
+              global_vector[dofs_of_cell[4] + offset * (degree - 1) + i];
 
-  // top layer (j=p; vertex-line-vertex)
-  {
-    const bool flag = orientations[3] == 1;
+          // line 1
+          local_vector[counter++] =
+            global_vector[dofs_of_cell[5] + reorientate_line(offset, flag1)];
+        }
+      else if (j == degree) // top layer (j=p; vertex-line-vertex)
+        {
+          const bool flag = orientations[3] == 1;
 
-    // vertex 2
-    local_vector[counter++] = global_vector[dofs_of_cell[6]];
+          // vertex 2
+          local_vector[counter++] = global_vector[dofs_of_cell[6]];
 
-    // line 3
-    for (unsigned int i = 0; i < degree - 1; ++i)
-      local_vector[counter++] =
-        global_vector[dofs_of_cell[7] + reorientate_line(i, flag)];
+          // line 3
+          for (unsigned int i = 0; i < degree - 1; ++i)
+            local_vector[counter++] =
+              global_vector[dofs_of_cell[7] + reorientate_line(i, flag)];
 
-    // vertex 3
-    local_vector[counter++] = global_vector[dofs_of_cell[8]];
-  }
+          // vertex 3
+          local_vector[counter++] = global_vector[dofs_of_cell[8]];
+        }
+
+      if ((j == 0) || (j == (degree - 1)))
+        offset = 0;
+      else
+        offset++;
+    }
 }
 
 int
