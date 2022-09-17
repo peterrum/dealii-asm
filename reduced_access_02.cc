@@ -65,7 +65,7 @@ gather(const std::vector<Number> &      global_vector,
           const auto indices =
             dofs_of_cell.begin() + 3 * (compressed_k * 3 + compressed_j);
 
-          if (k == 0)
+          if (k == 0 || k == degree)
             {
               // bottom layer (k=0)
 
@@ -200,66 +200,6 @@ gather(const std::vector<Number> &      global_vector,
                   local_vector[counter++] =
                     global_vector[indices[2] +
                                   reorientate_line(k - 1, line_flag_1)];
-                }
-            }
-          else
-            {
-              // top layer (k=p)
-
-              if (j == 0)
-                {
-                  const bool line_flag = o_ptr[0];
-
-                  // vertex 4
-                  local_vector[counter++] = global_vector[indices[0]];
-
-                  // line 6
-                  for (unsigned int i = 0; i < degree - 1; ++i)
-                    local_vector[counter++] =
-                      global_vector[indices[1] +
-                                    reorientate_line(i, line_flag)];
-
-                  // vertex 5
-                  local_vector[counter++] = global_vector[indices[2]];
-                }
-              else if ((0 < j) && (j < degree))
-                {
-                  const bool         line_flag_0 = o_ptr[0];
-                  const unsigned int quad_flag   = o_ptr[1];
-                  const bool         line_flag_1 = o_ptr[2];
-
-                  // line 4
-                  local_vector[counter++] =
-                    global_vector[indices[0] +
-                                  reorientate_line(j - 1, line_flag_0)];
-
-                  // quad 5 (ij)
-                  for (unsigned int i = 0; i < degree - 1; ++i)
-                    local_vector[counter++] =
-                      global_vector[indices[1] +
-                                    reorientate_quad((degree - 1) * (j - 1) + i,
-                                                     quad_flag)];
-
-                  // line 5
-                  local_vector[counter++] =
-                    global_vector[indices[2] +
-                                  reorientate_line(j - 1, line_flag_1)];
-                }
-              else
-                {
-                  const bool line_flag = o_ptr[0];
-
-                  // vertex 6
-                  local_vector[counter++] = global_vector[indices[0]];
-
-                  // line 7
-                  for (unsigned int i = 0; i < degree - 1; ++i)
-                    local_vector[counter++] =
-                      global_vector[indices[1] +
-                                    reorientate_line(i, line_flag)];
-
-                  // vertex 7
-                  local_vector[counter++] = global_vector[indices[2]];
                 }
             }
 
