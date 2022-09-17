@@ -98,53 +98,62 @@ gather(const std::vector<Number> &      global_vector,
     const unsigned int quad_flag_2 = orientations[14];
     const unsigned int quad_flag_3 = orientations[15];
 
-    for (unsigned int k = 0; k < degree - 1; ++k)
+    for (unsigned int k = 1; k < degree; ++k)
       {
         // line 8
         local_vector[counter++] =
-          global_vector[dofs_of_cell[9] + reorientate_line(k, line_flag_8)];
+          global_vector[dofs_of_cell[9] + reorientate_line(k - 1, line_flag_8)];
 
         // quad 2 (ik)
         for (unsigned int i = 0; i < degree - 1; ++i)
           local_vector[counter++] =
             global_vector[dofs_of_cell[10] +
-                          reorientate_quad(k * (degree - 1) + i, quad_flag_2)];
+                          reorientate_quad((k - 1) * (degree - 1) + i,
+                                           quad_flag_2)];
 
         // line 9
         local_vector[counter++] =
-          global_vector[dofs_of_cell[11] + reorientate_line(k, line_flag_9)];
+          global_vector[dofs_of_cell[11] +
+                        reorientate_line(k - 1, line_flag_9)];
 
         for (unsigned int j = 0; j < degree - 1; ++j)
           {
             // quad 0 (jk)
             local_vector[counter++] =
               global_vector[dofs_of_cell[12] +
-                            reorientate_quad(k * (degree - 1) + j, quad_flag_0)];
+                            reorientate_quad((k - 1) * (degree - 1) + j,
+                                             quad_flag_0)];
 
             // hex 0
             for (unsigned int i = 0; i < degree - 1; ++i)
               local_vector[counter++] =
-                global_vector[dofs_of_cell[13] + k * (degree - 1) * (degree - 1) + j * (degree - 1) + i];
+                global_vector[dofs_of_cell[13] +
+                              (k - 1) * (degree - 1) * (degree - 1) +
+                              j * (degree - 1) + i];
 
             // quad 1 (jk)
             local_vector[counter++] =
               global_vector[dofs_of_cell[14] +
-                            reorientate_quad(k * (degree - 1) + j, quad_flag_1)];
+                            reorientate_quad((k - 1) * (degree - 1) + j,
+                                             quad_flag_1)];
           }
 
         // line 10
         local_vector[counter++] =
-          global_vector[dofs_of_cell[15] + reorientate_line(k, line_flag_10)];
+          global_vector[dofs_of_cell[15] +
+                        reorientate_line(k - 1, line_flag_10)];
 
         // quad 3 (ik)
         for (unsigned int i = 0; i < degree - 1; ++i)
           local_vector[counter++] =
             global_vector[dofs_of_cell[16] +
-                          reorientate_quad(k * (degree - 1) + i, quad_flag_3)];
+                          reorientate_quad((k - 1) * (degree - 1) + i,
+                                           quad_flag_3)];
 
         // line 11
         local_vector[counter++] =
-          global_vector[dofs_of_cell[17] + reorientate_line(k, line_flag_11)];
+          global_vector[dofs_of_cell[17] +
+                        reorientate_line(k - 1, line_flag_11)];
       }
   }
 
