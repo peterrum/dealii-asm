@@ -3,6 +3,7 @@
 #include <deal.II/matrix_free/shape_info.h>
 
 #include <array>
+#include <bit>
 #include <iostream>
 #include <vector>
 
@@ -35,26 +36,38 @@ gather(const std::vector<Number> &      global_vector,
         return orientation_table[orientation][i];
     };
 
-  std::vector<unsigned int> orientation{orientations[2],
-                                        orientations[0],
-                                        orientations[16],
-                                        orientations[1],
-                                        orientations[3],
-                                        orientations[8],
-                                        orientations[14],
-                                        orientations[9],
-                                        orientations[12],
-                                        orientations[13],
-                                        orientations[10],
-                                        orientations[15],
-                                        orientations[11],
-                                        orientations[6],
-                                        orientations[4],
-                                        orientations[17],
-                                        orientations[5],
-                                        orientations[7]};
+  std::vector<std::pair<unsigned int, unsigned int>> orientation{
+    // bottom layer
+    {1, orientations[2]},
+    {1, orientations[0]},
+    {3, orientations[16]},
+    {1, orientations[1]},
+    {1, orientations[3]},
+    // middle layer
+    {1, orientations[8]},
+    {3, orientations[14]},
+    {1, orientations[9]},
+    {3, orientations[12]},
+    {3, orientations[13]},
+    {1, orientations[10]},
+    {3, orientations[15]},
+    {1, orientations[11]},
+    // bottom layer
+    {1, orientations[6]},
+    {1, orientations[4]},
+    {3, orientations[17]},
+    {1, orientations[5]},
+    {1, orientations[7]}};
 
-  auto o_ptr = orientation.data();
+  unsigned int o_ptr = 0;
+
+  for (unsigned int i = 0, s = 0; i < orientation.size(); ++i)
+    {
+      o_ptr += orientation[i].second << s;
+      s += orientation[i].first;
+    }
+
+  const unsigned int o = o_ptr;
 
   unsigned int counter = 0;
 
@@ -67,7 +80,7 @@ gather(const std::vector<Number> &      global_vector,
 
           if ((k == 0 || k == degree) && (j == 0 || j == degree))
             {
-              const bool line_flag = o_ptr[0];
+              const bool line_flag = o_ptr & 0b1;
 
               // vertex
               local_vector[counter++] = global_vector[indices[0]];
@@ -83,9 +96,9 @@ gather(const std::vector<Number> &      global_vector,
           else if (((k == 0 || k == degree) && ((0 < j) && (j < degree))) ||
                    (((0 < k) && (k < degree)) && (j == 0 || j == degree)))
             {
-              const bool         line_flag_0 = o_ptr[0];
-              const unsigned int quad_flag   = o_ptr[1];
-              const bool         line_flag_1 = o_ptr[2];
+              const bool         line_flag_0 = o_ptr & 0b00001;
+              const unsigned int quad_flag   = (o_ptr >> 1) & 0b111;
+              const bool         line_flag_1 = o_ptr & 0b10000;
 
               const unsigned int jk = (k == 0 || k == degree) ? j : k;
 
@@ -108,8 +121,8 @@ gather(const std::vector<Number> &      global_vector,
             }
           else if (((0 < k) && (k < degree)) && ((0 < j) && (j < degree)))
             {
-              const unsigned int quad_flag_0 = o_ptr[0];
-              const unsigned int quad_flag_1 = o_ptr[1];
+              const unsigned int quad_flag_0 = (o_ptr >> 0) & 0b111;
+              const unsigned int quad_flag_1 = (o_ptr >> 3) & 0b111;
 
               // quad (jk)
               local_vector[counter++] =
@@ -141,20 +154,20 @@ gather(const std::vector<Number> &      global_vector,
           if (k == 0 || k == degree)
             {
               if (j == 0 || j == degree)
-                o_ptr += 1;
+                o_ptr = std::rotr(o_ptr, 1);
               else if (j == (degree - 1))
-                o_ptr += 3;
+                o_ptr = std::rotr(o_ptr, 5);
             }
           else
             {
               if (j == 0 || j == degree)
-                o_ptr += 3;
+                o_ptr = std::rotr(o_ptr, 5);
               else if (j == (degree - 1))
-                o_ptr += 2;
+                o_ptr = std::rotr(o_ptr, 6);
             }
 
           if (0 < k && k < (degree - 1) && j == degree)
-            o_ptr -= 8;
+            o_ptr = std::rotl(o_ptr, 16);
         }
 
       if (k == 0 || k == degree - 1)
