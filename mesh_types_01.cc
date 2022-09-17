@@ -1,10 +1,13 @@
 #include <deal.II/fe/fe_q.h>
 #include <deal.II/fe/fe_q_iso_q1.h>
+#include <deal.II/fe/mapping_q1.h>
 #include <deal.II/fe/mapping_q_cache.h>
 
 #include <deal.II/grid/grid_generator.h>
 
 #include <deal.II/numerics/data_out.h>
+
+#include <fstream>
 
 #include "include/kershaw.h"
 

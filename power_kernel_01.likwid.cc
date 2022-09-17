@@ -1,5 +1,6 @@
 #include <deal.II/base/conditional_ostream.h>
 #include <deal.II/base/convergence_table.h>
+#include <deal.II/base/parameter_handler.h>
 
 #include <deal.II/distributed/tria.h>
 

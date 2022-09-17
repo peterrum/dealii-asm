@@ -9,6 +9,8 @@
 
 #include <deal.II/numerics/data_out.h>
 
+#include <fstream>
+
 #include "include/grid_generator.h"
 #include "include/grid_tools.h"
 
