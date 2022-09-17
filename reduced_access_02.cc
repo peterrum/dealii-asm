@@ -54,6 +54,7 @@ gather(const std::vector<Number> &      global_vector,
                                         orientations[5],
                                         orientations[7]};
 
+  auto o_ptr = orientation.data();
 
   unsigned int counter = 0;
 
@@ -70,7 +71,8 @@ gather(const std::vector<Number> &      global_vector,
 
               if (j == 0)
                 {
-                  const bool line_flag = orientation[0];
+                  const bool line_flag = o_ptr[0];
+                  o_ptr += 1;
 
                   // vertex 0
                   local_vector[counter++] = global_vector[indices[0]];
@@ -86,9 +88,12 @@ gather(const std::vector<Number> &      global_vector,
                 }
               else if ((0 < j) && (j < degree))
                 {
-                  const bool         line_flag_0 = orientation[1];
-                  const unsigned int quad_flag   = orientation[2];
-                  const bool         line_flag_1 = orientation[3];
+                  const bool         line_flag_0 = o_ptr[0];
+                  const unsigned int quad_flag   = o_ptr[1];
+                  const bool         line_flag_1 = o_ptr[2];
+
+                  if (j == (degree - 1))
+                    o_ptr += 3;
 
                   // line 0
                   local_vector[counter++] =
@@ -109,7 +114,8 @@ gather(const std::vector<Number> &      global_vector,
                 }
               else
                 {
-                  const bool line_flag = orientation[4];
+                  const bool line_flag = o_ptr[0];
+                  o_ptr += 1;
 
                   // vertex 2
                   local_vector[counter++] = global_vector[indices[0]];
@@ -130,9 +136,10 @@ gather(const std::vector<Number> &      global_vector,
 
               if (j == 0)
                 {
-                  const bool         line_flag_0 = orientation[5];
-                  const unsigned int quad_flag   = orientation[6];
-                  const bool         line_flag_1 = orientation[7];
+                  const bool         line_flag_0 = o_ptr[0];
+                  const unsigned int quad_flag   = o_ptr[1];
+                  const bool         line_flag_1 = o_ptr[2];
+                  o_ptr += 3;
 
                   // line 8
                   local_vector[counter++] =
@@ -153,8 +160,10 @@ gather(const std::vector<Number> &      global_vector,
                 }
               else if ((0 < j) && (j < degree))
                 {
-                  const unsigned int quad_flag_0 = orientation[8];
-                  const unsigned int quad_flag_1 = orientation[9];
+                  const unsigned int quad_flag_0 = o_ptr[0];
+                  const unsigned int quad_flag_1 = o_ptr[1];
+                  if (j == (degree - 1))
+                    o_ptr += 2;
 
                   // quad 0 (jk)
                   local_vector[counter++] =
@@ -179,9 +188,10 @@ gather(const std::vector<Number> &      global_vector,
                 }
               else
                 {
-                  const bool         line_flag_0 = orientation[10];
-                  const unsigned int quad_flag   = orientation[11];
-                  const bool         line_flag_1 = orientation[12];
+                  const bool         line_flag_0 = o_ptr[0];
+                  const unsigned int quad_flag   = o_ptr[1];
+                  const bool         line_flag_1 = o_ptr[2];
+                  o_ptr += 3;
 
                   // line 10
                   local_vector[counter++] =
@@ -200,6 +210,9 @@ gather(const std::vector<Number> &      global_vector,
                     global_vector[indices[2] +
                                   reorientate_line(k - 1, line_flag_1)];
                 }
+
+              if (k != (degree - 1) && j == degree)
+                o_ptr -= 8;
             }
           else
             {
@@ -207,7 +220,8 @@ gather(const std::vector<Number> &      global_vector,
 
               if (j == 0)
                 {
-                  const bool line_flag = orientation[13];
+                  const bool line_flag = o_ptr[0];
+                  o_ptr += 1;
 
                   // vertex 4
                   local_vector[counter++] = global_vector[indices[0]];
@@ -223,9 +237,12 @@ gather(const std::vector<Number> &      global_vector,
                 }
               else if ((0 < j) && (j < degree))
                 {
-                  const bool         line_flag_0 = orientation[14];
-                  const unsigned int quad_flag   = orientation[15];
-                  const bool         line_flag_1 = orientation[16];
+                  const bool         line_flag_0 = o_ptr[0];
+                  const unsigned int quad_flag   = o_ptr[1];
+                  const bool         line_flag_1 = o_ptr[2];
+
+                  if (j == (degree - 1))
+                    o_ptr += 3;
 
                   // line 4
                   local_vector[counter++] =
@@ -246,7 +263,8 @@ gather(const std::vector<Number> &      global_vector,
                 }
               else
                 {
-                  const bool line_flag = orientation[17];
+                  const bool line_flag = o_ptr[0];
+                  o_ptr += 1;
 
                   // vertex 6
                   local_vector[counter++] = global_vector[indices[0]];
