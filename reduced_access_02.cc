@@ -43,179 +43,204 @@ gather(const std::vector<Number> &      global_vector,
         {
           // bottom layer (k=0)
 
-          const bool line_flag_0 = orientations[0] == 1;
-          const bool line_flag_1 = orientations[1] == 1;
-          const bool line_flag_2 = orientations[2] == 1;
-          const bool line_flag_3 = orientations[3] == 1;
-
-          const unsigned int quad_flag_4 = orientations[16];
-
-          // vertex 0
-          local_vector[counter++] = global_vector[dofs_of_cell[0]];
-
-          // line 2
-          for (unsigned int i = 0; i < degree - 1; ++i)
-            local_vector[counter++] =
-              global_vector[dofs_of_cell[1] + reorientate_line(i, line_flag_2)];
-
-          // vertex 1
-          local_vector[counter++] = global_vector[dofs_of_cell[2]];
-
-          for (unsigned int j = 1; j < degree; ++j)
+          for (unsigned int j = 0; j <= degree; ++j)
             {
-              // line 0
-              local_vector[counter++] =
-                global_vector[dofs_of_cell[3] +
-                              reorientate_line(j - 1, line_flag_0)];
+              const bool line_flag_0 = orientations[0] == 1;
+              const bool line_flag_1 = orientations[1] == 1;
+              const bool line_flag_2 = orientations[2] == 1;
+              const bool line_flag_3 = orientations[3] == 1;
 
-              // quad 4 (ij)
-              for (unsigned int i = 0; i < degree - 1; ++i)
-                local_vector[counter++] =
-                  global_vector[dofs_of_cell[4] +
-                                reorientate_quad((degree - 1) * (j - 1) + i,
-                                                 quad_flag_4)];
+              const unsigned int quad_flag_4 = orientations[16];
 
-              // line 1
-              local_vector[counter++] =
-                global_vector[dofs_of_cell[5] +
-                              reorientate_line(j - 1, line_flag_1)];
+              if (j == 0)
+                {
+                  // vertex 0
+                  local_vector[counter++] = global_vector[dofs_of_cell[0]];
+
+                  // line 2
+                  for (unsigned int i = 0; i < degree - 1; ++i)
+                    local_vector[counter++] =
+                      global_vector[dofs_of_cell[1] +
+                                    reorientate_line(i, line_flag_2)];
+
+                  // vertex 1
+                  local_vector[counter++] = global_vector[dofs_of_cell[2]];
+                }
+              else if ((0 < j) && (j < degree))
+                {
+                  // line 0
+                  local_vector[counter++] =
+                    global_vector[dofs_of_cell[3] +
+                                  reorientate_line(j - 1, line_flag_0)];
+
+                  // quad 4 (ij)
+                  for (unsigned int i = 0; i < degree - 1; ++i)
+                    local_vector[counter++] =
+                      global_vector[dofs_of_cell[4] +
+                                    reorientate_quad((degree - 1) * (j - 1) + i,
+                                                     quad_flag_4)];
+
+                  // line 1
+                  local_vector[counter++] =
+                    global_vector[dofs_of_cell[5] +
+                                  reorientate_line(j - 1, line_flag_1)];
+                }
+              else
+                {
+                  // vertex 2
+                  local_vector[counter++] = global_vector[dofs_of_cell[6]];
+
+                  // line 3
+                  for (unsigned int i = 0; i < degree - 1; ++i)
+                    local_vector[counter++] =
+                      global_vector[dofs_of_cell[7] +
+                                    reorientate_line(i, line_flag_3)];
+
+                  // vertex 3
+                  local_vector[counter++] = global_vector[dofs_of_cell[8]];
+                }
             }
-
-          // vertex 2
-          local_vector[counter++] = global_vector[dofs_of_cell[6]];
-
-          // line 3
-          for (unsigned int i = 0; i < degree - 1; ++i)
-            local_vector[counter++] =
-              global_vector[dofs_of_cell[7] + reorientate_line(i, line_flag_3)];
-
-          // vertex 3
-          local_vector[counter++] = global_vector[dofs_of_cell[8]];
         }
       else if ((0 < k) && (k < degree))
         {
           // middle layers (0<k<p)
 
-          const bool line_flag_8  = orientations[8] == 1;
-          const bool line_flag_9  = orientations[9] == 1;
-          const bool line_flag_10 = orientations[10] == 1;
-          const bool line_flag_11 = orientations[11] == 1;
-
-          const unsigned int quad_flag_0 = orientations[12];
-          const unsigned int quad_flag_1 = orientations[13];
-          const unsigned int quad_flag_2 = orientations[14];
-          const unsigned int quad_flag_3 = orientations[15];
-
-          // line 8
-          local_vector[counter++] =
-            global_vector[dofs_of_cell[9] +
-                          reorientate_line(k - 1, line_flag_8)];
-
-          // quad 2 (ik)
-          for (unsigned int i = 0; i < degree - 1; ++i)
-            local_vector[counter++] =
-              global_vector[dofs_of_cell[10] +
-                            reorientate_quad((k - 1) * (degree - 1) + i,
-                                             quad_flag_2)];
-
-          // line 9
-          local_vector[counter++] =
-            global_vector[dofs_of_cell[11] +
-                          reorientate_line(k - 1, line_flag_9)];
-
-          for (unsigned int j = 1; j < degree; ++j)
+          for (unsigned int j = 0; j <= degree; ++j)
             {
-              // quad 0 (jk)
-              local_vector[counter++] =
-                global_vector[dofs_of_cell[12] +
-                              reorientate_quad((k - 1) * (degree - 1) + (j - 1),
-                                               quad_flag_0)];
+              const bool line_flag_8  = orientations[8] == 1;
+              const bool line_flag_9  = orientations[9] == 1;
+              const bool line_flag_10 = orientations[10] == 1;
+              const bool line_flag_11 = orientations[11] == 1;
 
-              // hex 0
-              for (unsigned int i = 0; i < degree - 1; ++i)
-                local_vector[counter++] =
-                  global_vector[dofs_of_cell[13] +
-                                (k - 1) * (degree - 1) * (degree - 1) +
-                                (j - 1) * (degree - 1) + i];
+              const unsigned int quad_flag_0 = orientations[12];
+              const unsigned int quad_flag_1 = orientations[13];
+              const unsigned int quad_flag_2 = orientations[14];
+              const unsigned int quad_flag_3 = orientations[15];
 
-              // quad 1 (jk)
-              local_vector[counter++] =
-                global_vector[dofs_of_cell[14] +
-                              reorientate_quad((k - 1) * (degree - 1) + (j - 1),
-                                               quad_flag_1)];
+              if (j == 0)
+                {
+                  // line 8
+                  local_vector[counter++] =
+                    global_vector[dofs_of_cell[9] +
+                                  reorientate_line(k - 1, line_flag_8)];
+
+                  // quad 2 (ik)
+                  for (unsigned int i = 0; i < degree - 1; ++i)
+                    local_vector[counter++] =
+                      global_vector[dofs_of_cell[10] +
+                                    reorientate_quad((k - 1) * (degree - 1) + i,
+                                                     quad_flag_2)];
+
+                  // line 9
+                  local_vector[counter++] =
+                    global_vector[dofs_of_cell[11] +
+                                  reorientate_line(k - 1, line_flag_9)];
+                }
+              else if ((0 < j) && (j < degree))
+                {
+                  // quad 0 (jk)
+                  local_vector[counter++] =
+                    global_vector[dofs_of_cell[12] +
+                                  reorientate_quad((k - 1) * (degree - 1) +
+                                                     (j - 1),
+                                                   quad_flag_0)];
+
+                  // hex 0
+                  for (unsigned int i = 0; i < degree - 1; ++i)
+                    local_vector[counter++] =
+                      global_vector[dofs_of_cell[13] +
+                                    (k - 1) * (degree - 1) * (degree - 1) +
+                                    (j - 1) * (degree - 1) + i];
+
+                  // quad 1 (jk)
+                  local_vector[counter++] =
+                    global_vector[dofs_of_cell[14] +
+                                  reorientate_quad((k - 1) * (degree - 1) +
+                                                     (j - 1),
+                                                   quad_flag_1)];
+                }
+              else
+                {
+                  // line 10
+                  local_vector[counter++] =
+                    global_vector[dofs_of_cell[15] +
+                                  reorientate_line(k - 1, line_flag_10)];
+
+                  // quad 3 (ik)
+                  for (unsigned int i = 0; i < degree - 1; ++i)
+                    local_vector[counter++] =
+                      global_vector[dofs_of_cell[16] +
+                                    reorientate_quad((k - 1) * (degree - 1) + i,
+                                                     quad_flag_3)];
+
+                  // line 11
+                  local_vector[counter++] =
+                    global_vector[dofs_of_cell[17] +
+                                  reorientate_line(k - 1, line_flag_11)];
+                }
             }
-
-          // line 10
-          local_vector[counter++] =
-            global_vector[dofs_of_cell[15] +
-                          reorientate_line(k - 1, line_flag_10)];
-
-          // quad 3 (ik)
-          for (unsigned int i = 0; i < degree - 1; ++i)
-            local_vector[counter++] =
-              global_vector[dofs_of_cell[16] +
-                            reorientate_quad((k - 1) * (degree - 1) + i,
-                                             quad_flag_3)];
-
-          // line 11
-          local_vector[counter++] =
-            global_vector[dofs_of_cell[17] +
-                          reorientate_line(k - 1, line_flag_11)];
         }
       else
         {
           // top layer (k=p)
 
-          const bool line_flag_4 = orientations[4] == 1;
-          const bool line_flag_5 = orientations[5] == 1;
-          const bool line_flag_6 = orientations[6] == 1;
-          const bool line_flag_7 = orientations[7] == 1;
-
-          const unsigned int quad_flag_5 = orientations[17];
-
-          // vertex 4
-          local_vector[counter++] = global_vector[dofs_of_cell[18]];
-
-          // line 6
-          for (unsigned int i = 0; i < degree - 1; ++i)
-            local_vector[counter++] =
-              global_vector[dofs_of_cell[19] +
-                            reorientate_line(i, line_flag_6)];
-
-          // vertex 5
-          local_vector[counter++] = global_vector[dofs_of_cell[20]];
-
-          for (unsigned int j = 1; j < degree; ++j)
+          for (unsigned int j = 0; j <= degree; ++j)
             {
-              // line 4
-              local_vector[counter++] =
-                global_vector[dofs_of_cell[21] +
-                              reorientate_line(j - 1, line_flag_4)];
+              const bool line_flag_4 = orientations[4] == 1;
+              const bool line_flag_5 = orientations[5] == 1;
+              const bool line_flag_6 = orientations[6] == 1;
+              const bool line_flag_7 = orientations[7] == 1;
 
-              // quad 5 (ij)
-              for (unsigned int i = 0; i < degree - 1; ++i)
-                local_vector[counter++] =
-                  global_vector[dofs_of_cell[22] +
-                                reorientate_quad((degree - 1) * (j - 1) + i,
-                                                 quad_flag_5)];
+              const unsigned int quad_flag_5 = orientations[17];
 
-              // line 5
-              local_vector[counter++] =
-                global_vector[dofs_of_cell[23] +
-                              reorientate_line(j - 1, line_flag_5)];
+              if (j == 0)
+                {
+                  // vertex 4
+                  local_vector[counter++] = global_vector[dofs_of_cell[18]];
+
+                  // line 6
+                  for (unsigned int i = 0; i < degree - 1; ++i)
+                    local_vector[counter++] =
+                      global_vector[dofs_of_cell[19] +
+                                    reorientate_line(i, line_flag_6)];
+
+                  // vertex 5
+                  local_vector[counter++] = global_vector[dofs_of_cell[20]];
+                }
+              else if ((0 < j) && (j < degree))
+                {
+                  // line 4
+                  local_vector[counter++] =
+                    global_vector[dofs_of_cell[21] +
+                                  reorientate_line(j - 1, line_flag_4)];
+
+                  // quad 5 (ij)
+                  for (unsigned int i = 0; i < degree - 1; ++i)
+                    local_vector[counter++] =
+                      global_vector[dofs_of_cell[22] +
+                                    reorientate_quad((degree - 1) * (j - 1) + i,
+                                                     quad_flag_5)];
+
+                  // line 5
+                  local_vector[counter++] =
+                    global_vector[dofs_of_cell[23] +
+                                  reorientate_line(j - 1, line_flag_5)];
+                }
+              else
+                {
+                  // vertex 6
+                  local_vector[counter++] = global_vector[dofs_of_cell[24]];
+
+                  // line 7
+                  for (unsigned int i = 0; i < degree - 1; ++i)
+                    local_vector[counter++] =
+                      global_vector[dofs_of_cell[25] +
+                                    reorientate_line(i, line_flag_7)];
+
+                  // vertex 7
+                  local_vector[counter++] = global_vector[dofs_of_cell[26]];
+                }
             }
-
-          // vertex 6
-          local_vector[counter++] = global_vector[dofs_of_cell[24]];
-
-          // line 7
-          for (unsigned int i = 0; i < degree - 1; ++i)
-            local_vector[counter++] =
-              global_vector[dofs_of_cell[25] +
-                            reorientate_line(i, line_flag_7)];
-
-          // vertex 7
-          local_vector[counter++] = global_vector[dofs_of_cell[26]];
         }
     }
 }
