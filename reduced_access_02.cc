@@ -69,7 +69,7 @@ gather(const std::vector<Number> &      global_vector,
             {
               // bottom layer (k=0)
 
-              if (j == 0)
+              if (j == 0 || j == degree)
                 {
                   const bool line_flag = o_ptr[0];
 
@@ -108,28 +108,12 @@ gather(const std::vector<Number> &      global_vector,
                     global_vector[indices[2] +
                                   reorientate_line(j - 1, line_flag_1)];
                 }
-              else
-                {
-                  const bool line_flag = o_ptr[0];
-
-                  // vertex 2
-                  local_vector[counter++] = global_vector[indices[0]];
-
-                  // line 3
-                  for (unsigned int i = 0; i < degree - 1; ++i)
-                    local_vector[counter++] =
-                      global_vector[indices[1] +
-                                    reorientate_line(i, line_flag)];
-
-                  // vertex 3
-                  local_vector[counter++] = global_vector[indices[2]];
-                }
             }
           else if ((0 < k) && (k < degree))
             {
               // middle layers (0<k<p)
 
-              if (j == 0)
+              if (j == 0 || j == degree)
                 {
                   const bool         line_flag_0 = o_ptr[0];
                   const unsigned int quad_flag   = o_ptr[1];
@@ -177,29 +161,6 @@ gather(const std::vector<Number> &      global_vector,
                                   reorientate_quad((k - 1) * (degree - 1) +
                                                      (j - 1),
                                                    quad_flag_1)];
-                }
-              else
-                {
-                  const bool         line_flag_0 = o_ptr[0];
-                  const unsigned int quad_flag   = o_ptr[1];
-                  const bool         line_flag_1 = o_ptr[2];
-
-                  // line 10
-                  local_vector[counter++] =
-                    global_vector[indices[0] +
-                                  reorientate_line(k - 1, line_flag_0)];
-
-                  // quad 3 (ik)
-                  for (unsigned int i = 0; i < degree - 1; ++i)
-                    local_vector[counter++] =
-                      global_vector[indices[1] +
-                                    reorientate_quad((k - 1) * (degree - 1) + i,
-                                                     quad_flag)];
-
-                  // line 11
-                  local_vector[counter++] =
-                    global_vector[indices[2] +
-                                  reorientate_line(k - 1, line_flag_1)];
                 }
             }
 
