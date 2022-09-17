@@ -47,7 +47,7 @@ gather(const std::vector<Number> &      global_vector,
 
               if (j == 0)
                 {
-                  const bool line_flag_2 = orientations[2] == 1;
+                  const bool line_flag = orientations[2] == 1;
 
                   // vertex 0
                   local_vector[counter++] = global_vector[dofs_of_cell[0]];
@@ -56,7 +56,7 @@ gather(const std::vector<Number> &      global_vector,
                   for (unsigned int i = 0; i < degree - 1; ++i)
                     local_vector[counter++] =
                       global_vector[dofs_of_cell[1] +
-                                    reorientate_line(i, line_flag_2)];
+                                    reorientate_line(i, line_flag)];
 
                   // vertex 1
                   local_vector[counter++] = global_vector[dofs_of_cell[2]];
@@ -64,7 +64,7 @@ gather(const std::vector<Number> &      global_vector,
               else if ((0 < j) && (j < degree))
                 {
                   const bool         line_flag_0 = orientations[0] == 1;
-                  const unsigned int quad_flag_4 = orientations[16];
+                  const unsigned int quad_flag   = orientations[16];
                   const bool         line_flag_1 = orientations[1] == 1;
 
                   // line 0
@@ -77,7 +77,7 @@ gather(const std::vector<Number> &      global_vector,
                     local_vector[counter++] =
                       global_vector[dofs_of_cell[4] +
                                     reorientate_quad((degree - 1) * (j - 1) + i,
-                                                     quad_flag_4)];
+                                                     quad_flag)];
 
                   // line 1
                   local_vector[counter++] =
@@ -86,7 +86,7 @@ gather(const std::vector<Number> &      global_vector,
                 }
               else
                 {
-                  const bool line_flag_3 = orientations[3] == 1;
+                  const bool line_flag = orientations[3] == 1;
 
                   // vertex 2
                   local_vector[counter++] = global_vector[dofs_of_cell[6]];
@@ -95,7 +95,7 @@ gather(const std::vector<Number> &      global_vector,
                   for (unsigned int i = 0; i < degree - 1; ++i)
                     local_vector[counter++] =
                       global_vector[dofs_of_cell[7] +
-                                    reorientate_line(i, line_flag_3)];
+                                    reorientate_line(i, line_flag)];
 
                   // vertex 3
                   local_vector[counter++] = global_vector[dofs_of_cell[8]];
@@ -107,26 +107,26 @@ gather(const std::vector<Number> &      global_vector,
 
               if (j == 0)
                 {
-                  const bool         line_flag_8 = orientations[8] == 1;
-                  const unsigned int quad_flag_2 = orientations[14];
-                  const bool         line_flag_9 = orientations[9] == 1;
+                  const bool         line_flag_0 = orientations[8] == 1;
+                  const unsigned int quad_flag   = orientations[14];
+                  const bool         line_flag_1 = orientations[9] == 1;
 
                   // line 8
                   local_vector[counter++] =
                     global_vector[dofs_of_cell[9] +
-                                  reorientate_line(k - 1, line_flag_8)];
+                                  reorientate_line(k - 1, line_flag_0)];
 
                   // quad 2 (ik)
                   for (unsigned int i = 0; i < degree - 1; ++i)
                     local_vector[counter++] =
                       global_vector[dofs_of_cell[10] +
                                     reorientate_quad((k - 1) * (degree - 1) + i,
-                                                     quad_flag_2)];
+                                                     quad_flag)];
 
                   // line 9
                   local_vector[counter++] =
                     global_vector[dofs_of_cell[11] +
-                                  reorientate_line(k - 1, line_flag_9)];
+                                  reorientate_line(k - 1, line_flag_1)];
                 }
               else if ((0 < j) && (j < degree))
                 {
@@ -156,26 +156,26 @@ gather(const std::vector<Number> &      global_vector,
                 }
               else
                 {
-                  const bool         line_flag_10 = orientations[10] == 1;
-                  const unsigned int quad_flag_3  = orientations[15];
-                  const bool         line_flag_11 = orientations[11] == 1;
+                  const bool         line_flag_0 = orientations[10] == 1;
+                  const unsigned int quad_flag   = orientations[15];
+                  const bool         line_flag_1 = orientations[11] == 1;
 
                   // line 10
                   local_vector[counter++] =
                     global_vector[dofs_of_cell[15] +
-                                  reorientate_line(k - 1, line_flag_10)];
+                                  reorientate_line(k - 1, line_flag_0)];
 
                   // quad 3 (ik)
                   for (unsigned int i = 0; i < degree - 1; ++i)
                     local_vector[counter++] =
                       global_vector[dofs_of_cell[16] +
                                     reorientate_quad((k - 1) * (degree - 1) + i,
-                                                     quad_flag_3)];
+                                                     quad_flag)];
 
                   // line 11
                   local_vector[counter++] =
                     global_vector[dofs_of_cell[17] +
-                                  reorientate_line(k - 1, line_flag_11)];
+                                  reorientate_line(k - 1, line_flag_1)];
                 }
             }
           else
@@ -184,7 +184,7 @@ gather(const std::vector<Number> &      global_vector,
 
               if (j == 0)
                 {
-                  const bool line_flag_6 = orientations[6] == 1;
+                  const bool line_flag = orientations[6] == 1;
 
                   // vertex 4
                   local_vector[counter++] = global_vector[dofs_of_cell[18]];
@@ -193,37 +193,37 @@ gather(const std::vector<Number> &      global_vector,
                   for (unsigned int i = 0; i < degree - 1; ++i)
                     local_vector[counter++] =
                       global_vector[dofs_of_cell[19] +
-                                    reorientate_line(i, line_flag_6)];
+                                    reorientate_line(i, line_flag)];
 
                   // vertex 5
                   local_vector[counter++] = global_vector[dofs_of_cell[20]];
                 }
               else if ((0 < j) && (j < degree))
                 {
-                  const bool         line_flag_4 = orientations[4] == 1;
-                  const bool         line_flag_5 = orientations[5] == 1;
-                  const unsigned int quad_flag_5 = orientations[17];
+                  const bool         line_flag_0 = orientations[4] == 1;
+                  const unsigned int quad_flag   = orientations[17];
+                  const bool         line_flag_1 = orientations[5] == 1;
 
                   // line 4
                   local_vector[counter++] =
                     global_vector[dofs_of_cell[21] +
-                                  reorientate_line(j - 1, line_flag_4)];
+                                  reorientate_line(j - 1, line_flag_0)];
 
                   // quad 5 (ij)
                   for (unsigned int i = 0; i < degree - 1; ++i)
                     local_vector[counter++] =
                       global_vector[dofs_of_cell[22] +
                                     reorientate_quad((degree - 1) * (j - 1) + i,
-                                                     quad_flag_5)];
+                                                     quad_flag)];
 
                   // line 5
                   local_vector[counter++] =
                     global_vector[dofs_of_cell[23] +
-                                  reorientate_line(j - 1, line_flag_5)];
+                                  reorientate_line(j - 1, line_flag_1)];
                 }
               else
                 {
-                  const bool line_flag_7 = orientations[7] == 1;
+                  const bool line_flag = orientations[7] == 1;
 
                   // vertex 6
                   local_vector[counter++] = global_vector[dofs_of_cell[24]];
@@ -232,7 +232,7 @@ gather(const std::vector<Number> &      global_vector,
                   for (unsigned int i = 0; i < degree - 1; ++i)
                     local_vector[counter++] =
                       global_vector[dofs_of_cell[25] +
-                                    reorientate_line(i, line_flag_7)];
+                                    reorientate_line(i, line_flag)];
 
                   // vertex 7
                   local_vector[counter++] = global_vector[dofs_of_cell[26]];
