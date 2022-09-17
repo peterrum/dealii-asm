@@ -18,8 +18,10 @@
 #include <deal.II/lac/diagonal_matrix.h>
 #include <deal.II/lac/dynamic_sparsity_pattern.h>
 #include <deal.II/lac/precondition.h>
+#include <deal.II/lac/solver_bicgstab.h>
 #include <deal.II/lac/solver_cg.h>
 #include <deal.II/lac/solver_gmres.h>
+#include <deal.II/lac/solver_idr.h>
 #include <deal.II/lac/sparse_matrix_tools.h>
 #include <deal.II/lac/trilinos_precondition.h>
 #include <deal.II/lac/trilinos_sparse_matrix.h>
@@ -182,6 +184,16 @@ test(const unsigned int fe_degree,
           SolverFGMRES<VectorType> solver(reduction_control);
           solver.solve(op, dst, src, precon);
         }
+      else if (type == "Bicgstab")
+        {
+          SolverBicgstab<VectorType> solver(reduction_control);
+          solver.solve(op, dst, src, precon);
+        }
+      else if (type == "IDR")
+        {
+          SolverIDR<VectorType> solver(reduction_control);
+          solver.solve(op, dst, src, precon);
+        }
       else
         {
           AssertThrow(false, ExcMessage("Solver <" + type + "> is not known!"))
@@ -210,10 +222,12 @@ test(const unsigned int fe_degree,
 }
 
 /**
- * mpirun -np 40 ./outer_solver_01 3 4 6 GMRES  1 40
- * mpirun -np 40 ./outer_solver_01 3 4 6 CG     1 40
- * mpirun -np 40 ./outer_solver_01 3 4 6 FGMRES 1 40
- * mpirun -np 40 ./outer_solver_01 3 4 6 FCG    1 40
+ * mpirun -np 40 ./outer_solver_01 3 4 6 GMRES    1 40
+ * mpirun -np 40 ./outer_solver_01 3 4 6 CG       1 40
+ * mpirun -np 40 ./outer_solver_01 3 4 6 FGMRES   1 40
+ * mpirun -np 40 ./outer_solver_01 3 4 6 FCG      1 40
+ * mpirun -np 40 ./outer_solver_01 3 4 6 IDR      1 40
+ * mpirun -np 40 ./outer_solver_01 3 4 6 Bicgstab 1 40
  */
 int
 main(int argc, char *argv[])
