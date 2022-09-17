@@ -1,28 +1,38 @@
 - Create mesh: hypercube
 
 - Create operator:
-  - n cells: 64
-  - n dofs:  625
+  - n cells:          64
+  - n dofs:           625
+  - compress indices: false
+  - mapping type:     
 
 - Create system preconditioner: Multigrid
  - type:       h
  - p sequence: bisect
 
 - Create operator:
-  - n cells: 1
-  - n dofs:  16
+  - n cells:          1
+  - n dofs:           16
+  - compress indices: false
+  - mapping type:     
 
 - Create operator:
-  - n cells: 4
-  - n dofs:  49
+  - n cells:          4
+  - n dofs:           49
+  - compress indices: false
+  - mapping type:     
 
 - Create operator:
-  - n cells: 16
-  - n dofs:  169
+  - n cells:          16
+  - n dofs:           169
+  - compress indices: false
+  - mapping type:     
 
 - Create operator:
-  - n cells: 64
-  - n dofs:  625
+  - n cells:          64
+  - n dofs:           625
+  - compress indices: false
+  - mapping type:     
 
 - Setting up coarse-grid solver on level 0
 
@@ -61,7 +71,7 @@
     - degree: 1
     - min ev: 1.10372
     - max ev: 1.32446
-    - omega:  0.823662
+    - omega:  0.823661
 
 - Setting up smoother on level 3
 
@@ -74,7 +84,7 @@
     - degree: 1
     - min ev: 1.16311
     - max ev: 1.39573
-    - omega:  0.781606
+    - omega:  0.781605
 
  - Solving with GMRES
    - max iterations: 1000
