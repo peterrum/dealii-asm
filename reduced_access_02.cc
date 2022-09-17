@@ -81,7 +81,7 @@ gather(const std::vector<Number> &      global_vector,
           const auto indices =
             dofs_of_cell.begin() + 3 * (compressed_k * 3 + compressed_j);
 
-          if ((k == 0 || k == degree) && (j == 0 || j == degree))
+          if ((o != 0) && (k == 0 || k == degree) && (j == 0 || j == degree))
             {
               const bool line_flag = o_ptr & 0b1;
 
@@ -96,8 +96,9 @@ gather(const std::vector<Number> &      global_vector,
               // vertex
               local_vector[counter++] = global_vector[indices[2]];
             }
-          else if (((k == 0 || k == degree) && ((0 < j) && (j < degree))) ||
-                   (((0 < k) && (k < degree)) && (j == 0 || j == degree)))
+          else if ((o != 0) &&
+                   (((k == 0 || k == degree) && ((0 < j) && (j < degree))) ||
+                    (((0 < k) && (k < degree)) && (j == 0 || j == degree))))
             {
               const bool         line_flag_0 = o_ptr & 0b00001;
               const unsigned int quad_flag   = (o_ptr >> 1) & 0b111;
@@ -122,7 +123,8 @@ gather(const std::vector<Number> &      global_vector,
                 global_vector[indices[2] +
                               reorientate_line(jk - 1, line_flag_1)];
             }
-          else if ((0 < k) && (k < degree) && (0 < j) && (j < degree))
+          else if ((o != 0) && (0 < k) && (k < degree) && (0 < j) &&
+                   (j < degree))
             {
               const unsigned int quad_flag_0 = (o_ptr >> 0) & 0b111;
               const unsigned int quad_flag_1 = (o_ptr >> 3) & 0b111;
@@ -141,6 +143,16 @@ gather(const std::vector<Number> &      global_vector,
               local_vector[counter++] =
                 global_vector[indices[2] +
                               reorientate_quad(offset, quad_flag_1)];
+            }
+          else
+            {
+              local_vector[counter++] = global_vector[indices[0] + offset];
+
+              for (unsigned int i = 0; i < degree - 1; ++i)
+                local_vector[counter++] =
+                  global_vector[indices[1] + offset * (degree - 1) + i];
+
+              local_vector[counter++] = global_vector[indices[2] + offset];
             }
 
           if (j == 0 || j == degree - 1)
