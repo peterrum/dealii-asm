@@ -61,24 +61,24 @@ gather(const std::vector<Number> &      global_vector,
           // vertex 1
           local_vector[counter++] = global_vector[dofs_of_cell[2]];
 
-          for (unsigned int j = 0; j < degree - 1; ++j)
+          for (unsigned int j = 1; j < degree; ++j)
             {
               // line 0
               local_vector[counter++] =
                 global_vector[dofs_of_cell[3] +
-                              reorientate_line(j, line_flag_0)];
+                              reorientate_line(j - 1, line_flag_0)];
 
               // quad 4 (ij)
               for (unsigned int i = 0; i < degree - 1; ++i)
                 local_vector[counter++] =
                   global_vector[dofs_of_cell[4] +
-                                reorientate_quad((degree - 1) * j + i,
+                                reorientate_quad((degree - 1) * (j - 1) + i,
                                                  quad_flag_4)];
 
               // line 1
               local_vector[counter++] =
                 global_vector[dofs_of_cell[5] +
-                              reorientate_line(j, line_flag_1)];
+                              reorientate_line(j - 1, line_flag_1)];
             }
 
           // vertex 2
@@ -123,12 +123,12 @@ gather(const std::vector<Number> &      global_vector,
             global_vector[dofs_of_cell[11] +
                           reorientate_line(k - 1, line_flag_9)];
 
-          for (unsigned int j = 0; j < degree - 1; ++j)
+          for (unsigned int j = 1; j < degree; ++j)
             {
               // quad 0 (jk)
               local_vector[counter++] =
                 global_vector[dofs_of_cell[12] +
-                              reorientate_quad((k - 1) * (degree - 1) + j,
+                              reorientate_quad((k - 1) * (degree - 1) + (j - 1),
                                                quad_flag_0)];
 
               // hex 0
@@ -136,12 +136,12 @@ gather(const std::vector<Number> &      global_vector,
                 local_vector[counter++] =
                   global_vector[dofs_of_cell[13] +
                                 (k - 1) * (degree - 1) * (degree - 1) +
-                                j * (degree - 1) + i];
+                                (j - 1) * (degree - 1) + i];
 
               // quad 1 (jk)
               local_vector[counter++] =
                 global_vector[dofs_of_cell[14] +
-                              reorientate_quad((k - 1) * (degree - 1) + j,
+                              reorientate_quad((k - 1) * (degree - 1) + (j - 1),
                                                quad_flag_1)];
             }
 
@@ -185,24 +185,24 @@ gather(const std::vector<Number> &      global_vector,
           // vertex 5
           local_vector[counter++] = global_vector[dofs_of_cell[20]];
 
-          for (unsigned int j = 0; j < degree - 1; ++j)
+          for (unsigned int j = 1; j < degree; ++j)
             {
               // line 4
               local_vector[counter++] =
                 global_vector[dofs_of_cell[21] +
-                              reorientate_line(j, line_flag_4)];
+                              reorientate_line(j - 1, line_flag_4)];
 
               // quad 5 (ij)
               for (unsigned int i = 0; i < degree - 1; ++i)
                 local_vector[counter++] =
                   global_vector[dofs_of_cell[22] +
-                                reorientate_quad((degree - 1) * j + i,
+                                reorientate_quad((degree - 1) * (j - 1) + i,
                                                  quad_flag_5)];
 
               // line 5
               local_vector[counter++] =
                 global_vector[dofs_of_cell[23] +
-                              reorientate_line(j, line_flag_5)];
+                              reorientate_line(j - 1, line_flag_5)];
             }
 
           // vertex 6
