@@ -68,6 +68,8 @@ gather(const std::vector<Number> &      global_vector,
           if ((o != 0) && (o_ptr & 0b1) && (k == 0 || k == degree) &&
               (j == 0 || j == degree))
             {
+              // case 1: vertex-line-vertex
+
               // vertex
               local_vector[counter++] = global_vector[indices[0]];
 
@@ -83,6 +85,8 @@ gather(const std::vector<Number> &      global_vector,
                    (((k == 0 || k == degree) && ((0 < j) && (j < degree))) ||
                     (((0 < k) && (k < degree)) && (j == 0 || j == degree))))
             {
+              // case 2: line-quad-line
+
               const unsigned int jk = (k == 0 || k == degree) ? j : k;
 
               // line
@@ -110,6 +114,8 @@ gather(const std::vector<Number> &      global_vector,
           else if ((o != 0) && (o_ptr & 0b111111) && (0 < k) && (k < degree) &&
                    (0 < j) && (j < degree))
             {
+              // case 3: quad-hex-quad
+
               // quad (jk)
               const unsigned int quad_flag_0 = (o_ptr >> 0) & 0b111;
               if (quad_flag_0 != 0)
@@ -135,6 +141,8 @@ gather(const std::vector<Number> &      global_vector,
             }
           else
             {
+              // case 4: standard -> nothing to do
+
               local_vector[counter++] = global_vector[indices[0] + offset];
 
               for (unsigned int i = 0; i < degree - 1; ++i)
