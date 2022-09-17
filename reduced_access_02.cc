@@ -39,12 +39,11 @@ gather(const std::vector<Number> &      global_vector,
 
   for (unsigned int k = 0; k <= degree; ++k)
     {
-      if (k == 0)
+      for (unsigned int j = 0; j <= degree; ++j)
         {
-          // bottom layer (k=0)
-
-          for (unsigned int j = 0; j <= degree; ++j)
+          if (k == 0)
             {
+              // bottom layer (k=0)
               const bool line_flag_0 = orientations[0] == 1;
               const bool line_flag_1 = orientations[1] == 1;
               const bool line_flag_2 = orientations[2] == 1;
@@ -100,13 +99,9 @@ gather(const std::vector<Number> &      global_vector,
                   local_vector[counter++] = global_vector[dofs_of_cell[8]];
                 }
             }
-        }
-      else if ((0 < k) && (k < degree))
-        {
-          // middle layers (0<k<p)
-
-          for (unsigned int j = 0; j <= degree; ++j)
+          else if ((0 < k) && (k < degree))
             {
+              // middle layers (0<k<p)
               const bool line_flag_8  = orientations[8] == 1;
               const bool line_flag_9  = orientations[9] == 1;
               const bool line_flag_10 = orientations[10] == 1;
@@ -179,13 +174,9 @@ gather(const std::vector<Number> &      global_vector,
                                   reorientate_line(k - 1, line_flag_11)];
                 }
             }
-        }
-      else
-        {
-          // top layer (k=p)
-
-          for (unsigned int j = 0; j <= degree; ++j)
+          else
             {
+              // top layer (k=p)
               const bool line_flag_4 = orientations[4] == 1;
               const bool line_flag_5 = orientations[5] == 1;
               const bool line_flag_6 = orientations[6] == 1;
