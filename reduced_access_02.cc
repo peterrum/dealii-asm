@@ -18,15 +18,6 @@ gather(const std::vector<Number> &      global_vector,
        const Table<2, unsigned int> &   orientation_table,
        std::vector<Number> &            local_vector)
 {
-  // .... on quads
-  const auto reorientate_quad =
-    [&orientation_table](const unsigned int i, const unsigned int orientation) {
-      if (orientation == 0)
-        return i;
-      else
-        return orientation_table[orientation][i];
-    };
-
   std::vector<std::pair<unsigned int, unsigned int>> orientation{
     // bottom layer
     {1, orientations[2]},
@@ -60,9 +51,9 @@ gather(const std::vector<Number> &      global_vector,
 
   const unsigned int o = o_ptr;
 
-  unsigned int counter = 0;
-
-  for (unsigned int k = 0, compressed_k = 0, offset_k = 0; k <= degree; ++k)
+  for (unsigned int k = 0, compressed_k = 0, offset_k = 0, counter = 0;
+       k <= degree;
+       ++k)
     {
       for (unsigned int j = 0, compressed_j = 0, offset_j = 0; j <= degree; ++j)
         {
@@ -104,8 +95,8 @@ gather(const std::vector<Number> &      global_vector,
               for (unsigned int i = 0; i < degree - 1; ++i)
                 local_vector[counter++] =
                   global_vector[indices[1] +
-                                reorientate_quad((degree - 1) * (jk - 1) + i,
-                                                 quad_flag)];
+                                orientation_table[quad_flag]
+                                                 [(degree - 1) * (jk - 1) + i]];
 
               // line
               if (o_ptr & 0b10000)
@@ -122,7 +113,7 @@ gather(const std::vector<Number> &      global_vector,
               if (quad_flag_0 != 0)
                 local_vector[counter++] =
                   global_vector[indices[0] +
-                                reorientate_quad(offset, quad_flag_0)];
+                                orientation_table[quad_flag_0][offset]];
               else
                 local_vector[counter++] = global_vector[indices[0] + offset];
 
@@ -136,7 +127,7 @@ gather(const std::vector<Number> &      global_vector,
               if (quad_flag_1 != 0)
                 local_vector[counter++] =
                   global_vector[indices[2] +
-                                reorientate_quad(offset, quad_flag_1)];
+                                orientation_table[quad_flag_1][offset]];
               else
                 local_vector[counter++] = global_vector[indices[2] + offset];
             }
