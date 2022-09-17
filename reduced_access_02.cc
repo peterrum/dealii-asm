@@ -41,17 +41,19 @@ gather(const std::vector<Number> &      global_vector,
     {1, orientations[5]},
     {1, orientations[7]}};
 
-  unsigned int o_ptr = 0;
+  unsigned int o = 0;
 
   for (unsigned int i = 0, s = 0; i < orientation.size(); ++i)
     {
-      o_ptr += orientation[i].second << s;
+      o += orientation[i].second << s;
       s += orientation[i].first;
     }
 
-  const unsigned int o = o_ptr;
-
-  for (unsigned int k = 0, compressed_k = 0, offset_k = 0, counter = 0;
+  for (unsigned int k            = 0,
+                    compressed_k = 0,
+                    offset_k     = 0,
+                    counter      = 0,
+                    o_ptr        = o;
        k <= degree;
        ++k)
     {
