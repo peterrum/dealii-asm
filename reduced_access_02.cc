@@ -71,10 +71,13 @@ gather(const std::vector<Number> &      global_vector,
 
   unsigned int counter = 0;
 
-  for (unsigned int k = 0, compressed_k = 0; k <= degree; ++k)
+  for (unsigned int k = 0, compressed_k = 0, offset_k = 0; k <= degree; ++k)
     {
-      for (unsigned int j = 0, compressed_j = 0; j <= degree; ++j)
+      for (unsigned int j = 0, compressed_j = 0, offset_j = 0; j <= degree; ++j)
         {
+          const unsigned int offset =
+            (compressed_j == 1 ? degree - 1 : 1) * offset_k + offset_j;
+
           const auto indices =
             dofs_of_cell.begin() + 3 * (compressed_k * 3 + compressed_j);
 
@@ -119,7 +122,7 @@ gather(const std::vector<Number> &      global_vector,
                 global_vector[indices[2] +
                               reorientate_line(jk - 1, line_flag_1)];
             }
-          else if (((0 < k) && (k < degree)) && ((0 < j) && (j < degree)))
+          else if ((0 < k) && (k < degree) && (0 < j) && (j < degree))
             {
               const unsigned int quad_flag_0 = (o_ptr >> 0) & 0b111;
               const unsigned int quad_flag_1 = (o_ptr >> 3) & 0b111;
@@ -127,29 +130,28 @@ gather(const std::vector<Number> &      global_vector,
               // quad (jk)
               local_vector[counter++] =
                 global_vector[indices[0] +
-                              reorientate_quad((k - 1) * (degree - 1) + (j - 1),
-                                               quad_flag_0)];
+                              reorientate_quad(offset, quad_flag_0)];
 
               // hex
               for (unsigned int i = 0; i < degree - 1; ++i)
                 local_vector[counter++] =
-                  global_vector[indices[1] +
-                                (k - 1) * (degree - 1) * (degree - 1) +
-                                (j - 1) * (degree - 1) + i];
+                  global_vector[indices[1] + offset * (degree - 1) + i];
 
               // quad (jk)
               local_vector[counter++] =
                 global_vector[indices[2] +
-                              reorientate_quad((k - 1) * (degree - 1) + (j - 1),
-                                               quad_flag_1)];
+                              reorientate_quad(offset, quad_flag_1)];
             }
 
           if (j == 0 || j == degree - 1)
             {
               ++compressed_j;
+              offset_j = 0;
             }
           else
-            {}
+            {
+              ++offset_j;
+            }
 
           if (k == 0 || k == degree)
             {
@@ -173,9 +175,12 @@ gather(const std::vector<Number> &      global_vector,
       if (k == 0 || k == degree - 1)
         {
           ++compressed_k;
+          offset_k = 0;
         }
       else
-        {}
+        {
+          ++offset_k;
+        }
     }
 }
 
