@@ -164,6 +164,57 @@ private:
 };
 
 
+template <int dim, typename Number, typename VectorizedArrayType>
+class MyOperatorAdapter : public Subscriptor
+{
+public:
+  using VectorType = LinearAlgebra::distributed::Vector<Number>;
+
+  MyOperatorAdapter(const MyOperator<dim, Number, VectorizedArrayType> &op)
+    : op(op)
+  {}
+
+  types::global_dof_index
+  m() const
+  {
+    return op.m();
+  }
+
+  Number
+  el(unsigned int i, unsigned int j) const
+  {
+    return op.el(i, j);
+  }
+
+  void
+  vmult(VectorType &dst, const VectorType &src) const
+  {
+    op.vmult(dst, src);
+  }
+
+  void
+  initialize_dof_vector(VectorType &vec) const
+  {
+    op.initialize_dof_vector(vec);
+  }
+
+  void
+  compute_inverse_diagonal(VectorType &diagonal) const
+  {
+    op.compute_inverse_diagonal(diagonal);
+  }
+
+  const AffineConstraints<Number> &
+  get_constraints() const
+  {
+    return op.get_constraints();
+  }
+
+private:
+  const MyOperator<dim, Number, VectorizedArrayType> &op;
+};
+
+
 template <typename VectorType>
 class DiagonalMatrixPrePost : public Subscriptor
 {
@@ -284,7 +335,7 @@ test(const unsigned int fe_degree,
 
   const OperatorType op_pre_post(matrix_free);
 
-  const auto &op = op_pre_post;
+  const MyOperatorAdapter op(op_pre_post);
 
   const auto precon_diag = std::make_shared<DiagonalMatrix<VectorType>>();
   op_pre_post.compute_inverse_diagonal(precon_diag->get_vector());
