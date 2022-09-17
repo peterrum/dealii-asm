@@ -72,7 +72,6 @@ gather(const std::vector<Number> &      global_vector,
               if (j == 0)
                 {
                   const bool line_flag = o_ptr[0];
-                  o_ptr += 1;
 
                   // vertex 0
                   local_vector[counter++] = global_vector[indices[0]];
@@ -91,9 +90,6 @@ gather(const std::vector<Number> &      global_vector,
                   const bool         line_flag_0 = o_ptr[0];
                   const unsigned int quad_flag   = o_ptr[1];
                   const bool         line_flag_1 = o_ptr[2];
-
-                  if (j == (degree - 1))
-                    o_ptr += 3;
 
                   // line 0
                   local_vector[counter++] =
@@ -115,7 +111,6 @@ gather(const std::vector<Number> &      global_vector,
               else
                 {
                   const bool line_flag = o_ptr[0];
-                  o_ptr += 1;
 
                   // vertex 2
                   local_vector[counter++] = global_vector[indices[0]];
@@ -139,7 +134,6 @@ gather(const std::vector<Number> &      global_vector,
                   const bool         line_flag_0 = o_ptr[0];
                   const unsigned int quad_flag   = o_ptr[1];
                   const bool         line_flag_1 = o_ptr[2];
-                  o_ptr += 3;
 
                   // line 8
                   local_vector[counter++] =
@@ -162,8 +156,6 @@ gather(const std::vector<Number> &      global_vector,
                 {
                   const unsigned int quad_flag_0 = o_ptr[0];
                   const unsigned int quad_flag_1 = o_ptr[1];
-                  if (j == (degree - 1))
-                    o_ptr += 2;
 
                   // quad 0 (jk)
                   local_vector[counter++] =
@@ -191,7 +183,6 @@ gather(const std::vector<Number> &      global_vector,
                   const bool         line_flag_0 = o_ptr[0];
                   const unsigned int quad_flag   = o_ptr[1];
                   const bool         line_flag_1 = o_ptr[2];
-                  o_ptr += 3;
 
                   // line 10
                   local_vector[counter++] =
@@ -210,9 +201,6 @@ gather(const std::vector<Number> &      global_vector,
                     global_vector[indices[2] +
                                   reorientate_line(k - 1, line_flag_1)];
                 }
-
-              if (k != (degree - 1) && j == degree)
-                o_ptr -= 8;
             }
           else
             {
@@ -221,7 +209,6 @@ gather(const std::vector<Number> &      global_vector,
               if (j == 0)
                 {
                   const bool line_flag = o_ptr[0];
-                  o_ptr += 1;
 
                   // vertex 4
                   local_vector[counter++] = global_vector[indices[0]];
@@ -240,9 +227,6 @@ gather(const std::vector<Number> &      global_vector,
                   const bool         line_flag_0 = o_ptr[0];
                   const unsigned int quad_flag   = o_ptr[1];
                   const bool         line_flag_1 = o_ptr[2];
-
-                  if (j == (degree - 1))
-                    o_ptr += 3;
 
                   // line 4
                   local_vector[counter++] =
@@ -264,7 +248,6 @@ gather(const std::vector<Number> &      global_vector,
               else
                 {
                   const bool line_flag = o_ptr[0];
-                  o_ptr += 1;
 
                   // vertex 6
                   local_vector[counter++] = global_vector[indices[0]];
@@ -286,6 +269,24 @@ gather(const std::vector<Number> &      global_vector,
             }
           else
             {}
+
+          if (k == 0 || k == degree)
+            {
+              if (j == 0 || j == degree)
+                o_ptr += 1;
+              else if (j == (degree - 1))
+                o_ptr += 3;
+            }
+          else
+            {
+              if (j == 0 || j == degree)
+                o_ptr += 3;
+              else if (j == (degree - 1))
+                o_ptr += 2;
+            }
+
+          if (0 < k && k < (degree - 1) && j == degree)
+            o_ptr -= 8;
         }
 
       if (k == 0 || k == degree - 1)
