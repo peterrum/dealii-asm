@@ -65,103 +65,90 @@ gather(const std::vector<Number> &      global_vector,
           const auto indices =
             dofs_of_cell.begin() + 3 * (compressed_k * 3 + compressed_j);
 
-          if (k == 0 || k == degree)
+          if ((k == 0 || k == degree) && (j == 0 || j == degree))
             {
-              // bottom layer (k=0)
+              const bool line_flag = o_ptr[0];
 
-              if (j == 0 || j == degree)
-                {
-                  const bool line_flag = o_ptr[0];
+              // vertex 0
+              local_vector[counter++] = global_vector[indices[0]];
 
-                  // vertex 0
-                  local_vector[counter++] = global_vector[indices[0]];
+              // line 2
+              for (unsigned int i = 0; i < degree - 1; ++i)
+                local_vector[counter++] =
+                  global_vector[indices[1] + reorientate_line(i, line_flag)];
 
-                  // line 2
-                  for (unsigned int i = 0; i < degree - 1; ++i)
-                    local_vector[counter++] =
-                      global_vector[indices[1] +
-                                    reorientate_line(i, line_flag)];
-
-                  // vertex 1
-                  local_vector[counter++] = global_vector[indices[2]];
-                }
-              else if ((0 < j) && (j < degree))
-                {
-                  const bool         line_flag_0 = o_ptr[0];
-                  const unsigned int quad_flag   = o_ptr[1];
-                  const bool         line_flag_1 = o_ptr[2];
-
-                  // line 0
-                  local_vector[counter++] =
-                    global_vector[indices[0] +
-                                  reorientate_line(j - 1, line_flag_0)];
-
-                  // quad 4 (ij)
-                  for (unsigned int i = 0; i < degree - 1; ++i)
-                    local_vector[counter++] =
-                      global_vector[indices[1] +
-                                    reorientate_quad((degree - 1) * (j - 1) + i,
-                                                     quad_flag)];
-
-                  // line 1
-                  local_vector[counter++] =
-                    global_vector[indices[2] +
-                                  reorientate_line(j - 1, line_flag_1)];
-                }
+              // vertex 1
+              local_vector[counter++] = global_vector[indices[2]];
             }
-          else if ((0 < k) && (k < degree))
+          else if ((k == 0 || k == degree) && ((0 < j) && (j < degree)))
             {
-              // middle layers (0<k<p)
+              const bool         line_flag_0 = o_ptr[0];
+              const unsigned int quad_flag   = o_ptr[1];
+              const bool         line_flag_1 = o_ptr[2];
 
-              if (j == 0 || j == degree)
-                {
-                  const bool         line_flag_0 = o_ptr[0];
-                  const unsigned int quad_flag   = o_ptr[1];
-                  const bool         line_flag_1 = o_ptr[2];
+              // line 0
+              local_vector[counter++] =
+                global_vector[indices[0] +
+                              reorientate_line(j - 1, line_flag_0)];
 
-                  // line 8
-                  local_vector[counter++] =
-                    global_vector[indices[0] +
-                                  reorientate_line(k - 1, line_flag_0)];
+              // quad 4 (ij)
+              for (unsigned int i = 0; i < degree - 1; ++i)
+                local_vector[counter++] =
+                  global_vector[indices[1] +
+                                reorientate_quad((degree - 1) * (j - 1) + i,
+                                                 quad_flag)];
 
-                  // quad 2 (ik)
-                  for (unsigned int i = 0; i < degree - 1; ++i)
-                    local_vector[counter++] =
-                      global_vector[indices[1] +
-                                    reorientate_quad((k - 1) * (degree - 1) + i,
-                                                     quad_flag)];
+              // line 1
+              local_vector[counter++] =
+                global_vector[indices[2] +
+                              reorientate_line(j - 1, line_flag_1)];
+            }
+          else if (((0 < k) && (k < degree)) && (j == 0 || j == degree))
+            {
+              const bool         line_flag_0 = o_ptr[0];
+              const unsigned int quad_flag   = o_ptr[1];
+              const bool         line_flag_1 = o_ptr[2];
 
-                  // line 9
-                  local_vector[counter++] =
-                    global_vector[indices[2] +
-                                  reorientate_line(k - 1, line_flag_1)];
-                }
-              else if ((0 < j) && (j < degree))
-                {
-                  const unsigned int quad_flag_0 = o_ptr[0];
-                  const unsigned int quad_flag_1 = o_ptr[1];
+              // line 8
+              local_vector[counter++] =
+                global_vector[indices[0] +
+                              reorientate_line(k - 1, line_flag_0)];
 
-                  // quad 0 (jk)
-                  local_vector[counter++] =
-                    global_vector[indices[0] +
-                                  reorientate_quad((k - 1) * (degree - 1) +
-                                                     (j - 1),
-                                                   quad_flag_0)];
+              // quad 2 (ik)
+              for (unsigned int i = 0; i < degree - 1; ++i)
+                local_vector[counter++] =
+                  global_vector[indices[1] +
+                                reorientate_quad((k - 1) * (degree - 1) + i,
+                                                 quad_flag)];
 
-                  // hex 0
-                  for (unsigned int i = 0; i < degree - 1; ++i)
-                    local_vector[counter++] =
-                      global_vector[indices[1] +
-                                    (k - 1) * (degree - 1) * (degree - 1) +
-                                    (j - 1) * (degree - 1) + i];
+              // line 9
+              local_vector[counter++] =
+                global_vector[indices[2] +
+                              reorientate_line(k - 1, line_flag_1)];
+            }
+          else if (((0 < k) && (k < degree)) && ((0 < j) && (j < degree)))
+            {
+              const unsigned int quad_flag_0 = o_ptr[0];
+              const unsigned int quad_flag_1 = o_ptr[1];
 
-                  // quad 1 (jk)
-                  local_vector[counter++] =
-                    global_vector[indices[2] +
-                                  reorientate_quad((k - 1) * (degree - 1) +
-                                                     (j - 1),
-                                                   quad_flag_1)];
-                }
+              // quad 0 (jk)
+              local_vector[counter++] =
+                global_vector[indices[0] +
+                              reorientate_quad((k - 1) * (degree - 1) + (j - 1),
+                                               quad_flag_0)];
+
+              // hex 0
+              for (unsigned int i = 0; i < degree - 1; ++i)
+                local_vector[counter++] =
+                  global_vector[indices[1] +
+                                (k - 1) * (degree - 1) * (degree - 1) +
+                                (j - 1) * (degree - 1) + i];
+
+              // quad 1 (jk)
+              local_vector[counter++] =
+                global_vector[indices[2] +
+                              reorientate_quad((k - 1) * (degree - 1) + (j - 1),
+                                               quad_flag_1)];
             }
 
           if (j == 0 || j == degree - 1)
