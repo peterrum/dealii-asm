@@ -95,10 +95,13 @@ gather(const std::vector<Number> &      global_vector,
               // quad (ij or ik)
               const unsigned int quad_flag = (o_ptr >> 1) & 0b111;
               for (unsigned int i = 0; i < degree - 1; ++i)
-                local_vector[c++] =
-                  global_vector[indices[1] +
-                                orientation_table[quad_flag]
-                                                 [(degree - 1) * (jk - 1) + i]];
+                if (quad_flag != 0)
+                  local_vector[c++] = global_vector
+                    [indices[1] +
+                     orientation_table[quad_flag][(degree - 1) * (jk - 1) + i]];
+                else
+                  local_vector[c++] =
+                    global_vector[indices[1] + (degree - 1) * (jk - 1) + i];
 
               // line
               if (o_ptr & 0b10000)
