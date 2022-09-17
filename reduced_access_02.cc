@@ -49,11 +49,7 @@ gather(const std::vector<Number> &      global_vector,
       s += orientation[i].first;
     }
 
-  for (unsigned int k            = 0,
-                    compressed_k = 0,
-                    offset_k     = 0,
-                    counter      = 0,
-                    o_ptr        = o;
+  for (unsigned int k = 0, compressed_k = 0, offset_k = 0, c = 0, o_ptr = o;
        k <= degree;
        ++k)
     {
@@ -71,15 +67,15 @@ gather(const std::vector<Number> &      global_vector,
               // case 1: vertex-line-vertex
 
               // vertex
-              local_vector[counter++] = global_vector[indices[0]];
+              local_vector[c++] = global_vector[indices[0]];
 
               // line
               for (unsigned int i = 0; i < degree - 1; ++i)
-                local_vector[counter++] =
+                local_vector[c++] =
                   global_vector[indices[1] + (degree - 2 - i)];
 
               // vertex
-              local_vector[counter++] = global_vector[indices[2]];
+              local_vector[c++] = global_vector[indices[2]];
             }
           else if ((o != 0) && (o_ptr & 0b11111) &&
                    (((k == 0 || k == degree) && ((0 < j) && (j < degree))) ||
@@ -91,25 +87,25 @@ gather(const std::vector<Number> &      global_vector,
 
               // line
               if (o_ptr & 0b00001)
-                local_vector[counter++] =
+                local_vector[c++] =
                   global_vector[indices[0] + (degree - 1 - jk)];
               else
-                local_vector[counter++] = global_vector[indices[0] + (jk - 1)];
+                local_vector[c++] = global_vector[indices[0] + (jk - 1)];
 
               // quad (ij or ik)
               const unsigned int quad_flag = (o_ptr >> 1) & 0b111;
               for (unsigned int i = 0; i < degree - 1; ++i)
-                local_vector[counter++] =
+                local_vector[c++] =
                   global_vector[indices[1] +
                                 orientation_table[quad_flag]
                                                  [(degree - 1) * (jk - 1) + i]];
 
               // line
               if (o_ptr & 0b10000)
-                local_vector[counter++] =
+                local_vector[c++] =
                   global_vector[indices[2] + (degree - 1 - jk)];
               else
-                local_vector[counter++] = global_vector[indices[2] + (jk - 1)];
+                local_vector[c++] = global_vector[indices[2] + (jk - 1)];
             }
           else if ((o != 0) && (o_ptr & 0b111111) && (0 < k) && (k < degree) &&
                    (0 < j) && (j < degree))
@@ -119,37 +115,37 @@ gather(const std::vector<Number> &      global_vector,
               // quad (jk)
               const unsigned int quad_flag_0 = (o_ptr >> 0) & 0b111;
               if (quad_flag_0 != 0)
-                local_vector[counter++] =
+                local_vector[c++] =
                   global_vector[indices[0] +
                                 orientation_table[quad_flag_0][offset]];
               else
-                local_vector[counter++] = global_vector[indices[0] + offset];
+                local_vector[c++] = global_vector[indices[0] + offset];
 
               // hex
               for (unsigned int i = 0; i < degree - 1; ++i)
-                local_vector[counter++] =
+                local_vector[c++] =
                   global_vector[indices[1] + offset * (degree - 1) + i];
 
               // quad (jk)
               const unsigned int quad_flag_1 = (o_ptr >> 3) & 0b111;
               if (quad_flag_1 != 0)
-                local_vector[counter++] =
+                local_vector[c++] =
                   global_vector[indices[2] +
                                 orientation_table[quad_flag_1][offset]];
               else
-                local_vector[counter++] = global_vector[indices[2] + offset];
+                local_vector[c++] = global_vector[indices[2] + offset];
             }
           else
             {
               // case 4: standard -> nothing to do
 
-              local_vector[counter++] = global_vector[indices[0] + offset];
+              local_vector[c++] = global_vector[indices[0] + offset];
 
               for (unsigned int i = 0; i < degree - 1; ++i)
-                local_vector[counter++] =
+                local_vector[c++] =
                   global_vector[indices[1] + offset * (degree - 1) + i];
 
-              local_vector[counter++] = global_vector[indices[2] + offset];
+              local_vector[c++] = global_vector[indices[2] + offset];
             }
 
           if (j == 0 || j == degree - 1)
