@@ -10,6 +10,7 @@
 
 #include <deal.II/fe/fe_q.h>
 #include <deal.II/fe/mapping_q.h>
+#include <deal.II/fe/mapping_q1.h>
 #include <deal.II/fe/mapping_q_cache.h>
 
 #include <deal.II/grid/grid_generator.h>
@@ -31,6 +32,8 @@
 
 #include <deal.II/numerics/matrix_creator.h>
 #include <deal.II/numerics/vector_tools.h>
+
+#include <fstream>
 
 #include "include/dof_tools.h"
 #include "include/grid_tools.h"

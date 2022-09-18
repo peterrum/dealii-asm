@@ -399,29 +399,18 @@ create_fdm_preconditioner(const OperatorType &              op,
             << (reuse_partitioner ? "true" : "false") << std::endl;
       pcout << std::endl;
 
-      const unsigned int n_rows = fe_degree + 2 * n_overlap - 1;
-
       std::shared_ptr<const ASPoissonPreconditionerBase<VectorType>> precon;
 
-#define OPERATION(c, d)                                                  \
-  if (c == -1)                                                           \
-    pcout << "Warning: FDM with <" + std::to_string(n_rows) +            \
-               "> is not precompiled!"                                   \
-          << std::endl;                                                  \
-                                                                         \
-  precon = std::make_shared<                                             \
-    const ASPoissonPreconditioner<dim, Number, VectorizedArrayType, c>>( \
-    matrix_free,                                                         \
-    n_overlap,                                                           \
-    sub_mesh_approximation,                                              \
-    mapping,                                                             \
-    fe_1D,                                                               \
-    quadrature_face,                                                     \
-    quadrature_1D,                                                       \
-    weight_type);
-
-      EXPAND_OPERATIONS(OPERATION);
-#undef OPERATION
+      precon = std::make_shared<
+        const ASPoissonPreconditioner<dim, Number, VectorizedArrayType, -1>>(
+        matrix_free,
+        n_overlap,
+        sub_mesh_approximation,
+        mapping,
+        fe_1D,
+        quadrature_face,
+        quadrature_1D,
+        weight_type);
 
       if (reuse_partitioner)
         op.set_partitioner(precon->get_partitioner());

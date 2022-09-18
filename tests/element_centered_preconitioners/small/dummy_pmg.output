@@ -1,20 +1,26 @@
 - Create mesh: hypercube
 
 - Create operator:
-  - n cells: 64
-  - n dofs:  625
+  - n cells:          64
+  - n dofs:           625
+  - compress indices: false
+  - mapping type:     
 
 - Create system preconditioner: Multigrid
  - type:       p
  - p sequence: go to one
 
 - Create operator:
-  - n cells: 64
-  - n dofs:  81
+  - n cells:          64
+  - n dofs:           81
+  - compress indices: false
+  - mapping type:     
 
 - Create operator:
-  - n cells: 64
-  - n dofs:  625
+  - n cells:          64
+  - n dofs:           625
+  - compress indices: false
+  - mapping type:     
 
 - Setting up coarse-grid solver on level 0
 

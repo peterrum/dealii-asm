@@ -32,7 +32,7 @@ public:
         const std::function<void(const unsigned int, const unsigned int)>
           &operation_before_matrix_vector_product,
         const std::function<void(const unsigned int, const unsigned int)>
-          &operation_after_matrix_vector_product) const
+          &operation_after_matrix_vector_product = {}) const
   {
     (void)dst;
     (void)src;
@@ -262,7 +262,7 @@ public:
             writer;
           constraint_info.read_write_operation(writer,
                                                dst_,
-                                               dst__,
+                                               dst__.data(),
                                                cell_ptr[cell],
                                                cell_ptr[cell + 1] -
                                                  cell_ptr[cell],
@@ -329,7 +329,7 @@ public:
         const std::function<void(const unsigned int, const unsigned int)>
           &operation_before_matrix_vector_product,
         const std::function<void(const unsigned int, const unsigned int)>
-          &operation_after_matrix_vector_product) const
+          &operation_after_matrix_vector_product = {}) const
   {
     if ((partitioner_for_fdm.get() ==
          matrix_free.get_vector_partitioner().get()) &&
@@ -347,7 +347,9 @@ public:
         // of dst so that we can skip zeroing
         operation_before_matrix_vector_product(0, src.locally_owned_size());
         vmult_internal(dst, src, /*dst is zero*/ true);
-        operation_after_matrix_vector_product(0, src.locally_owned_size());
+
+        if (operation_after_matrix_vector_product)
+          operation_after_matrix_vector_product(0, src.locally_owned_size());
       }
   }
 
@@ -427,7 +429,7 @@ private:
         internal::VectorReader<Number, VectorizedArrayType> reader;
         constraint_info.read_write_operation(reader,
                                              src_ptr,
-                                             src_local,
+                                             src_local.data(),
                                              cell_ptr[cell],
                                              cell_ptr[cell + 1] -
                                                cell_ptr[cell],
@@ -437,7 +439,7 @@ private:
         if (weights_local.size() > 0)
           constraint_info.read_write_operation(reader,
                                                weights,
-                                               weights_local,
+                                               weights_local.data(),
                                                cell_ptr[cell],
                                                cell_ptr[cell + 1] -
                                                  cell_ptr[cell],
@@ -469,7 +471,7 @@ private:
           writer;
         constraint_info.read_write_operation(writer,
                                              dst_ptr,
-                                             dst_local,
+                                             dst_local.data(),
                                              cell_ptr[cell],
                                              cell_ptr[cell + 1] -
                                                cell_ptr[cell],

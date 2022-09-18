@@ -235,7 +235,7 @@ public:
         const std::function<void(const unsigned int, const unsigned int)>
           &operation_before_matrix_vector_product,
         const std::function<void(const unsigned int, const unsigned int)>
-          &operation_after_matrix_vector_product) const
+          &operation_after_matrix_vector_product = {}) const
   {
     const auto dst_ptr  = dst.begin();
     const auto src_ptr  = src.begin();
@@ -253,7 +253,8 @@ public:
         for (unsigned int j = begin; j < end; ++j)
           dst_ptr[j] = src_ptr[j] * diag_ptr[j];
 
-        operation_after_matrix_vector_product(begin, end);
+        if (operation_after_matrix_vector_product)
+          operation_after_matrix_vector_product(begin, end);
       }
   }
 

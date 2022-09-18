@@ -1,5 +1,6 @@
 #include <deal.II/fe/fe_q.h>
 #include <deal.II/fe/fe_values.h>
+#include <deal.II/fe/mapping_q1.h>
 
 #include <deal.II/grid/tria.h>
 
@@ -7,6 +8,8 @@
 
 #include <deal.II/particles/data_out.h>
 #include <deal.II/particles/particle_handler.h>
+
+#include <fstream>
 
 using namespace dealii;
 

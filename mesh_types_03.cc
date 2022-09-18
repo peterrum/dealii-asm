@@ -1,5 +1,6 @@
 #include <deal.II/fe/fe_q.h>
 #include <deal.II/fe/fe_q_iso_q1.h>
+#include <deal.II/fe/mapping_q1.h>
 #include <deal.II/fe/mapping_q_cache.h>
 
 #include <deal.II/grid/grid_generator.h>
@@ -9,6 +10,8 @@
 
 #include <deal.II/particles/data_out.h>
 #include <deal.II/particles/particle_handler.h>
+
+#include <fstream>
 
 #include "include/dof_tools.h"
 #include "include/grid_tools.h"
