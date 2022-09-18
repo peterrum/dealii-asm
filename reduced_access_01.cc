@@ -202,9 +202,11 @@ main(int argc, char *argv[])
   // gather values and print to terminal
   std::vector<double> local_vector(dof_counter);
 
-  gather(global_vector, degree, dofs_of_cell, orientations, local_vector);
-
-  gather_post(global_vector, degree, dofs_of_cell, orientations, local_vector);
+  if (false)
+    gather(global_vector, degree, dofs_of_cell, orientations, local_vector);
+  else
+    gather_post(
+      global_vector, degree, dofs_of_cell, orientations, local_vector);
 
   for (unsigned int j = 0, c = 0; j <= degree; ++j)
     {
