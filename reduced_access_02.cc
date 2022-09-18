@@ -287,32 +287,31 @@ gather_post(const std::vector<Number> &      global_vector,
 
               if (l == 0)
                 begin = 1;
-              else if (l == 2)
+              else if (l == 1)
                 begin = (degree + 1) * degree + 1;
-              else if (l == 3)
+              else if (l == 2)
                 begin = (degree + 1) * (degree + 1) * degree + 1;
-              else if (l == 4)
+              else if (l == 3)
                 begin = (degree + 1) * (degree + 1) * degree +
                         (degree + 1) * degree + 1;
-              else if (l == 5)
+              else if (l == 4)
                 begin = (degree + 1);
-              else if (l == 6)
+              else if (l == 5)
                 begin = (degree + 1) + degree;
-              else if (l == 7)
+              else if (l == 6)
                 begin = (degree + 1) * (degree + 1) * degree + (degree + 1);
-              else if (l == 8)
+              else if (l == 7)
                 begin =
                   (degree + 1) * (degree + 1) * degree + (degree + 1) + degree;
-              else if (l == 9)
+              else if (l == 8)
                 begin = (degree + 1) * (degree + 1);
-              else if (l == 10)
+              else if (l == 9)
                 begin = (degree + 1) * (degree + 1) + degree;
+              else if (l == 10)
+                begin = (degree + 1) * (degree + 1) + (degree + 1) * degree;
               else if (l == 11)
                 begin =
-                  (degree + 1) * (degree + 1) * degree + (degree + 1) * degree;
-              else if (l == 12)
-                begin = (degree + 1) * (degree + 1) * degree +
-                        (degree + 1) * degree + degree;
+                  (degree + 1) * (degree + 1) + (degree + 1) * degree + degree;
 
               // perform reorientation
               for (unsigned int i = 0; i < (degree - 1) / 2; ++i)
@@ -429,7 +428,7 @@ main(int argc, char *argv[])
   // gather values and print to terminal
   std::vector<double> local_vector(dof_counter);
 
-  if (true)
+  if (false)
     gather(global_vector,
            degree,
            dofs_of_cell,
