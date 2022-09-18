@@ -94,6 +94,69 @@ gather(const std::vector<Number> &      global_vector,
     }
 }
 
+template <typename Number>
+void
+gather_post(const std::vector<Number> &      global_vector,
+            const unsigned int               degree,
+            const std::vector<unsigned int> &dofs_of_cell,
+            const std::vector<unsigned int> &orientations, // TODO: compress
+            std::vector<Number> &            local_vector)
+{
+  unsigned int orientation = 0;        // TODO
+  orientation += orientations[0] << 0; //
+  orientation += orientations[1] << 1; //
+  orientation += orientations[2] << 2; //
+  orientation += orientations[3] << 3; //
+
+  for (unsigned int j = 0, c = 0, offset = 0, compressed = 0; j <= degree; ++j)
+    {
+      const auto indices = dofs_of_cell.begin() + compressed * 3;
+
+      local_vector[c++] = global_vector[indices[0] + offset];
+
+      for (unsigned int i = 0; i < degree - 1; ++i)
+        local_vector[c++] =
+          global_vector[indices[1] + offset * (degree - 1) + i];
+
+      local_vector[c++] = global_vector[indices[2] + offset];
+
+      if ((j == 0) || (j == (degree - 1)))
+        {
+          compressed++;
+          offset = 0;
+        }
+      else
+        offset++;
+    }
+
+  if (orientation != 0)
+    for (unsigned int l = 0; l < 4; ++l) // loop over all lines
+      {
+        if (orientation & 1) // check bit
+          {
+            // determine stride and begin
+            const unsigned int stride = (l < 2) ? (degree + 1) : 1;
+
+            unsigned int begin = 0;
+            if (l == 0)
+              begin = degree + 1;
+            else if (l == 1)
+              begin = 2 * degree + 1;
+            else if (l == 2)
+              begin = 1;
+            else
+              begin = degree * degree + degree + 1;
+
+            // perform reorientation
+            for (unsigned int i = 0; i < (degree - 1) / 2; ++i)
+              std::swap(local_vector[begin + i * stride],
+                        local_vector[begin + (degree - 2 - i) * stride]);
+          }
+
+        orientation = orientation >> 1; //  go to next bit
+      }
+}
+
 int
 main(int argc, char *argv[])
 {
@@ -139,7 +202,11 @@ main(int argc, char *argv[])
   // gather values and print to terminal
   std::vector<double> local_vector(dof_counter);
 
-  gather(global_vector, degree, dofs_of_cell, orientations, local_vector);
+  if (false)
+    gather(global_vector, degree, dofs_of_cell, orientations, local_vector);
+  else
+    gather_post(
+      global_vector, degree, dofs_of_cell, orientations, local_vector);
 
   for (unsigned int j = 0, c = 0; j <= degree; ++j)
     {
