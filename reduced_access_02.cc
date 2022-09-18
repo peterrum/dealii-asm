@@ -372,6 +372,10 @@ main(int argc, char *argv[])
 {
   AssertThrow(argc == 2 || argc == 20, ExcNotImplemented());
 
+  for (int i = 0; i < argc; ++i)
+    std::cout << std::string(argv[i]) << " ";
+  std::cout << std::endl << std::endl;
+
   const unsigned int degree = atoi(argv[1]);
 
   std::vector<unsigned int> orientations(18, 0);
@@ -425,19 +429,20 @@ main(int argc, char *argv[])
   // gather values and print to terminal
   std::vector<double> local_vector(dof_counter);
 
-  gather(global_vector,
-         degree,
-         dofs_of_cell,
-         orientations,
-         orientation_table,
-         local_vector);
-
-  gather_post(global_vector,
-              degree,
-              dofs_of_cell,
-              orientations,
-              orientation_table,
-              local_vector);
+  if (true)
+    gather(global_vector,
+           degree,
+           dofs_of_cell,
+           orientations,
+           orientation_table,
+           local_vector);
+  else
+    gather_post(global_vector,
+                degree,
+                dofs_of_cell,
+                orientations,
+                orientation_table,
+                local_vector);
 
   for (unsigned int k = 0, c = 0; k <= degree; ++k)
     {
