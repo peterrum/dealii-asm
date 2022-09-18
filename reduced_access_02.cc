@@ -287,7 +287,6 @@ gather_post(const std::vector<Number> &      global_vector,
               const unsigned int stride = Utilities::pow(degree + 1, l / 4);
 
               unsigned int begin = 0;
-
               if (l == 0)
                 begin = 1;
               else if (l == 1)
@@ -333,16 +332,8 @@ gather_post(const std::vector<Number> &      global_vector,
               const unsigned int d       = q / 2;
               const unsigned int stride  = (d == 0) ? np : 1;
               const unsigned int stride2 = (d == 2) ? np : np2;
-
-              unsigned int begin = 0;
-              if ((q % 2) == 0)
-                begin = 0;
-              else if (q == 1)
-                begin = degree;
-              else if (q == 3)
-                begin = np * degree;
-              else if (q == 5)
-                begin = np2 * degree;
+              const unsigned int begin =
+                ((q % 2) == 0) ? 0 : (Utilities::pow(np, q / 2) * degree);
 
               // copy values into buffer
               for (unsigned int g = 1, c = 0; g < degree; ++g)
