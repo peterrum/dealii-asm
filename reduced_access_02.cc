@@ -276,6 +276,9 @@ gather_post(const std::vector<Number> &      global_vector,
 
   if (orientation != 0)
     {
+      const unsigned int np  = degree + 1;
+      const unsigned int np2 = np * np;
+
       for (unsigned int l = 0; l < 12; ++l) // loop over all lines
         {
           if (orientation & 1) // check bit
@@ -288,30 +291,27 @@ gather_post(const std::vector<Number> &      global_vector,
               if (l == 0)
                 begin = 1;
               else if (l == 1)
-                begin = (degree + 1) * degree + 1;
+                begin = np * degree + 1;
               else if (l == 2)
-                begin = (degree + 1) * (degree + 1) * degree + 1;
+                begin = np2 * degree + 1;
               else if (l == 3)
-                begin = (degree + 1) * (degree + 1) * degree +
-                        (degree + 1) * degree + 1;
+                begin = np2 * degree + np * degree + 1;
               else if (l == 4)
-                begin = (degree + 1);
+                begin = np;
               else if (l == 5)
-                begin = (degree + 1) + degree;
+                begin = np + degree;
               else if (l == 6)
-                begin = (degree + 1) * (degree + 1) * degree + (degree + 1);
+                begin = np2 * degree + np;
               else if (l == 7)
-                begin =
-                  (degree + 1) * (degree + 1) * degree + (degree + 1) + degree;
+                begin = np2 * degree + np + degree;
               else if (l == 8)
-                begin = (degree + 1) * (degree + 1);
+                begin = np2;
               else if (l == 9)
-                begin = (degree + 1) * (degree + 1) + degree;
+                begin = np2 + degree;
               else if (l == 10)
-                begin = (degree + 1) * (degree + 1) + (degree + 1) * degree;
+                begin = np2 + np * degree;
               else if (l == 11)
-                begin =
-                  (degree + 1) * (degree + 1) + (degree + 1) * degree + degree;
+                begin = np2 + np * degree + degree;
 
               // perform reorientation
               for (unsigned int i = 0; i < (degree - 1) / 2; ++i)
@@ -330,10 +330,9 @@ gather_post(const std::vector<Number> &      global_vector,
             {
               Number temp[100];
 
-              const unsigned int d      = q / 2;
-              const unsigned int stride = (d == 0) ? (degree + 1) : 1;
-              const unsigned int stride2 =
-                (d == 2) ? (degree + 1) : ((degree + 1) * (degree + 1));
+              const unsigned int d       = q / 2;
+              const unsigned int stride  = (d == 0) ? np : 1;
+              const unsigned int stride2 = (d == 2) ? np : np2;
 
               unsigned int begin = 0;
               if ((q % 2) == 0)
@@ -341,9 +340,9 @@ gather_post(const std::vector<Number> &      global_vector,
               else if (q == 1)
                 begin = degree;
               else if (q == 3)
-                begin = (degree + 1) * degree;
+                begin = np * degree;
               else if (q == 5)
-                begin = (degree + 1) * (degree + 1) * degree;
+                begin = np2 * degree;
 
               // copy values into buffer
               for (unsigned int g = 1, c = 0; g < degree; ++g)
