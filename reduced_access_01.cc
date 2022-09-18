@@ -108,18 +108,17 @@ gather_post(const std::vector<Number> &      global_vector,
   orientation += orientations[2] << 2; //
   orientation += orientations[3] << 3; //
 
-  for (unsigned int j = 0, counter = 0, offset = 0, compressed = 0; j <= degree;
-       ++j)
+  for (unsigned int j = 0, c = 0, offset = 0, compressed = 0; j <= degree; ++j)
     {
       const auto indices = dofs_of_cell.begin() + compressed * 3;
 
-      local_vector[counter++] = global_vector[indices[0] + offset];
+      local_vector[c++] = global_vector[indices[0] + offset];
 
       for (unsigned int i = 0; i < degree - 1; ++i)
-        local_vector[counter++] =
+        local_vector[c++] =
           global_vector[indices[1] + offset * (degree - 1) + i];
 
-      local_vector[counter++] = global_vector[indices[2] + offset];
+      local_vector[c++] = global_vector[indices[2] + offset];
 
       if ((j == 0) || (j == (degree - 1)))
         {
@@ -131,29 +130,30 @@ gather_post(const std::vector<Number> &      global_vector,
     }
 
   if (orientation != 0)
-    for (unsigned int l = 0, begin = degree + 1, stride = degree + 1; l < 4;
-         ++l)
+    for (unsigned int l = 0; l < 4; ++l) // loop over all lines
       {
-        if (orientation & 1)
-          for (unsigned int i = 0; i < (degree - 1) / 2; ++i)
-            std::swap(local_vector[begin + i * stride],
-                      local_vector[begin + (degree - 2 - i) * stride]);
+        if (orientation & 1) // check bit
+          {
+            // determine stride and begin
+            const unsigned int stride = (l < 2) ? (degree + 1) : 1;
 
-        if (l == 0)
-          {
-            begin += degree;
-          }
-        else if (l == 1)
-          {
-            begin  = 1;
-            stride = 1;
-          }
-        else if (l == 2)
-          {
-            begin += (degree + 1) * degree;
+            unsigned int begin = 0;
+            if (l == 0)
+              begin = degree + 1;
+            else if (l == 1)
+              begin = 2 * degree + 1;
+            else if (l == 2)
+              begin = 1;
+            else
+              begin = degree * degree + degree + 1;
+
+            // perform reorientation
+            for (unsigned int i = 0; i < (degree - 1) / 2; ++i)
+              std::swap(local_vector[begin + i * stride],
+                        local_vector[begin + (degree - 2 - i) * stride]);
           }
 
-        orientation = orientation >> 1;
+        orientation = orientation >> 1; //  go to next bit
       }
 }
 
