@@ -153,11 +153,12 @@ namespace dealii
 
   template <int dim, typename Number, int n_rows_1d = -1>
   MyTensorProductMatrixSymmetricSum<dim, Number, n_rows_1d>
-  setup_fdm(const typename Triangulation<dim>::cell_iterator &cell,
-            const FiniteElement<1> &                          fe,
-            const Quadrature<1> &                             quadrature,
-            const dealii::ndarray<double, dim, 3> &           cell_extend,
-            const unsigned int                                n_overlap)
+  create_laplace_tensor_product_matrix(
+    const typename Triangulation<dim>::cell_iterator &cell,
+    const FiniteElement<1> &                          fe,
+    const Quadrature<1> &                             quadrature,
+    const dealii::ndarray<double, dim, 3> &           cell_extend,
+    const unsigned int                                n_overlap)
   {
     // 1) create element mass and siffness matrix (without overlap)
     const auto [M_ref, K_ref, is_dg] =

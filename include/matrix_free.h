@@ -222,12 +222,13 @@ public:
                                              local_dofs,
                                              partitioner_for_fdm);
 
-            scalar_fdm[v] = setup_fdm<dim, Number, n_rows_1d>(
-              cell_iterator,
-              fe_1D,
-              quadrature_1D,
-              harmonic_patch_extend[cell_iterator->active_cell_index()],
-              n_overlap);
+            scalar_fdm[v] =
+              create_laplace_tensor_product_matrix<dim, Number, n_rows_1d>(
+                cell_iterator,
+                fe_1D,
+                quadrature_1D,
+                harmonic_patch_extend[cell_iterator->active_cell_index()],
+                n_overlap);
           }
 
         cell_ptr.push_back(cell_ptr.back() +
