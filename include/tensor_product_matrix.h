@@ -332,10 +332,14 @@ namespace dealii
                   const ArrayView<const Number> &src,
                   AlignedVector<Number> &        tmp) const
     {
-      if (compressed_vector.size() > 0)
-        return compressed_vector[indices[index]].apply_inverse(dst, src, tmp);
+      const auto do_apply = [&](const auto &fdm) {
+        fdm.apply_inverse(dst, src, tmp);
+      };
 
-      return vector[index].apply_inverse(dst, src, tmp);
+      if (compressed_vector.size() > 0)
+        do_apply(compressed_vector[indices[index]]);
+      else
+        do_apply(vector[index]);
     }
 
     std::size_t
