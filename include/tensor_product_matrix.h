@@ -4,28 +4,6 @@
 
 namespace dealii
 {
-  template <int dim, typename Number, int n_rows_1d = -1>
-  class MyTensorProductMatrixSymmetricSum
-    : public TensorProductMatrixSymmetricSum<dim, Number, n_rows_1d>
-  {
-  public:
-    const std::array<AlignedVector<Number>, dim> &
-    get_eigenvalues() const
-    {
-      return this->eigenvalues;
-    }
-
-    const std::array<Table<2, Number>, dim> &
-    get_eigenvectors() const
-    {
-      return this->eigenvectors;
-    }
-
-  private:
-  };
-
-
-
   template <typename Number>
   std::tuple<FullMatrix<Number>, FullMatrix<Number>, bool>
   create_referece_cell_matrices(const FiniteElement<1> &fe,
@@ -220,7 +198,7 @@ namespace dealii
   }
 
   template <int dim, typename Number, int n_rows_1d = -1>
-  class MyTensorProductMatrixSymmetricSumCache
+  class TensorProductMatrixSymmetricSumCache
   {
     using MKType = std::pair<Table<2, Number>, Table<2, Number>>;
 

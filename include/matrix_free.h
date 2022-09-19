@@ -599,8 +599,7 @@ private:
                             constraint_info;
   std::vector<unsigned int> cell_ptr;
 
-  MyTensorProductMatrixSymmetricSumCache<dim, VectorizedArrayType, n_rows_1d>
-    fdm;
+  TensorProductMatrixSymmetricSumCache<dim, VectorizedArrayType, n_rows_1d> fdm;
 
   mutable VectorType src_;
   mutable VectorType dst_;
