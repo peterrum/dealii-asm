@@ -335,10 +335,9 @@ namespace dealii
           const unsigned int translated_index =
             (indices.size() > 0) ? indices[dim * index + d] : (dim * index + d);
 
-          const auto &fdm         = vector[translated_index];         // TODO
-          eigenvectors[d]         = &fdm.get_eigenvectors()[0](0, 0); //
-          eigenvalues[d]          = fdm.get_eigenvalues()[0].data();  //
-          n_rows_1d_non_templated = fdm.get_eigenvalues()[0].size();  //
+          eigenvectors[d] = &vector_eigenvectors[translated_index](0, 0);
+          eigenvalues[d]  = vector_eigenvalues[translated_index].data();
+          n_rows_1d_non_templated = vector_eigenvalues[translated_index].size();
         }
 
       if (n_rows_1d != -1)
@@ -362,19 +361,47 @@ namespace dealii
     std::size_t
     memory_consumption() const
     {
-      return MemoryConsumption::memory_consumption(vector);
+      return MemoryConsumption::memory_consumption(indices) +
+             MemoryConsumption::memory_consumption(vector_mass_matrix) +
+             MemoryConsumption::memory_consumption(vector_derivative_matrix) +
+             MemoryConsumption::memory_consumption(vector_eigenvectors) +
+             MemoryConsumption::memory_consumption(vector_eigenvalues);
     }
 
     std::size_t
     size() const
     {
-      return vector.size();
+      return vector_mass_matrix.size();
     }
 
     void
     finalize()
     {
-      vector.resize(cache.size());
+      vector_mass_matrix.resize(cache.size());
+      vector_derivative_matrix.resize(cache.size());
+      vector_eigenvectors.resize(cache.size());
+      vector_eigenvalues.resize(cache.size());
+
+      const auto store = [&](const unsigned int index, const MKType &M_and_K) {
+        std::array<Table<2, Number>, 1> mass_matrices;
+        mass_matrices[0] = M_and_K.first;
+
+        std::array<Table<2, Number>, 1> derivative_matrices;
+        derivative_matrices[0] = M_and_K.second;
+
+        std::array<Table<2, Number>, 1>      eigenvectors;
+        std::array<AlignedVector<Number>, 1> eigenvalues;
+
+        internal::TensorProductMatrixSymmetricSum::setup(mass_matrices,
+                                                         derivative_matrices,
+                                                         eigenvectors,
+                                                         eigenvalues);
+
+        vector_mass_matrix[index]       = M_and_K.first;
+        vector_derivative_matrix[index] = M_and_K.second;
+        vector_eigenvectors[index]      = eigenvectors[0];
+        vector_eigenvalues[index]       = eigenvalues[0];
+      };
 
       if (cache.size() == indices.size())
         {
@@ -384,18 +411,14 @@ namespace dealii
             inverted_cache[i.second] = i.first;
 
           for (unsigned int i = 0; i < indices.size(); ++i)
-            {
-              const auto &M_and_K = inverted_cache[indices[i]];
-
-              vector[i].reinit(M_and_K.first, M_and_K.second);
-            }
+            store(i, inverted_cache[indices[i]]);
 
           indices.clear();
         }
       else
         {
           for (const auto &i : cache)
-            vector[i.second].reinit(i.first.first, i.first.second);
+            store(i.second, i.first);
         }
 
       cache.clear();
@@ -406,7 +429,10 @@ namespace dealii
 
     std::vector<unsigned int> indices;
 
-    std::vector<MyTensorProductMatrixSymmetricSum<1, Number, n_rows_1d>> vector;
+    std::vector<Table<2, Number>>      vector_mass_matrix;
+    std::vector<Table<2, Number>>      vector_derivative_matrix;
+    std::vector<Table<2, Number>>      vector_eigenvectors;
+    std::vector<AlignedVector<Number>> vector_eigenvalues;
   };
 
 } // namespace dealii
