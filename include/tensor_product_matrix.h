@@ -197,76 +197,90 @@ namespace dealii
     return {Ms, Ks};
   }
 
+
+
+  namespace internal
+  {
+    namespace TensorProductMatrixSymmetricSum
+    {
+      template <typename Number>
+      struct MatrixPairComparator
+      {
+        using MatrixPairType = std::pair<Table<2, Number>, Table<2, Number>>;
+
+        bool
+        operator()(const MatrixPairType &left,
+                   const MatrixPairType &right) const
+        {
+          const auto &M_0 = left.first;
+          const auto &K_0 = left.second;
+          const auto &M_1 = right.first;
+          const auto &K_1 = right.second;
+
+          const unsigned int n_lanes = Number::size();
+
+          std::array<bool, n_lanes> mask;
+
+          using NumberScalar = typename Number::value_type;
+
+          for (unsigned int v = 0; v < n_lanes; ++v)
+            {
+              NumberScalar a = 0.0;
+              NumberScalar b = 0.0;
+
+              for (unsigned int i = 0; i < M_0.size(0); ++i)
+                for (unsigned int j = 0; j < M_0.size(1); ++j)
+                  {
+                    a += std::abs(M_0[i][j][v]);
+                    b += std::abs(M_1[i][j][v]);
+                  }
+
+              mask[v] = (a != 0.0) && (b != 0.0);
+            }
+
+          const auto eps = std::pow<NumberScalar>(
+            static_cast<NumberScalar>(10.0),
+            static_cast<NumberScalar>(
+              std::log10(std::numeric_limits<NumberScalar>::epsilon()) / 2.0));
+
+          const auto less = [eps](const auto a, const auto b) -> bool {
+            return (b - a) > std::max(eps, std::abs(a + b) * eps);
+          };
+
+          const auto greater = [eps](const auto a, const auto b) -> bool {
+            return (a - b) > std::max(eps, std::abs(a + b) * eps);
+          };
+
+          for (unsigned int v = 0; v < n_lanes; ++v)
+            if (mask[v])
+              for (unsigned int i = 0; i < M_0.size(0); ++i)
+                for (unsigned int j = 0; j < M_0.size(1); ++j)
+                  if (less(M_0[i][j][v], M_1[i][j][v]))
+                    return true;
+                  else if (greater(M_0[i][j][v], M_1[i][j][v]))
+                    return false;
+
+          for (unsigned int v = 0; v < n_lanes; ++v)
+            if (mask[v])
+              for (unsigned int i = 0; i < K_0.size(0); ++i)
+                for (unsigned int j = 0; j < K_0.size(1); ++j)
+                  if (less(K_0[i][j][v], K_1[i][j][v]))
+                    return true;
+                  else if (greater(K_0[i][j][v], K_1[i][j][v]))
+                    return false;
+
+          return false;
+        }
+      };
+    } // namespace TensorProductMatrixSymmetricSum
+  }   // namespace internal
+
+
+
   template <int dim, typename Number, int n_rows_1d = -1>
   class TensorProductMatrixSymmetricSumCache
   {
-    using MKType = std::pair<Table<2, Number>, Table<2, Number>>;
-
-    struct comparator
-    {
-      bool
-      operator()(const MKType &left, const MKType &right) const
-      {
-        const auto &M_0 = left.first;
-        const auto &K_0 = left.second;
-        const auto &M_1 = right.first;
-        const auto &K_1 = right.second;
-
-        const unsigned int n_lanes = Number::size();
-
-        std::array<bool, n_lanes> mask;
-
-        using NumberScalar = typename Number::value_type;
-
-        for (unsigned int v = 0; v < n_lanes; ++v)
-          {
-            NumberScalar a = 0.0;
-            NumberScalar b = 0.0;
-
-            for (unsigned int i = 0; i < M_0.size(0); ++i)
-              for (unsigned int j = 0; j < M_0.size(1); ++j)
-                {
-                  a += std::abs(M_0[i][j][v]);
-                  b += std::abs(M_1[i][j][v]);
-                }
-
-            mask[v] = (a != 0.0) && (b != 0.0);
-          }
-
-        const auto eps = std::pow<NumberScalar>(
-          static_cast<NumberScalar>(10.0),
-          static_cast<NumberScalar>(
-            std::log10(std::numeric_limits<NumberScalar>::epsilon()) / 2.0));
-
-        const auto less = [eps](const auto a, const auto b) -> bool {
-          return (b - a) > std::max(eps, std::abs(a + b) * eps);
-        };
-
-        const auto greater = [eps](const auto a, const auto b) -> bool {
-          return (a - b) > std::max(eps, std::abs(a + b) * eps);
-        };
-
-        for (unsigned int v = 0; v < n_lanes; ++v)
-          if (mask[v])
-            for (unsigned int i = 0; i < M_0.size(0); ++i)
-              for (unsigned int j = 0; j < M_0.size(1); ++j)
-                if (less(M_0[i][j][v], M_1[i][j][v]))
-                  return true;
-                else if (greater(M_0[i][j][v], M_1[i][j][v]))
-                  return false;
-
-        for (unsigned int v = 0; v < n_lanes; ++v)
-          if (mask[v])
-            for (unsigned int i = 0; i < K_0.size(0); ++i)
-              for (unsigned int j = 0; j < K_0.size(1); ++j)
-                if (less(K_0[i][j][v], K_1[i][j][v]))
-                  return true;
-                else if (greater(K_0[i][j][v], K_1[i][j][v]))
-                  return false;
-
-        return false;
-      }
-    };
+    using MatrixPairType = std::pair<Table<2, Number>, Table<2, Number>>;
 
   public:
     void
@@ -282,7 +296,7 @@ namespace dealii
     {
       for (unsigned int d = 0; d < dim; ++d)
         {
-          const MKType matrix(Ms[d], Ks[d]);
+          const MatrixPairType matrix(Ms[d], Ks[d]);
 
           const auto ptr = cache.find(matrix);
 
@@ -360,7 +374,8 @@ namespace dealii
       vector_eigenvectors.resize(cache.size());
       vector_eigenvalues.resize(cache.size());
 
-      const auto store = [&](const unsigned int index, const MKType &M_and_K) {
+      const auto store = [&](const unsigned int    index,
+                             const MatrixPairType &M_and_K) {
         std::array<Table<2, Number>, 1> mass_matrices;
         mass_matrices[0] = M_and_K.first;
 
@@ -383,7 +398,7 @@ namespace dealii
 
       if (cache.size() == indices.size())
         {
-          std::map<unsigned int, MKType> inverted_cache;
+          std::map<unsigned int, MatrixPairType> inverted_cache;
 
           for (const auto &i : cache)
             inverted_cache[i.second] = i.first;
@@ -403,7 +418,11 @@ namespace dealii
     }
 
   private:
-    std::map<MKType, unsigned int, comparator> cache;
+    std::map<
+      MatrixPairType,
+      unsigned int,
+      internal::TensorProductMatrixSymmetricSum::MatrixPairComparator<Number>>
+      cache;
 
     std::vector<unsigned int> indices;
 
