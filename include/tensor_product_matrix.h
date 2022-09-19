@@ -308,11 +308,14 @@ namespace dealii
     }
 
     void
-    insert(const unsigned int                                  index,
-           const MyTensorProductMatrixSymmetricSum<dim,
-                                                   VectorizedArrayType,
-                                                   n_rows_1d> &matrix)
+    insert(const unsigned int                                    index,
+           const std::array<Table<2, VectorizedArrayType>, dim> &Ms,
+           const std::array<Table<2, VectorizedArrayType>, dim> &Ks)
     {
+      MyTensorProductMatrixSymmetricSum<dim, VectorizedArrayType, n_rows_1d>
+        matrix;
+      matrix.reinit(Ms, Ks);
+
       vector[index] = matrix;
 
       const auto ptr = cache.find(matrix);

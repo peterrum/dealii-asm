@@ -250,11 +250,7 @@ public:
         cell_ptr.push_back(cell_ptr.back() +
                            matrix_free.n_active_entries_per_cell_batch(cell));
 
-        MyTensorProductMatrixSymmetricSum<dim, VectorizedArrayType, n_rows_1d>
-          fdm_;
-        fdm_.reinit(Ms, Ks);
-
-        fdm.insert(cell, fdm_);
+        fdm.insert(cell, Ms, Ks);
       }
 
     fdm.finalize();
