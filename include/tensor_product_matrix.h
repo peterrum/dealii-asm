@@ -328,12 +328,41 @@ namespace dealii
 
     void
     apply_inverse(const unsigned int             index,
-                  const ArrayView<Number> &      dst,
-                  const ArrayView<const Number> &src,
-                  AlignedVector<Number> &        tmp) const
+                  const ArrayView<Number> &      dst_in,
+                  const ArrayView<const Number> &src_in,
+                  AlignedVector<Number> &        tmp_array) const
     {
       const auto do_apply = [&](const auto &fdm) {
-        fdm.apply_inverse(dst, src, tmp);
+        Number *      dst = dst_in.begin();
+        const Number *src = src_in.begin();
+
+        std::array<const Number *, dim> eigenvectors, eigenvalues;
+
+        for (unsigned int d = 0; d < dim; ++d)
+          {
+            eigenvectors[d] = &fdm.get_eigenvectors()[d](0, 0);
+            eigenvalues[d]  = fdm.get_eigenvalues()[d].data();
+          }
+
+        const unsigned int n_rows_1d_non_templated =
+          fdm.get_eigenvalues()[0].size();
+
+        if (n_rows_1d != -1)
+          internal::TensorProductMatrixSymmetricSum::apply_inverse<
+            n_rows_1d == -1 ? 0 : n_rows_1d>(dst,
+                                             src,
+                                             tmp_array,
+                                             n_rows_1d_non_templated,
+                                             eigenvectors,
+                                             eigenvalues);
+        else
+          internal::TensorProductMatrixSymmetricSum::select_apply_inverse<1>(
+            dst,
+            src,
+            tmp_array,
+            n_rows_1d_non_templated,
+            eigenvectors,
+            eigenvalues);
       };
 
       if (compressed_vector.size() > 0)
