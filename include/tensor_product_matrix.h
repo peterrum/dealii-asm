@@ -151,8 +151,9 @@ namespace dealii
   }
 
 
-  template <int dim, typename Number, int n_rows_1d = -1>
-  MyTensorProductMatrixSymmetricSum<dim, Number, n_rows_1d>
+  template <int dim, typename Number>
+  std::pair<std::array<FullMatrix<Number>, dim>,
+            std::array<FullMatrix<Number>, dim>>
   create_laplace_tensor_product_matrix(
     const typename Triangulation<dim>::cell_iterator &cell,
     const FiniteElement<1> &                          fe,
@@ -288,11 +289,7 @@ namespace dealii
         Ks[d] = K;
       }
 
-    // 3) setup FDM routine
-    MyTensorProductMatrixSymmetricSum<dim, Number, n_rows_1d> fdm;
-    fdm.reinit(Ms, Ks);
-
-    return fdm;
+    return {Ms, Ks};
   }
 
   template <int dim, typename VectorizedArrayType, int n_rows_1d = -1>

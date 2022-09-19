@@ -195,9 +195,8 @@ public:
          cell < matrix_free.n_cell_batches();
          ++cell)
       {
-        std::array<MyTensorProductMatrixSymmetricSum<dim, Number, n_rows_1d>,
-                   VectorizedArrayType::size()>
-          scalar_fdm;
+        std::array<Table<2, VectorizedArrayType>, dim> Ms;
+        std::array<Table<2, VectorizedArrayType>, dim> Ks;
 
         for (unsigned int v = 0;
              v < matrix_free.n_active_entries_per_cell_batch(cell);
@@ -222,23 +221,40 @@ public:
                                              local_dofs,
                                              partitioner_for_fdm);
 
-            scalar_fdm[v] =
-              create_laplace_tensor_product_matrix<dim, Number, n_rows_1d>(
+            const auto [Ms_scalar, Ks_scalar] =
+              create_laplace_tensor_product_matrix<dim, Number>(
                 cell_iterator,
                 fe_1D,
                 quadrature_1D,
                 harmonic_patch_extend[cell_iterator->active_cell_index()],
                 n_overlap);
+
+            for (unsigned int d = 0; d < dim; ++d)
+              {
+                if (Ms[d].size(0) == 0 || Ms[d].size(1) == 0)
+                  {
+                    Ms[d].reinit(Ms_scalar[d].size(0), Ms_scalar[d].size(1));
+                    Ks[d].reinit(Ks_scalar[d].size(0), Ks_scalar[d].size(1));
+                  }
+
+                for (unsigned int i = 0; i < Ms_scalar[d].size(0); ++i)
+                  for (unsigned int j = 0; j < Ms_scalar[d].size(0); ++j)
+                    Ms[d][i][j][v] = Ms_scalar[d][i][j];
+
+                for (unsigned int i = 0; i < Ks_scalar[d].size(0); ++i)
+                  for (unsigned int j = 0; j < Ks_scalar[d].size(0); ++j)
+                    Ks[d][i][j][v] = Ks_scalar[d][i][j];
+              }
           }
 
         cell_ptr.push_back(cell_ptr.back() +
                            matrix_free.n_active_entries_per_cell_batch(cell));
 
-        fdm.insert(cell,
-                   MyTensorProductMatrixSymmetricSum<dim, Number, n_rows_1d>::
-                     template transpose<VectorizedArrayType::size()>(
-                       scalar_fdm,
-                       matrix_free.n_active_entries_per_cell_batch(cell)));
+        MyTensorProductMatrixSymmetricSum<dim, VectorizedArrayType, n_rows_1d>
+          fdm_;
+        fdm_.reinit(Ms, Ks);
+
+        fdm.insert(cell, fdm_);
       }
 
     fdm.finalize();
