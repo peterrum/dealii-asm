@@ -219,7 +219,7 @@ namespace dealii
     return {Ms, Ks};
   }
 
-  template <int dim, typename VectorizedArrayType, int n_rows_1d = -1>
+  template <int dim, typename Number, int n_rows_1d = -1>
   class MyTensorProductMatrixSymmetricSumCache
   {
   public:
@@ -227,28 +227,25 @@ namespace dealii
     {
       bool
       operator()(
-        const MyTensorProductMatrixSymmetricSum<dim,
-                                                VectorizedArrayType,
-                                                n_rows_1d> &left,
-        const MyTensorProductMatrixSymmetricSum<dim,
-                                                VectorizedArrayType,
-                                                n_rows_1d> &right) const
+        const MyTensorProductMatrixSymmetricSum<dim, Number, n_rows_1d> &left,
+        const MyTensorProductMatrixSymmetricSum<dim, Number, n_rows_1d> &right)
+        const
       {
         const auto &eigenvalues_0  = left.get_eigenvalues();
         const auto &eigenvectors_0 = left.get_eigenvectors();
         const auto &eigenvalues_1  = right.get_eigenvalues();
         const auto &eigenvectors_1 = right.get_eigenvectors();
 
-        const unsigned int NN = VectorizedArrayType::size();
+        const unsigned int NN = Number::size();
 
         std::array<bool, NN> mask;
 
-        using Number = typename VectorizedArrayType::value_type;
+        using NumberScalar = typename Number::value_type;
 
         for (unsigned int v = 0; v < NN; ++v)
           {
-            Number a = 0.0;
-            Number b = 0.0;
+            NumberScalar a = 0.0;
+            NumberScalar b = 0.0;
 
             for (unsigned int d = 0; d < dim; ++d)
               for (unsigned int i = 0; i < eigenvalues_0.size(); ++i)
@@ -261,10 +258,10 @@ namespace dealii
           }
 
 
-        const auto eps = std::pow<Number>(
-          static_cast<Number>(10.0),
-          static_cast<Number>(
-            std::log10(std::numeric_limits<Number>::epsilon()) / 2.0));
+        const auto eps = std::pow<NumberScalar>(
+          static_cast<NumberScalar>(10.0),
+          static_cast<NumberScalar>(
+            std::log10(std::numeric_limits<NumberScalar>::epsilon()) / 2.0));
 
         const auto less = [eps](const auto a, const auto b) -> bool {
           return (b - a) > std::max(eps, std::abs(a + b) * eps);
@@ -308,12 +305,11 @@ namespace dealii
     }
 
     void
-    insert(const unsigned int                                    index,
-           const std::array<Table<2, VectorizedArrayType>, dim> &Ms,
-           const std::array<Table<2, VectorizedArrayType>, dim> &Ks)
+    insert(const unsigned int                       index,
+           const std::array<Table<2, Number>, dim> &Ms,
+           const std::array<Table<2, Number>, dim> &Ks)
     {
-      MyTensorProductMatrixSymmetricSum<dim, VectorizedArrayType, n_rows_1d>
-        matrix;
+      MyTensorProductMatrixSymmetricSum<dim, Number, n_rows_1d> matrix;
       matrix.reinit(Ms, Ks);
 
       vector[index] = matrix;
@@ -330,9 +326,8 @@ namespace dealii
         }
     }
 
-    const MyTensorProductMatrixSymmetricSum<dim, VectorizedArrayType, n_rows_1d>
-      &
-      get(const unsigned int index) const
+    const MyTensorProductMatrixSymmetricSum<dim, Number, n_rows_1d> &
+    get(const unsigned int index) const
     {
       if (compressed_vector.size() > 0)
         return compressed_vector[indices[index]];
@@ -368,20 +363,17 @@ namespace dealii
     }
 
   private:
-    std::map<
-      MyTensorProductMatrixSymmetricSum<dim, VectorizedArrayType, n_rows_1d>,
-      unsigned int,
-      compartor>
+    std::map<MyTensorProductMatrixSymmetricSum<dim, Number, n_rows_1d>,
+             unsigned int,
+             compartor>
       cache;
 
     std::vector<unsigned int> indices;
 
-    std::vector<
-      MyTensorProductMatrixSymmetricSum<dim, VectorizedArrayType, n_rows_1d>>
+    std::vector<MyTensorProductMatrixSymmetricSum<dim, Number, n_rows_1d>>
       compressed_vector;
 
-    std::vector<
-      MyTensorProductMatrixSymmetricSum<dim, VectorizedArrayType, n_rows_1d>>
+    std::vector<MyTensorProductMatrixSymmetricSum<dim, Number, n_rows_1d>>
       vector;
   };
 
