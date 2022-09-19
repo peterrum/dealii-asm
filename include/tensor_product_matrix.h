@@ -284,138 +284,27 @@ namespace dealii
 
   public:
     void
-    reserve(const unsigned int size)
-    {
-      indices.assign(size * dim, numbers::invalid_unsigned_int);
-    }
+    reserve(const unsigned int size);
 
     void
     insert(const unsigned int                       index,
            const std::array<Table<2, Number>, dim> &Ms,
-           const std::array<Table<2, Number>, dim> &Ks)
-    {
-      for (unsigned int d = 0; d < dim; ++d)
-        {
-          const MatrixPairType matrix(Ms[d], Ks[d]);
+           const std::array<Table<2, Number>, dim> &Ks);
 
-          const auto ptr = cache.find(matrix);
-
-          if (ptr != cache.end())
-            indices[index * dim + d] = ptr->second;
-          else
-            {
-              indices[index * dim + d] = cache.size();
-              cache[matrix]            = cache.size();
-            }
-        }
-    }
+    void
+    finalize();
 
     void
     apply_inverse(const unsigned int             index,
                   const ArrayView<Number> &      dst_in,
                   const ArrayView<const Number> &src_in,
-                  AlignedVector<Number> &        tmp_array) const
-    {
-      Number *      dst = dst_in.begin();
-      const Number *src = src_in.begin();
-
-      std::array<const Number *, dim> eigenvectors, eigenvalues;
-      unsigned int                    n_rows_1d_non_templated = 0;
-
-      for (unsigned int d = 0; d < dim; ++d)
-        {
-          const unsigned int translated_index =
-            (indices.size() > 0) ? indices[dim * index + d] : (dim * index + d);
-
-          eigenvectors[d] = &vector_eigenvectors[translated_index](0, 0);
-          eigenvalues[d]  = vector_eigenvalues[translated_index].data();
-          n_rows_1d_non_templated = vector_eigenvalues[translated_index].size();
-        }
-
-      if (n_rows_1d != -1)
-        internal::TensorProductMatrixSymmetricSum::apply_inverse<
-          n_rows_1d == -1 ? 0 : n_rows_1d>(dst,
-                                           src,
-                                           tmp_array,
-                                           n_rows_1d_non_templated,
-                                           eigenvectors,
-                                           eigenvalues);
-      else
-        internal::TensorProductMatrixSymmetricSum::select_apply_inverse<1>(
-          dst,
-          src,
-          tmp_array,
-          n_rows_1d_non_templated,
-          eigenvectors,
-          eigenvalues);
-    }
+                  AlignedVector<Number> &        tmp_array) const;
 
     std::size_t
-    memory_consumption() const
-    {
-      return MemoryConsumption::memory_consumption(indices) +
-             MemoryConsumption::memory_consumption(vector_mass_matrix) +
-             MemoryConsumption::memory_consumption(vector_derivative_matrix) +
-             MemoryConsumption::memory_consumption(vector_eigenvectors) +
-             MemoryConsumption::memory_consumption(vector_eigenvalues);
-    }
+    memory_consumption() const;
 
     std::size_t
-    size() const
-    {
-      return vector_mass_matrix.size();
-    }
-
-    void
-    finalize()
-    {
-      vector_mass_matrix.resize(cache.size());
-      vector_derivative_matrix.resize(cache.size());
-      vector_eigenvectors.resize(cache.size());
-      vector_eigenvalues.resize(cache.size());
-
-      const auto store = [&](const unsigned int    index,
-                             const MatrixPairType &M_and_K) {
-        std::array<Table<2, Number>, 1> mass_matrices;
-        mass_matrices[0] = M_and_K.first;
-
-        std::array<Table<2, Number>, 1> derivative_matrices;
-        derivative_matrices[0] = M_and_K.second;
-
-        std::array<Table<2, Number>, 1>      eigenvectors;
-        std::array<AlignedVector<Number>, 1> eigenvalues;
-
-        internal::TensorProductMatrixSymmetricSum::setup(mass_matrices,
-                                                         derivative_matrices,
-                                                         eigenvectors,
-                                                         eigenvalues);
-
-        vector_mass_matrix[index]       = M_and_K.first;
-        vector_derivative_matrix[index] = M_and_K.second;
-        vector_eigenvectors[index]      = eigenvectors[0];
-        vector_eigenvalues[index]       = eigenvalues[0];
-      };
-
-      if (cache.size() == indices.size())
-        {
-          std::map<unsigned int, MatrixPairType> inverted_cache;
-
-          for (const auto &i : cache)
-            inverted_cache[i.second] = i.first;
-
-          for (unsigned int i = 0; i < indices.size(); ++i)
-            store(i, inverted_cache[indices[i]]);
-
-          indices.clear();
-        }
-      else
-        {
-          for (const auto &i : cache)
-            store(i.second, i.first);
-        }
-
-      cache.clear();
-    }
+    size() const;
 
   private:
     std::map<
@@ -431,5 +320,162 @@ namespace dealii
     std::vector<Table<2, Number>>      vector_eigenvectors;
     std::vector<AlignedVector<Number>> vector_eigenvalues;
   };
+
+
+
+  template <int dim, typename Number, int n_rows_1d>
+  void
+  TensorProductMatrixSymmetricSumCache<dim, Number, n_rows_1d>::reserve(
+    const unsigned int size)
+  {
+    indices.assign(size * dim, numbers::invalid_unsigned_int);
+  }
+
+
+
+  template <int dim, typename Number, int n_rows_1d>
+  void
+  TensorProductMatrixSymmetricSumCache<dim, Number, n_rows_1d>::insert(
+    const unsigned int                       index,
+    const std::array<Table<2, Number>, dim> &Ms,
+    const std::array<Table<2, Number>, dim> &Ks)
+  {
+    for (unsigned int d = 0; d < dim; ++d)
+      {
+        const MatrixPairType matrix(Ms[d], Ks[d]);
+
+        const auto ptr = cache.find(matrix);
+
+        if (ptr != cache.end())
+          indices[index * dim + d] = ptr->second;
+        else
+          {
+            indices[index * dim + d] = cache.size();
+            cache[matrix]            = cache.size();
+          }
+      }
+  }
+
+
+
+  template <int dim, typename Number, int n_rows_1d>
+  void
+  TensorProductMatrixSymmetricSumCache<dim, Number, n_rows_1d>::finalize()
+  {
+    vector_mass_matrix.resize(cache.size());
+    vector_derivative_matrix.resize(cache.size());
+    vector_eigenvectors.resize(cache.size());
+    vector_eigenvalues.resize(cache.size());
+
+    const auto store = [&](const unsigned int    index,
+                           const MatrixPairType &M_and_K) {
+      std::array<Table<2, Number>, 1> mass_matrices;
+      mass_matrices[0] = M_and_K.first;
+
+      std::array<Table<2, Number>, 1> derivative_matrices;
+      derivative_matrices[0] = M_and_K.second;
+
+      std::array<Table<2, Number>, 1>      eigenvectors;
+      std::array<AlignedVector<Number>, 1> eigenvalues;
+
+      internal::TensorProductMatrixSymmetricSum::setup(mass_matrices,
+                                                       derivative_matrices,
+                                                       eigenvectors,
+                                                       eigenvalues);
+
+      vector_mass_matrix[index]       = M_and_K.first;
+      vector_derivative_matrix[index] = M_and_K.second;
+      vector_eigenvectors[index]      = eigenvectors[0];
+      vector_eigenvalues[index]       = eigenvalues[0];
+    };
+
+    if (cache.size() == indices.size())
+      {
+        std::map<unsigned int, MatrixPairType> inverted_cache;
+
+        for (const auto &i : cache)
+          inverted_cache[i.second] = i.first;
+
+        for (unsigned int i = 0; i < indices.size(); ++i)
+          store(i, inverted_cache[indices[i]]);
+
+        indices.clear();
+      }
+    else
+      {
+        for (const auto &i : cache)
+          store(i.second, i.first);
+      }
+
+    cache.clear();
+  }
+
+
+
+  template <int dim, typename Number, int n_rows_1d>
+  void
+  TensorProductMatrixSymmetricSumCache<dim, Number, n_rows_1d>::apply_inverse(
+    const unsigned int             index,
+    const ArrayView<Number> &      dst_in,
+    const ArrayView<const Number> &src_in,
+    AlignedVector<Number> &        tmp_array) const
+  {
+    Number *      dst = dst_in.begin();
+    const Number *src = src_in.begin();
+
+    std::array<const Number *, dim> eigenvectors, eigenvalues;
+    unsigned int                    n_rows_1d_non_templated = 0;
+
+    for (unsigned int d = 0; d < dim; ++d)
+      {
+        const unsigned int translated_index =
+          (indices.size() > 0) ? indices[dim * index + d] : (dim * index + d);
+
+        eigenvectors[d]         = &vector_eigenvectors[translated_index](0, 0);
+        eigenvalues[d]          = vector_eigenvalues[translated_index].data();
+        n_rows_1d_non_templated = vector_eigenvalues[translated_index].size();
+      }
+
+    if (n_rows_1d != -1)
+      internal::TensorProductMatrixSymmetricSum::apply_inverse<
+        n_rows_1d == -1 ? 0 : n_rows_1d>(dst,
+                                         src,
+                                         tmp_array,
+                                         n_rows_1d_non_templated,
+                                         eigenvectors,
+                                         eigenvalues);
+    else
+      internal::TensorProductMatrixSymmetricSum::select_apply_inverse<1>(
+        dst,
+        src,
+        tmp_array,
+        n_rows_1d_non_templated,
+        eigenvectors,
+        eigenvalues);
+  }
+
+
+
+  template <int dim, typename Number, int n_rows_1d>
+  std::size_t
+  TensorProductMatrixSymmetricSumCache<dim, Number, n_rows_1d>::
+    memory_consumption() const
+  {
+    return MemoryConsumption::memory_consumption(indices) +
+           MemoryConsumption::memory_consumption(vector_mass_matrix) +
+           MemoryConsumption::memory_consumption(vector_derivative_matrix) +
+           MemoryConsumption::memory_consumption(vector_eigenvectors) +
+           MemoryConsumption::memory_consumption(vector_eigenvalues);
+  }
+
+
+
+  template <int dim, typename Number, int n_rows_1d>
+  std::size_t
+  TensorProductMatrixSymmetricSumCache<dim, Number, n_rows_1d>::size() const
+  {
+    return vector_mass_matrix.size();
+  }
+
 
 } // namespace dealii
