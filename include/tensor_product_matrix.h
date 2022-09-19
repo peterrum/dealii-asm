@@ -326,13 +326,16 @@ namespace dealii
         }
     }
 
-    const MyTensorProductMatrixSymmetricSum<dim, Number, n_rows_1d> &
-    get(const unsigned int index) const
+    void
+    apply_inverse(const unsigned int             index,
+                  const ArrayView<Number> &      dst,
+                  const ArrayView<const Number> &src,
+                  AlignedVector<Number> &        tmp) const
     {
       if (compressed_vector.size() > 0)
-        return compressed_vector[indices[index]];
+        return compressed_vector[indices[index]].apply_inverse(dst, src, tmp);
 
-      return vector[index];
+      return vector[index].apply_inverse(dst, src, tmp);
     }
 
     std::size_t

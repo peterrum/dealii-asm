@@ -171,31 +171,19 @@ test(const unsigned int fe_degree,
   LaplaceOperatorMatrixFree<dim, Number, VectorizedArrayType> op(matrix_free,
                                                                  op_as);
 
-  std::shared_ptr<ASPoissonPreconditionerBase<VectorType>> precon_fdm;
-
-  const unsigned int n_rows = fe_degree + 2 * n_overlap - 1;
-
-#define OPERATION(c, d)                                            \
-  if (c == -1)                                                     \
-    pcout << "Warning: FDM with <" + std::to_string(n_rows) +      \
-               "> is not precompiled!"                             \
-          << std::endl;                                            \
-                                                                   \
-  precon_fdm = std::make_shared<                                   \
-    ASPoissonPreconditioner<dim, Number, VectorizedArrayType, c>>( \
-    matrix_free,                                                   \
-    n_overlap,                                                     \
-    dim,                                                           \
-    mapping_q_cache,                                               \
-    fe_1D,                                                         \
-    quadrature_face,                                               \
-    quadrature_1D,                                                 \
+  ASPoissonPreconditioner<dim, Number, VectorizedArrayType, -1> precon_fdm(
+    matrix_free,
+    n_overlap,
+    dim,
+    mapping_q_cache,
+    fe_1D,
+    quadrature_face,
+    quadrature_1D,
     Restrictors::WeightingType::none);
 
-  EXPAND_OPERATIONS(OPERATION);
-#undef OPERATION
+  pcout << "- fdm size: " << precon_fdm.n_fdm_instances() << std::endl;
 
-  op.set_partitioner(precon_fdm->get_partitioner());
+  op.set_partitioner(precon_fdm.get_partitioner());
 
   VectorType src, dst;
 
@@ -208,7 +196,7 @@ test(const unsigned int fe_degree,
     {
       LIKWID_MARKER_START("fdm");
       for (unsigned int i = 0; i < 10; ++i)
-        precon_fdm->vmult(dst, src);
+        precon_fdm.vmult(dst, src);
       LIKWID_MARKER_STOP("fdm");
     }
   else

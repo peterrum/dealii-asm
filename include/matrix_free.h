@@ -467,10 +467,10 @@ private:
             src_local[i] *= weights_local[i];
 
         // 3) cell operation: fast diagonalization method
-        fdm.get(cell).apply_inverse(
-          make_array_view(dst_local.begin(), dst_local.end()),
-          make_array_view(src_local.begin(), src_local.end()),
-          tmp);
+        fdm.apply_inverse(cell,
+                          make_array_view(dst_local.begin(), dst_local.end()),
+                          make_array_view(src_local.begin(), src_local.end()),
+                          tmp);
 
         // 4) apply weights (optional)
         if ((weights_local.size() > 0) &&
@@ -548,7 +548,8 @@ private:
                     phi_weights.begin_dof_values()[i];
               }
 
-            fdm.get(cell).apply_inverse(
+            fdm.apply_inverse(
+              cell,
               ArrayView<VectorizedArrayType>(phi_dst.begin_dof_values(),
                                              phi_dst.dofs_per_cell),
               ArrayView<const VectorizedArrayType>(phi_src.begin_dof_values(),
