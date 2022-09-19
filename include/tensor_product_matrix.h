@@ -9,18 +9,6 @@ namespace dealii
     : public TensorProductMatrixSymmetricSum<dim, Number, n_rows_1d>
   {
   public:
-    void
-    internal_reinit(const std::array<Table<2, Number>, dim> mass_matrix,
-                    const std::array<Table<2, Number>, dim> derivative_matrix,
-                    const std::array<Table<2, Number>, dim> eigenvectors,
-                    const std::array<AlignedVector<Number>, dim> eigenvalues)
-    {
-      this->mass_matrix       = mass_matrix;
-      this->derivative_matrix = derivative_matrix;
-      this->eigenvectors      = eigenvectors;
-      this->eigenvalues       = eigenvalues;
-    }
-
     const std::array<AlignedVector<Number>, dim> &
     get_eigenvalues() const
     {
@@ -31,67 +19,6 @@ namespace dealii
     get_eigenvectors() const
     {
       return this->eigenvectors;
-    }
-
-    template <std::size_t N>
-    static MyTensorProductMatrixSymmetricSum<dim,
-                                             VectorizedArray<Number, N>,
-                                             n_rows_1d>
-    transpose(const std::array<
-                MyTensorProductMatrixSymmetricSum<dim, Number, n_rows_1d>,
-                N> &             in,
-              const unsigned int NN = N)
-    {
-      std::array<Table<2, VectorizedArray<Number, N>>, dim> mass_matrix;
-      std::array<Table<2, VectorizedArray<Number, N>>, dim> derivative_matrix;
-      std::array<Table<2, VectorizedArray<Number, N>>, dim> eigenvectors;
-      std::array<AlignedVector<VectorizedArray<Number, N>>, dim> eigenvalues;
-
-      for (unsigned int d = 0; d < dim; ++d)
-        {
-          // allocate memory
-          mass_matrix[d].reinit(in[0].mass_matrix[d].size(0),
-                                in[0].mass_matrix[d].size(1));
-          derivative_matrix[d].reinit(in[0].derivative_matrix[d].size(0),
-                                      in[0].derivative_matrix[d].size(1));
-          eigenvectors[d].reinit(in[0].eigenvectors[d].size(0),
-                                 in[0].eigenvectors[d].size(1));
-          eigenvalues[d].resize(in[0].eigenvalues[d].size());
-
-          // do actual transpose
-          for (unsigned int v = 0; v < NN; ++v)
-            for (unsigned int i = 0; i < in[0].mass_matrix[d].size(0); ++i)
-              for (unsigned int j = 0; j < in[0].mass_matrix[d].size(1); ++j)
-                mass_matrix[d][i][j][v] = in[v].mass_matrix[d][i][j];
-
-          for (unsigned int v = 0; v < NN; ++v)
-            for (unsigned int i = 0; i < in[0].derivative_matrix[d].size(0);
-                 ++i)
-              for (unsigned int j = 0; j < in[0].derivative_matrix[d].size(1);
-                   ++j)
-                derivative_matrix[d][i][j][v] =
-                  in[v].derivative_matrix[d][i][j];
-
-          for (unsigned int v = 0; v < NN; ++v)
-            for (unsigned int i = 0; i < in[0].eigenvectors[d].size(0); ++i)
-              for (unsigned int j = 0; j < in[0].eigenvectors[d].size(1); ++j)
-                eigenvectors[d][i][j][v] = in[v].eigenvectors[d][i][j];
-
-          for (unsigned int v = 0; v < NN; ++v)
-            for (unsigned int i = 0; i < in[0].eigenvalues[d].size(); ++i)
-              eigenvalues[d][i][v] = in[v].eigenvalues[d][i];
-        }
-
-      MyTensorProductMatrixSymmetricSum<dim,
-                                        VectorizedArray<Number, N>,
-                                        n_rows_1d>
-        out;
-      out.internal_reinit(mass_matrix,
-                          derivative_matrix,
-                          eigenvectors,
-                          eigenvalues);
-
-      return out;
     }
 
   private:
