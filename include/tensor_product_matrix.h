@@ -300,7 +300,6 @@ namespace dealii
     void
     reserve(const unsigned int size)
     {
-      vector.resize(size);
       indices.assign(size, numbers::invalid_unsigned_int);
     }
 
@@ -312,17 +311,14 @@ namespace dealii
       MyTensorProductMatrixSymmetricSum<dim, Number, n_rows_1d> matrix;
       matrix.reinit(Ms, Ks);
 
-      vector[index] = matrix;
-
       const auto ptr = cache.find(matrix);
 
       if (ptr != cache.end())
         indices[index] = ptr->second;
       else
         {
-          indices[index] = compressed_vector.size();
-          cache[matrix]  = compressed_vector.size();
-          compressed_vector.emplace_back(matrix);
+          indices[index] = cache.size();
+          cache[matrix]  = cache.size();
         }
     }
 
@@ -338,32 +334,18 @@ namespace dealii
       std::array<const Number *, dim> eigenvectors, eigenvalues;
       unsigned int                    n_rows_1d_non_templated = 0;
 
-      if (compressed_vector.size() > 0)
+      const unsigned int translated_index =
+        (indices.size() > 0) ? indices[index] : index;
+
+      const auto &fdm = vector[translated_index]; // TODO
+
+      for (unsigned int d = 0; d < dim; ++d)
         {
-          // TODO
-          const auto &fdm = compressed_vector[indices[index]];
-
-          for (unsigned int d = 0; d < dim; ++d)
-            {
-              eigenvectors[d] = &fdm.get_eigenvectors()[d](0, 0);
-              eigenvalues[d]  = fdm.get_eigenvalues()[d].data();
-            }
-
-          n_rows_1d_non_templated = fdm.get_eigenvalues()[0].size();
+          eigenvectors[d] = &fdm.get_eigenvectors()[d](0, 0);
+          eigenvalues[d]  = fdm.get_eigenvalues()[d].data();
         }
-      else
-        {
-          // TODO
-          const auto &fdm = vector[index];
 
-          for (unsigned int d = 0; d < dim; ++d)
-            {
-              eigenvectors[d] = &fdm.get_eigenvectors()[d](0, 0);
-              eigenvalues[d]  = fdm.get_eigenvalues()[d].data();
-            }
-
-          n_rows_1d_non_templated = fdm.get_eigenvalues()[0].size();
-        }
+      n_rows_1d_non_templated = fdm.get_eigenvalues()[0].size();
 
       if (n_rows_1d != -1)
         internal::TensorProductMatrixSymmetricSum::apply_inverse<
@@ -392,22 +374,35 @@ namespace dealii
     std::size_t
     size() const
     {
-      if (compressed_vector.size() != 0)
-        return compressed_vector.size();
-
       return vector.size();
     }
 
     void
     finalize()
     {
-      cache.clear();
+      vector.resize(cache.size());
 
-      if (compressed_vector.size() == vector.size())
+      if (cache.size() == indices.size())
         {
+          std::map<unsigned int,
+                   MyTensorProductMatrixSymmetricSum<dim, Number, n_rows_1d>>
+            inverted_cache;
+
+          for (const auto &i : cache)
+            inverted_cache[i.second] = i.first;
+
+          for (unsigned int i = 0; i < indices.size(); ++i)
+            vector[i] = inverted_cache[indices[i]];
+
           indices.clear();
-          compressed_vector.clear();
         }
+      else
+        {
+          for (const auto &i : cache)
+            vector[i.second] = i.first;
+        }
+
+      cache.clear();
     }
 
   private:
@@ -417,9 +412,6 @@ namespace dealii
       cache;
 
     std::vector<unsigned int> indices;
-
-    std::vector<MyTensorProductMatrixSymmetricSum<dim, Number, n_rows_1d>>
-      compressed_vector;
 
     std::vector<MyTensorProductMatrixSymmetricSum<dim, Number, n_rows_1d>>
       vector;
