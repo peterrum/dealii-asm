@@ -277,47 +277,122 @@ namespace dealii
 
 
 
+  /**
+   * A class similar to TensorProductMatrixSymmetricSum.
+   *
+   * The class TensorProductMatrixSymmetricSum stores a
+   * 1D mass matrix, 1D stiffness matrix, eigenvalues and eigenvectors
+   * for each direction. If one uses one TensorProductMatrixSymmetricSum
+   * instance for, e.g., each cell, these quantities are stored
+   * for each cell. There is no possibility to reusage quanties between
+   * TensorProductMatrixSymmetricSum instances even if the values of the
+   * internal data structures might be the same. This class targets the case
+   * that one needs many TensorProductMatrixSymmetricSum instances and
+   * there might be the possibility to reuse the internal quanties.
+   *
+   * This class is flexible and allows to interpret the parameter
+   * @p index arbitraryly. In the case of an element-centric patch
+   * smoother, the index might correspond to the cell index and,
+   * in the case of a vertex patch smoother, the index might
+   * correspond to the vertex index defining the vertex patch. If
+   * @p n_rows_1d is set to -1, the sizes of the mass matrices and
+   * the stiffness matrices can differ between cells, which might be
+   * useful if the class is used in the context of hp-refinement to
+   * construct a smoother.
+   */
   template <int dim, typename Number, int n_rows_1d = -1>
   class TensorProductMatrixSymmetricSumCache
   {
     using MatrixPairType = std::pair<Table<2, Number>, Table<2, Number>>;
 
   public:
+    /**
+     * Allocate memory. The parameter @p specifies the maximum value
+     * of the index used in invert() and apply_inverse().
+     */
     void
     reserve(const unsigned int size);
 
+    /**
+     * Attach for a given @p index, the mass matrices @p Ms and
+     * stiffness matrices @p Ks.
+     */
     void
     insert(const unsigned int                       index,
            const std::array<Table<2, Number>, dim> &Ms,
            const std::array<Table<2, Number>, dim> &Ks);
 
+    /**
+     * Finalize setup. This function computes, e.g., the
+     * eigenvalues and the eigenvectors.
+     */
     void
     finalize();
 
+    /**
+     * Apply the inverse matrix for a given @p index.
+     */
     void
     apply_inverse(const unsigned int             index,
                   const ArrayView<Number> &      dst_in,
                   const ArrayView<const Number> &src_in,
                   AlignedVector<Number> &        tmp_array) const;
 
+    /**
+     * Return the memory consumption of this class in bytes.
+     */
     std::size_t
     memory_consumption() const;
 
+    /**
+     * Return the number of 1D matrices of each type stored internally.
+     * In the case that no compression could be performed, its value
+     * is the parameter passed to the function reserve() times the
+     * number of dimension. If compression could be performed, the
+     * value returned is less. In the optimal case (uniform Cartesian
+     * mesh), the value is one.
+     */
     std::size_t
     size() const;
 
   private:
+    /**
+     * Container used during setup to determine the unique 1D
+     * matrices. The memory is freed during finalize().
+     */
     std::map<
       MatrixPairType,
       unsigned int,
       internal::TensorProductMatrixSymmetricSum::MatrixPairComparator<Number>>
       cache;
 
+    /**
+     * Map from index to the right index within vector_mass_matrix,
+     * vector_derivative_matrix, vector_eigenvectors, and
+     * vector_eigenvalues. If compression was not successful, this
+     * vector is emtyp, since the vectors can be access directly
+     * with the given index.
+     */
     std::vector<unsigned int> indices;
 
-    std::vector<Table<2, Number>>      vector_mass_matrix;
-    std::vector<Table<2, Number>>      vector_derivative_matrix;
-    std::vector<Table<2, Number>>      vector_eigenvectors;
+    /**
+     * Vector of 1D mass matrices.
+     */
+    std::vector<Table<2, Number>> vector_mass_matrix;
+
+    /**
+     * Vector of 1D derivative matrices.
+     */
+    std::vector<Table<2, Number>> vector_derivative_matrix;
+
+    /**
+     * Vector of eigenvectors.
+     */
+    std::vector<Table<2, Number>> vector_eigenvectors;
+
+    /**
+     * Vector of eigenvalues.
+     */
     std::vector<AlignedVector<Number>> vector_eigenvalues;
   };
 
