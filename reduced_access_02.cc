@@ -274,53 +274,63 @@ gather_post(const std::vector<Number> &      global_vector,
         }
     }
 
-  if (orientation != 0)
+  const unsigned int np  = degree + 1;
+  const unsigned int np2 = np * np;
+
+  if (orientation != 0) // process lines
     {
-      const unsigned int np  = degree + 1;
-      const unsigned int np2 = np * np;
-
-      for (unsigned int l = 0; l < 12; ++l) // loop over all lines
+      if (orientation & 0b111111111111) // at least one line is irregular
         {
-          if (orientation & 1) // check bit
+          for (unsigned int l = 0; l < 12; ++l) // loop over all lines
             {
-              // determine stride and begin
-              const unsigned int stride = Utilities::pow(degree + 1, l / 4);
+              if (orientation & 1) // check bit
+                {
+                  // determine stride and begin
+                  const unsigned int stride = Utilities::pow(degree + 1, l / 4);
 
-              unsigned int begin = 0;
-              if (l == 0)
-                begin = 1;
-              else if (l == 1)
-                begin = np * degree + 1;
-              else if (l == 2)
-                begin = np2 * degree + 1;
-              else if (l == 3)
-                begin = np2 * degree + np * degree + 1;
-              else if (l == 4)
-                begin = np;
-              else if (l == 5)
-                begin = np + degree;
-              else if (l == 6)
-                begin = np2 * degree + np;
-              else if (l == 7)
-                begin = np2 * degree + np + degree;
-              else if (l == 8)
-                begin = np2;
-              else if (l == 9)
-                begin = np2 + degree;
-              else if (l == 10)
-                begin = np2 + np * degree;
-              else if (l == 11)
-                begin = np2 + np * degree + degree;
+                  unsigned int begin = 0;
+                  if (l == 0)
+                    begin = 1;
+                  else if (l == 1)
+                    begin = np * degree + 1;
+                  else if (l == 2)
+                    begin = np2 * degree + 1;
+                  else if (l == 3)
+                    begin = np2 * degree + np * degree + 1;
+                  else if (l == 4)
+                    begin = np;
+                  else if (l == 5)
+                    begin = np + degree;
+                  else if (l == 6)
+                    begin = np2 * degree + np;
+                  else if (l == 7)
+                    begin = np2 * degree + np + degree;
+                  else if (l == 8)
+                    begin = np2;
+                  else if (l == 9)
+                    begin = np2 + degree;
+                  else if (l == 10)
+                    begin = np2 + np * degree;
+                  else if (l == 11)
+                    begin = np2 + np * degree + degree;
 
-              // perform reorientation
-              for (unsigned int i = 0; i < (degree - 1) / 2; ++i)
-                std::swap(local_vector[begin + i * stride],
-                          local_vector[begin + (degree - 2 - i) * stride]);
+                  // perform reorientation
+                  for (unsigned int i = 0; i < (degree - 1) / 2; ++i)
+                    std::swap(local_vector[begin + i * stride],
+                              local_vector[begin + (degree - 2 - i) * stride]);
+                }
+
+              orientation = orientation >> 1; //  go to next bit
             }
-
-          orientation = orientation >> 1; //  go to next bit
         }
+      else // all lines are regular
+        {
+          orientation = orientation >> 12;
+        }
+    }
 
+  if (orientation != 0) // process quads
+    {
       for (unsigned int q = 0; q < 6; ++q) // loop over all quads
         {
           const unsigned int flag = orientation & 0b111;
