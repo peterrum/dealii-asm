@@ -21,17 +21,6 @@ namespace dealii
       this->eigenvalues       = eigenvalues;
     }
 
-    void
-    set_mask(const std::array<AlignedVector<Number>, dim> masks)
-    {
-      const unsigned int n_dofs_1D = this->eigenvalues[0].size();
-
-      for (unsigned int d = 0; d < dim; ++d)
-        for (unsigned int i = 0; i < n_dofs_1D; ++i)
-          for (unsigned int j = 0; j < n_dofs_1D; ++j)
-            this->eigenvectors[d][i][j] *= masks[d][i];
-    }
-
     const std::array<AlignedVector<Number>, dim> &
     get_eigenvalues() const
     {
@@ -184,9 +173,8 @@ namespace dealii
     const unsigned int n_dofs_1D              = M_ref.n();
     const unsigned int n_dofs_1D_with_overlap = M_ref.n() - 2 + 2 * n_overlap;
 
-    std::array<FullMatrix<Number>, dim>    Ms;
-    std::array<FullMatrix<Number>, dim>    Ks;
-    std::array<AlignedVector<Number>, dim> masks;
+    std::array<FullMatrix<Number>, dim> Ms;
+    std::array<FullMatrix<Number>, dim> Ks;
 
     const auto clear_row_and_column = [&](const unsigned int n, auto &matrix) {
       for (unsigned int i = 0; i < n_dofs_1D_with_overlap; ++i)
@@ -200,8 +188,6 @@ namespace dealii
       {
         FullMatrix<Number> M(n_dofs_1D_with_overlap, n_dofs_1D_with_overlap);
         FullMatrix<Number> K(n_dofs_1D_with_overlap, n_dofs_1D_with_overlap);
-
-        masks[d].resize(n_dofs_1D_with_overlap, true);
 
         // inner cell
         for (unsigned int i = 0; i < n_dofs_1D; ++i)
@@ -293,9 +279,8 @@ namespace dealii
             {
               Assert(M[i][i] == 0.0, ExcInternalError());
 
-              M[i][i]     = 1.0;
-              K[i][i]     = 1.0;
-              masks[d][i] = false;
+              M[i][i] = 1.0;
+              K[i][i] = 1.0;
             }
 
         Ms[d] = M;
@@ -305,7 +290,6 @@ namespace dealii
     // 3) setup FDM routine
     MyTensorProductMatrixSymmetricSum<dim, Number, n_rows_1d> fdm;
     fdm.reinit(Ms, Ks);
-    fdm.set_mask(masks);
 
     return fdm;
   }
