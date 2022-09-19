@@ -227,8 +227,8 @@ namespace dealii
     {
       bool
       operator()(
-        const MyTensorProductMatrixSymmetricSum<dim, Number, n_rows_1d> &left,
-        const MyTensorProductMatrixSymmetricSum<dim, Number, n_rows_1d> &right)
+        const MyTensorProductMatrixSymmetricSum<1, Number, n_rows_1d> &left,
+        const MyTensorProductMatrixSymmetricSum<1, Number, n_rows_1d> &right)
         const
       {
         const auto &eigenvalues_0  = left.get_eigenvalues();
@@ -247,7 +247,7 @@ namespace dealii
             NumberScalar a = 0.0;
             NumberScalar b = 0.0;
 
-            for (unsigned int d = 0; d < dim; ++d)
+            for (unsigned int d = 0; d < 1; ++d)
               for (unsigned int i = 0; i < eigenvalues_0.size(); ++i)
                 {
                   a += eigenvalues_0[d][i][v];
@@ -273,7 +273,7 @@ namespace dealii
 
         for (unsigned int v = 0; v < NN; ++v)
           if (mask[v])
-            for (unsigned int d = 0; d < dim; ++d)
+            for (unsigned int d = 0; d < 1; ++d)
               for (unsigned int i = 0; i < eigenvalues_0[d].size(); ++i)
                 if (less(eigenvalues_0[d][i][v], eigenvalues_1[d][i][v]))
                   return true;
@@ -283,7 +283,7 @@ namespace dealii
 
         for (unsigned int v = 0; v < NN; ++v)
           if (mask[v])
-            for (unsigned int d = 0; d < dim; ++d)
+            for (unsigned int d = 0; d < 1; ++d)
               for (unsigned int i = 0; i < eigenvectors_0[d].size(0); ++i)
                 for (unsigned int j = 0; j < eigenvectors_0[d].size(1); ++j)
                   if (less(eigenvectors_0[d][i][j][v],
@@ -300,7 +300,7 @@ namespace dealii
     void
     reserve(const unsigned int size)
     {
-      indices.assign(size, numbers::invalid_unsigned_int);
+      indices.assign(size * dim, numbers::invalid_unsigned_int);
     }
 
     void
@@ -308,17 +308,20 @@ namespace dealii
            const std::array<Table<2, Number>, dim> &Ms,
            const std::array<Table<2, Number>, dim> &Ks)
     {
-      MyTensorProductMatrixSymmetricSum<dim, Number, n_rows_1d> matrix;
-      matrix.reinit(Ms, Ks);
-
-      const auto ptr = cache.find(matrix);
-
-      if (ptr != cache.end())
-        indices[index] = ptr->second;
-      else
+      for (unsigned int d = 0; d < dim; ++d)
         {
-          indices[index] = cache.size();
-          cache[matrix]  = cache.size();
+          MyTensorProductMatrixSymmetricSum<1, Number, n_rows_1d> matrix;
+          matrix.reinit(Ms[d], Ks[d]);
+
+          const auto ptr = cache.find(matrix);
+
+          if (ptr != cache.end())
+            indices[index * dim + d] = ptr->second;
+          else
+            {
+              indices[index * dim + d] = cache.size();
+              cache[matrix]            = cache.size();
+            }
         }
     }
 
@@ -334,18 +337,16 @@ namespace dealii
       std::array<const Number *, dim> eigenvectors, eigenvalues;
       unsigned int                    n_rows_1d_non_templated = 0;
 
-      const unsigned int translated_index =
-        (indices.size() > 0) ? indices[index] : index;
-
-      const auto &fdm = vector[translated_index]; // TODO
-
       for (unsigned int d = 0; d < dim; ++d)
         {
-          eigenvectors[d] = &fdm.get_eigenvectors()[d](0, 0);
-          eigenvalues[d]  = fdm.get_eigenvalues()[d].data();
-        }
+          const unsigned int translated_index =
+            (indices.size() > 0) ? indices[dim * index + d] : (dim * index + d);
 
-      n_rows_1d_non_templated = fdm.get_eigenvalues()[0].size();
+          const auto &fdm         = vector[translated_index];         // TODO
+          eigenvectors[d]         = &fdm.get_eigenvectors()[0](0, 0); //
+          eigenvalues[d]          = fdm.get_eigenvalues()[0].data();  //
+          n_rows_1d_non_templated = fdm.get_eigenvalues()[0].size();  //
+        }
 
       if (n_rows_1d != -1)
         internal::TensorProductMatrixSymmetricSum::apply_inverse<
@@ -385,7 +386,7 @@ namespace dealii
       if (cache.size() == indices.size())
         {
           std::map<unsigned int,
-                   MyTensorProductMatrixSymmetricSum<dim, Number, n_rows_1d>>
+                   MyTensorProductMatrixSymmetricSum<1, Number, n_rows_1d>>
             inverted_cache;
 
           for (const auto &i : cache)
@@ -406,15 +407,14 @@ namespace dealii
     }
 
   private:
-    std::map<MyTensorProductMatrixSymmetricSum<dim, Number, n_rows_1d>,
+    std::map<MyTensorProductMatrixSymmetricSum<1, Number, n_rows_1d>,
              unsigned int,
              compartor>
       cache;
 
     std::vector<unsigned int> indices;
 
-    std::vector<MyTensorProductMatrixSymmetricSum<dim, Number, n_rows_1d>>
-      vector;
+    std::vector<MyTensorProductMatrixSymmetricSum<1, Number, n_rows_1d>> vector;
   };
 
 } // namespace dealii
