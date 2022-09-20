@@ -55,27 +55,52 @@ compress_orientation(const std::vector<unsigned int> &orientations,
     }
   else if (orientations.size() == 18) // 3D
     {
-      unsigned int index_shift = 0;
-      unsigned int dof_shift   = 0;
-
       // lines
       if (do_post)
         {
+          unsigned int index_shift = 0;
+          unsigned int dof_shift   = 0;
+
           for (const auto i : {2, 3, 6, 7, 0, 1, 4, 5, 8, 9, 10, 11})
             orientation |= orientations[i] << (dof_shift++);
 
           index_shift += 12;
+
+          for (unsigned int i = 0; i < 6;
+               ++i, ++index_shift, dof_shift += 3) // quads
+            orientation |= orientations[index_shift] << dof_shift;
         }
       else
         {
-          for (unsigned int i = 0; i < 12;
-               ++i, ++index_shift, ++dof_shift) // lines
-            orientation |= orientations[index_shift] << dof_shift;
-        }
+          std::vector<std::pair<unsigned int, unsigned int>> orientation_table{
+            // bottom layer
+            {1, orientations[2]},
+            {1, orientations[0]},
+            {3, orientations[16]},
+            {1, orientations[1]},
+            {1, orientations[3]},
+            // middle layer
+            {1, orientations[8]},
+            {3, orientations[14]},
+            {1, orientations[9]},
+            {3, orientations[12]},
+            {3, orientations[13]},
+            {1, orientations[10]},
+            {3, orientations[15]},
+            {1, orientations[11]},
+            // bottom layer
+            {1, orientations[6]},
+            {1, orientations[4]},
+            {3, orientations[17]},
+            {1, orientations[5]},
+            {1, orientations[7]}};
 
-      for (unsigned int i = 0; i < 6;
-           ++i, ++index_shift, dof_shift += 3) // quads
-        orientation |= orientations[index_shift] << dof_shift;
+          for (unsigned int i = 0, s = 0; i < orientation_table.size(); ++i)
+            {
+              orientation += orientation_table[i].second << s;
+              s += orientation_table[i].first;
+            }
+        }
     }
   else
     {

@@ -23,36 +23,7 @@ gather(const std::vector<Number> &      global_vector,
 {
   (void)dim;
 
-  std::vector<std::pair<unsigned int, unsigned int>> orientation{
-    // bottom layer
-    {1, orientations[2]},
-    {1, orientations[0]},
-    {3, orientations[16]},
-    {1, orientations[1]},
-    {1, orientations[3]},
-    // middle layer
-    {1, orientations[8]},
-    {3, orientations[14]},
-    {1, orientations[9]},
-    {3, orientations[12]},
-    {3, orientations[13]},
-    {1, orientations[10]},
-    {3, orientations[15]},
-    {1, orientations[11]},
-    // bottom layer
-    {1, orientations[6]},
-    {1, orientations[4]},
-    {3, orientations[17]},
-    {1, orientations[5]},
-    {1, orientations[7]}};
-
-  unsigned int o = 0;
-
-  for (unsigned int i = 0, s = 0; i < orientation.size(); ++i)
-    {
-      o += orientation[i].second << s;
-      s += orientation[i].first;
-    }
+  unsigned int o = compress_orientation(orientations, false);
 
   for (unsigned int k = 0, compressed_k = 0, offset_k = 0, c = 0, o_ptr = o;
        k <= degree;
@@ -440,7 +411,7 @@ main(int argc, char *argv[])
   // gather values and print to terminal
   std::vector<double> local_vector(dof_counter);
 
-  if (false)
+  if (true)
     gather(global_vector,
            dim,
            degree,
