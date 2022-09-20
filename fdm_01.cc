@@ -144,8 +144,10 @@ test(const unsigned int fe_degree, const unsigned int n_overlap)
       std::cout << std::endl;
 #endif
 
-      const auto fdm = setup_fdm<dim, double>(
+      const auto [M, K] = create_laplace_tensor_product_matrix<dim, double>(
         cell, fe_1D, quadrature_1D, patch_extend, n_overlap);
+
+      const TensorProductMatrixSymmetricSum<dim, double> fdm(M, K);
 
       Vector<double> src, dst;
 

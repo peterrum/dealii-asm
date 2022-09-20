@@ -195,9 +195,8 @@ public:
          cell < matrix_free.n_cell_batches();
          ++cell)
       {
-        std::array<MyTensorProductMatrixSymmetricSum<dim, Number, n_rows_1d>,
-                   VectorizedArrayType::size()>
-          scalar_fdm;
+        std::array<Table<2, VectorizedArrayType>, dim> Ms;
+        std::array<Table<2, VectorizedArrayType>, dim> Ks;
 
         for (unsigned int v = 0;
              v < matrix_free.n_active_entries_per_cell_batch(cell);
@@ -222,22 +221,36 @@ public:
                                              local_dofs,
                                              partitioner_for_fdm);
 
-            scalar_fdm[v] = setup_fdm<dim, Number, n_rows_1d>(
-              cell_iterator,
-              fe_1D,
-              quadrature_1D,
-              harmonic_patch_extend[cell_iterator->active_cell_index()],
-              n_overlap);
+            const auto [Ms_scalar, Ks_scalar] =
+              create_laplace_tensor_product_matrix<dim, Number>(
+                cell_iterator,
+                fe_1D,
+                quadrature_1D,
+                harmonic_patch_extend[cell_iterator->active_cell_index()],
+                n_overlap);
+
+            for (unsigned int d = 0; d < dim; ++d)
+              {
+                if (Ms[d].size(0) == 0 || Ms[d].size(1) == 0)
+                  {
+                    Ms[d].reinit(Ms_scalar[d].size(0), Ms_scalar[d].size(1));
+                    Ks[d].reinit(Ks_scalar[d].size(0), Ks_scalar[d].size(1));
+                  }
+
+                for (unsigned int i = 0; i < Ms_scalar[d].size(0); ++i)
+                  for (unsigned int j = 0; j < Ms_scalar[d].size(0); ++j)
+                    Ms[d][i][j][v] = Ms_scalar[d][i][j];
+
+                for (unsigned int i = 0; i < Ks_scalar[d].size(0); ++i)
+                  for (unsigned int j = 0; j < Ks_scalar[d].size(0); ++j)
+                    Ks[d][i][j][v] = Ks_scalar[d][i][j];
+              }
           }
 
         cell_ptr.push_back(cell_ptr.back() +
                            matrix_free.n_active_entries_per_cell_batch(cell));
 
-        fdm.insert(cell,
-                   MyTensorProductMatrixSymmetricSum<dim, Number, n_rows_1d>::
-                     template transpose<VectorizedArrayType::size()>(
-                       scalar_fdm,
-                       matrix_free.n_active_entries_per_cell_batch(cell)));
+        fdm.insert(cell, Ms, Ks);
       }
 
     fdm.finalize();
@@ -368,7 +381,7 @@ public:
   unsigned int
   n_fdm_instances() const
   {
-    return fdm.size();
+    return fdm.storage_size();
   }
 
 
@@ -454,10 +467,10 @@ private:
             src_local[i] *= weights_local[i];
 
         // 3) cell operation: fast diagonalization method
-        fdm.get(cell).apply_inverse(
-          make_array_view(dst_local.begin(), dst_local.end()),
-          make_array_view(src_local.begin(), src_local.end()),
-          tmp);
+        fdm.apply_inverse(cell,
+                          make_array_view(dst_local.begin(), dst_local.end()),
+                          make_array_view(src_local.begin(), src_local.end()),
+                          tmp);
 
         // 4) apply weights (optional)
         if ((weights_local.size() > 0) &&
@@ -535,7 +548,8 @@ private:
                     phi_weights.begin_dof_values()[i];
               }
 
-            fdm.get(cell).apply_inverse(
+            fdm.apply_inverse(
+              cell,
               ArrayView<VectorizedArrayType>(phi_dst.begin_dof_values(),
                                              phi_dst.dofs_per_cell),
               ArrayView<const VectorizedArrayType>(phi_src.begin_dof_values(),
@@ -585,7 +599,7 @@ private:
                             constraint_info;
   std::vector<unsigned int> cell_ptr;
 
-  MyTensorProductMatrixSymmetricSumCache<dim, VectorizedArrayType, n_rows_1d>
+  TensorProductMatrixSymmetricSumCollection<dim, VectorizedArrayType, n_rows_1d>
     fdm;
 
   mutable VectorType src_;
