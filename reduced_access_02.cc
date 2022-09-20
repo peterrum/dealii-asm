@@ -23,9 +23,13 @@ gather(const std::vector<Number> &      global_vector,
 {
   (void)dim;
 
-  unsigned int o = compress_orientation(orientations, false);
+  unsigned int orientation = compress_orientation(orientations, false);
 
-  for (unsigned int k = 0, compressed_k = 0, offset_k = 0, c = 0, o_ptr = o;
+  for (unsigned int k            = 0,
+                    compressed_k = 0,
+                    offset_k     = 0,
+                    c            = 0,
+                    o_ptr        = orientation;
        k <= degree;
        ++k)
     {
@@ -37,7 +41,7 @@ gather(const std::vector<Number> &      global_vector,
           const auto indices =
             dofs_of_cell.begin() + 3 * (compressed_k * 3 + compressed_j);
 
-          if ((o != 0) && (o_ptr & 0b1) && (k == 0 || k == degree) &&
+          if ((orientation != 0) && (o_ptr & 0b1) && (k == 0 || k == degree) &&
               (j == 0 || j == degree))
             {
               // case 1: vertex-line-vertex
@@ -53,7 +57,7 @@ gather(const std::vector<Number> &      global_vector,
               // vertex
               local_vector[c++] = global_vector[indices[2]];
             }
-          else if ((o != 0) && (o_ptr & 0b11111) &&
+          else if ((orientation != 0) && (o_ptr & 0b11111) &&
                    (((k == 0 || k == degree) && ((0 < j) && (j < degree))) ||
                     (((0 < k) && (k < degree)) && (j == 0 || j == degree))))
             {
@@ -86,8 +90,8 @@ gather(const std::vector<Number> &      global_vector,
               else
                 local_vector[c++] = global_vector[indices[2] + (jk - 1)];
             }
-          else if ((o != 0) && (o_ptr & 0b111111) && (0 < k) && (k < degree) &&
-                   (0 < j) && (j < degree))
+          else if ((orientation != 0) && (o_ptr & 0b111111) && (0 < k) &&
+                   (k < degree) && (0 < j) && (j < degree))
             {
               // case 3: quad-hex-quad
 
