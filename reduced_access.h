@@ -591,30 +591,37 @@ adjust_for_orientation(const unsigned int               dim_non_template,
                       for (unsigned int i1 = 1, i = 0; i1 < degree; ++i1)
                         for (unsigned int i0 = 1; i0 < degree; ++i0, ++i)
                           if (integrate)
-                            temp[i] = VectorizedArrayTrait::get(
-                              local_vector[(c * dofs_per_comp + begin) +
-                                           i0 * stride0 + i1 * stride1],
-                              v);
-                          else
-                            temp[orientation_table[flag][i]] =
-                              VectorizedArrayTrait::get(
+                            {
+                              // TODO: can this be done easier?
+                              const unsigned int j =
+                                orientation_table[flag]
+                                                 [(i0 - 1) +
+                                                  (i1 - 1) * (degree - 1)];
+
+                              const unsigned int i0_ = j % (degree - 1);
+                              const unsigned int i1_ = j / (degree - 1);
+
+                              temp[i] = VectorizedArrayTrait::get(
                                 local_vector[(c * dofs_per_comp + begin) +
-                                             i0 * stride0 + i1 * stride1],
+                                             i0_ * stride0 + i1_ * stride1],
                                 v);
+                            }
+                          else
+                            {
+                              temp[orientation_table[flag][i]] =
+                                VectorizedArrayTrait::get(
+                                  local_vector[(c * dofs_per_comp + begin) +
+                                               i0 * stride0 + i1 * stride1],
+                                  v);
+                            }
 
                       // perform permuation
                       for (unsigned int i1 = 1, i = 0; i1 < degree; ++i1)
                         for (unsigned int i0 = 1; i0 < degree; ++i0, ++i)
-                          if (integrate)
-                            VectorizedArrayTrait::get(
-                              local_vector[(c * dofs_per_comp + begin) +
-                                           i0 * stride0 + i1 * stride1],
-                              v) = temp[orientation_table[flag][i]];
-                          else
-                            VectorizedArrayTrait::get(
-                              local_vector[(c * dofs_per_comp + begin) +
-                                           i0 * stride0 + i1 * stride1],
-                              v) = temp[i];
+                          VectorizedArrayTrait::get(
+                            local_vector[(c * dofs_per_comp + begin) +
+                                         i0 * stride0 + i1 * stride1],
+                            v) = temp[i];
                     }
                 }
 
