@@ -455,6 +455,8 @@ gather(const std::vector<Number> &      global_vector,
     }
 }
 
+
+
 template <typename Number, int dim_template = -1, int degree_template = -1>
 void
 adjust_for_orientation(const unsigned int            dim_non_template,
@@ -473,8 +475,6 @@ adjust_for_orientation(const unsigned int            dim_non_template,
   const unsigned int degree =
     (degree_template != -1) ? degree_template : degree_non_template;
 
-  unsigned int orientation = orientation_in;
-
   const unsigned int n_lines_per_cell    = dim == 2 ? 4 : 12;
   const unsigned int n_vertices_per_face = dim == 2 ? 2 : 4;
   const unsigned int n_quads_per_cell    = dim == 2 ? 0 : 6;
@@ -484,113 +484,129 @@ adjust_for_orientation(const unsigned int            dim_non_template,
 
   const unsigned int dofs_per_comp = Utilities::pow(np, dim);
 
-  if ((dim >= 2) && (orientation != 0)) // process lines
-    {
-      if (((dim == 2) && (orientation != 0)) ||
-          ((dim == 3) &&
-           (orientation & 0b111111111111))) // at least one line is irregular
-        {
-          for (unsigned int l = 0; l < n_lines_per_cell;
-               ++l) // loop over all lines
-            {
-              if (orientation & 1) // check bit
-                {
-                  // determine stride and begin
-                  const unsigned int stride =
-                    Utilities::pow(degree + 1, l / n_vertices_per_face);
+  using VectorizedArrayTrait = internal::VectorizedArrayTrait<Number>;
 
-                  unsigned int begin = 0;
-                  if (dim == 2)
+  for (unsigned int v = 0; v < VectorizedArrayTrait::width; ++v)
+    {
+      unsigned int orientation = orientation_in;
+
+      if ((dim >= 2) && (orientation != 0)) // process lines
+        {
+          if (((dim == 2) && (orientation != 0)) ||
+              ((dim == 3) &&
+               (orientation &
+                0b111111111111))) // at least one line is irregular
+            {
+              for (unsigned int l = 0; l < n_lines_per_cell;
+                   ++l) // loop over all lines
+                {
+                  if (orientation & 1) // check bit
                     {
-                      if (l == 0)
-                        begin = 1;
-                      else if (l == 1)
-                        begin = degree * degree + degree + 1;
-                      else if (l == 2)
-                        begin = degree + 1;
+                      // determine stride and begin
+                      const unsigned int stride =
+                        Utilities::pow(degree + 1, l / n_vertices_per_face);
+
+                      unsigned int begin = 0;
+                      if (dim == 2)
+                        {
+                          if (l == 0)
+                            begin = 1;
+                          else if (l == 1)
+                            begin = degree * degree + degree + 1;
+                          else if (l == 2)
+                            begin = degree + 1;
+                          else
+                            begin = 2 * degree + 1;
+                        }
                       else
-                        begin = 2 * degree + 1;
-                    }
-                  else
-                    {
-                      if (l == 0)
-                        begin = 1;
-                      else if (l == 1)
-                        begin = np * degree + 1;
-                      else if (l == 2)
-                        begin = np2 * degree + 1;
-                      else if (l == 3)
-                        begin = np2 * degree + np * degree + 1;
-                      else if (l == 4)
-                        begin = np;
-                      else if (l == 5)
-                        begin = np + degree;
-                      else if (l == 6)
-                        begin = np2 * degree + np;
-                      else if (l == 7)
-                        begin = np2 * degree + np + degree;
-                      else if (l == 8)
-                        begin = np2;
-                      else if (l == 9)
-                        begin = np2 + degree;
-                      else if (l == 10)
-                        begin = np2 + np * degree;
-                      else if (l == 11)
-                        begin = np2 + np * degree + degree;
+                        {
+                          if (l == 0)
+                            begin = 1;
+                          else if (l == 1)
+                            begin = np * degree + 1;
+                          else if (l == 2)
+                            begin = np2 * degree + 1;
+                          else if (l == 3)
+                            begin = np2 * degree + np * degree + 1;
+                          else if (l == 4)
+                            begin = np;
+                          else if (l == 5)
+                            begin = np + degree;
+                          else if (l == 6)
+                            begin = np2 * degree + np;
+                          else if (l == 7)
+                            begin = np2 * degree + np + degree;
+                          else if (l == 8)
+                            begin = np2;
+                          else if (l == 9)
+                            begin = np2 + degree;
+                          else if (l == 10)
+                            begin = np2 + np * degree;
+                          else if (l == 11)
+                            begin = np2 + np * degree + degree;
+                        }
+
+                      // perform reorientation
+                      for (unsigned int c = 0; c < n_components; ++c)
+                        for (unsigned int i0 = 0; i0 < (degree - 1) / 2; ++i0)
+                          std::swap(VectorizedArrayTrait::get(
+                                      local_vector[(c * dofs_per_comp + begin) +
+                                                   i0 * stride],
+                                      v),
+                                    VectorizedArrayTrait::get(
+                                      local_vector[(c * dofs_per_comp + begin) +
+                                                   (degree - 2 - i0) * stride],
+                                      v));
                     }
 
-                  // perform reorientation
-                  for (unsigned int c = 0; c < n_components; ++c)
-                    for (unsigned int i0 = 0; i0 < (degree - 1) / 2; ++i0)
-                      std::swap(
-                        local_vector[(c * dofs_per_comp + begin) + i0 * stride],
-                        local_vector[(c * dofs_per_comp + begin) +
-                                     (degree - 2 - i0) * stride]);
+                  orientation = orientation >> 1; //  go to next bit
                 }
-
-              orientation = orientation >> 1; //  go to next bit
             }
-        }
-      else if (dim == 3) // all lines are regular
-        {
-          orientation = orientation >> 12;
-        }
-    }
-
-  if ((dim == 3) && (orientation != 0)) // process quads
-    {
-      for (unsigned int q = 0; q < n_quads_per_cell; ++q) // loop over all quads
-        {
-          const unsigned int flag = orientation & 0b111;
-
-          if (flag != 0) // check bits
+          else if (dim == 3) // all lines are regular
             {
-              Number temp[100];
-
-              const unsigned int d       = q / 2;
-              const unsigned int stride0 = (d == 0) ? np : 1;
-              const unsigned int stride1 = (d == 2) ? np : np2;
-              const unsigned int begin =
-                ((q % 2) == 0) ? 0 : (Utilities::pow(np, q / 2) * degree);
-
-              for (unsigned int c = 0; c < n_components; ++c)
-                {
-                  // copy values into buffer
-                  for (unsigned int i1 = 1, i = 0; i1 < degree; ++i1)
-                    for (unsigned int i0 = 1; i0 < degree; ++i0, ++i)
-                      temp[i] = local_vector[(c * dofs_per_comp + begin) +
-                                             i0 * stride0 + i1 * stride1];
-
-                  // perform permuation
-                  for (unsigned int i1 = 1, i = 0; i1 < degree; ++i1)
-                    for (unsigned int i0 = 1; i0 < degree; ++i0, ++i)
-                      local_vector[(c * dofs_per_comp + begin) + i0 * stride0 +
-                                   i1 * stride1] =
-                        temp[orientation_table[flag][i]];
-                }
+              orientation = orientation >> 12;
             }
+        }
 
-          orientation = orientation >> 3; //  go to next bits
+      if ((dim == 3) && (orientation != 0)) // process quads
+        {
+          for (unsigned int q = 0; q < n_quads_per_cell;
+               ++q) // loop over all quads
+            {
+              const unsigned int flag = orientation & 0b111;
+
+              if (flag != 0) // check bits
+                {
+                  typename VectorizedArrayTrait::value_type temp[100];
+
+                  const unsigned int d       = q / 2;
+                  const unsigned int stride0 = (d == 0) ? np : 1;
+                  const unsigned int stride1 = (d == 2) ? np : np2;
+                  const unsigned int begin =
+                    ((q % 2) == 0) ? 0 : (Utilities::pow(np, q / 2) * degree);
+
+                  for (unsigned int c = 0; c < n_components; ++c)
+                    {
+                      // copy values into buffer
+                      for (unsigned int i1 = 1, i = 0; i1 < degree; ++i1)
+                        for (unsigned int i0 = 1; i0 < degree; ++i0, ++i)
+                          temp[i] = VectorizedArrayTrait::get(
+                            local_vector[(c * dofs_per_comp + begin) +
+                                         i0 * stride0 + i1 * stride1],
+                            v);
+
+                      // perform permuation
+                      for (unsigned int i1 = 1, i = 0; i1 < degree; ++i1)
+                        for (unsigned int i0 = 1; i0 < degree; ++i0, ++i)
+                          VectorizedArrayTrait::get(
+                            local_vector[(c * dofs_per_comp + begin) +
+                                         i0 * stride0 + i1 * stride1],
+                            v) = temp[orientation_table[flag][i]];
+                    }
+                }
+
+              orientation = orientation >> 3; //  go to next bits
+            }
         }
     }
 }
