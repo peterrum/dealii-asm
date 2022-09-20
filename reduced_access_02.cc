@@ -12,12 +12,15 @@ using namespace dealii;
 template <typename Number>
 void
 gather(const std::vector<Number> &      global_vector,
+       const unsigned int               dim,
        const unsigned int               degree,
        const std::vector<unsigned int> &dofs_of_cell,
        const std::vector<unsigned int> &orientations, // TODO: compress
        const Table<2, unsigned int> &   orientation_table,
        std::vector<Number> &            local_vector)
 {
+  (void)dim;
+
   std::vector<std::pair<unsigned int, unsigned int>> orientation{
     // bottom layer
     {1, orientations[2]},
@@ -195,6 +198,7 @@ gather(const std::vector<Number> &      global_vector,
 template <typename Number>
 void
 gather_post(const std::vector<Number> &      global_vector,
+            const unsigned int               dim,
             const unsigned int               degree,
             const std::vector<unsigned int> &dofs_of_cell,
             const std::vector<unsigned int> &orientations, // TODO: compress
@@ -274,90 +278,124 @@ gather_post(const std::vector<Number> &      global_vector,
         }
     }
 
-  const unsigned int np  = degree + 1;
-  const unsigned int np2 = np * np;
-
-  if (orientation != 0) // process lines
+  if (dim == 2)
     {
-      if (orientation & 0b111111111111) // at least one line is irregular
+      if (orientation != 0)                  // process lines
+        for (unsigned int l = 0; l < 4; ++l) // loop over all lines
+          {
+            if (orientation & 1) // check bit
+              {
+                // determine stride and begin
+                const unsigned int stride = (l < 2) ? (degree + 1) : 1;
+
+                unsigned int begin = 0;
+                if (l == 0)
+                  begin = degree + 1;
+                else if (l == 1)
+                  begin = 2 * degree + 1;
+                else if (l == 2)
+                  begin = 1;
+                else
+                  begin = degree * degree + degree + 1;
+
+                // perform reorientation
+                for (unsigned int i = 0; i < (degree - 1) / 2; ++i)
+                  std::swap(local_vector[begin + i * stride],
+                            local_vector[begin + (degree - 2 - i) * stride]);
+              }
+
+            orientation = orientation >> 1; //  go to next bit
+          }
+    }
+  else
+    {
+      const unsigned int np  = degree + 1;
+      const unsigned int np2 = np * np;
+
+      if (orientation != 0) // process lines
         {
-          for (unsigned int l = 0; l < 12; ++l) // loop over all lines
+          if (orientation & 0b111111111111) // at least one line is irregular
             {
-              if (orientation & 1) // check bit
+              for (unsigned int l = 0; l < 12; ++l) // loop over all lines
                 {
-                  // determine stride and begin
-                  const unsigned int stride = Utilities::pow(degree + 1, l / 4);
+                  if (orientation & 1) // check bit
+                    {
+                      // determine stride and begin
+                      const unsigned int stride =
+                        Utilities::pow(degree + 1, l / 4);
 
-                  unsigned int begin = 0;
-                  if (l == 0)
-                    begin = 1;
-                  else if (l == 1)
-                    begin = np * degree + 1;
-                  else if (l == 2)
-                    begin = np2 * degree + 1;
-                  else if (l == 3)
-                    begin = np2 * degree + np * degree + 1;
-                  else if (l == 4)
-                    begin = np;
-                  else if (l == 5)
-                    begin = np + degree;
-                  else if (l == 6)
-                    begin = np2 * degree + np;
-                  else if (l == 7)
-                    begin = np2 * degree + np + degree;
-                  else if (l == 8)
-                    begin = np2;
-                  else if (l == 9)
-                    begin = np2 + degree;
-                  else if (l == 10)
-                    begin = np2 + np * degree;
-                  else if (l == 11)
-                    begin = np2 + np * degree + degree;
+                      unsigned int begin = 0;
+                      if (l == 0)
+                        begin = 1;
+                      else if (l == 1)
+                        begin = np * degree + 1;
+                      else if (l == 2)
+                        begin = np2 * degree + 1;
+                      else if (l == 3)
+                        begin = np2 * degree + np * degree + 1;
+                      else if (l == 4)
+                        begin = np;
+                      else if (l == 5)
+                        begin = np + degree;
+                      else if (l == 6)
+                        begin = np2 * degree + np;
+                      else if (l == 7)
+                        begin = np2 * degree + np + degree;
+                      else if (l == 8)
+                        begin = np2;
+                      else if (l == 9)
+                        begin = np2 + degree;
+                      else if (l == 10)
+                        begin = np2 + np * degree;
+                      else if (l == 11)
+                        begin = np2 + np * degree + degree;
 
-                  // perform reorientation
-                  for (unsigned int i = 0; i < (degree - 1) / 2; ++i)
-                    std::swap(local_vector[begin + i * stride],
-                              local_vector[begin + (degree - 2 - i) * stride]);
+                      // perform reorientation
+                      for (unsigned int i = 0; i < (degree - 1) / 2; ++i)
+                        std::swap(
+                          local_vector[begin + i * stride],
+                          local_vector[begin + (degree - 2 - i) * stride]);
+                    }
+
+                  orientation = orientation >> 1; //  go to next bit
+                }
+            }
+          else // all lines are regular
+            {
+              orientation = orientation >> 12;
+            }
+        }
+
+      if (orientation != 0) // process quads
+        {
+          for (unsigned int q = 0; q < 6; ++q) // loop over all quads
+            {
+              const unsigned int flag = orientation & 0b111;
+
+              if (flag != 0) // check bits
+                {
+                  Number temp[100];
+
+                  const unsigned int d       = q / 2;
+                  const unsigned int stride  = (d == 0) ? np : 1;
+                  const unsigned int stride2 = (d == 2) ? np : np2;
+                  const unsigned int begin =
+                    ((q % 2) == 0) ? 0 : (Utilities::pow(np, q / 2) * degree);
+
+                  // copy values into buffer
+                  for (unsigned int g = 1, c = 0; g < degree; ++g)
+                    for (unsigned int k = 1; k < degree; ++k, ++c)
+                      temp[c] = local_vector[begin + k * stride + stride2 * g];
+
+                  // perform permuation
+                  for (unsigned int g = 1, c = 0; g < degree; ++g)
+                    for (unsigned int k = 1; k < degree; ++k, ++c)
+                      local_vector[begin + k * stride + stride2 * g] =
+                        temp[orientation_table[flag][c]];
                 }
 
-              orientation = orientation >> 1; //  go to next bit
+              orientation = orientation >> 3; //  go to next bits
             }
-        }
-      else // all lines are regular
-        {
-          orientation = orientation >> 12;
-        }
-    }
-
-  if (orientation != 0) // process quads
-    {
-      for (unsigned int q = 0; q < 6; ++q) // loop over all quads
-        {
-          const unsigned int flag = orientation & 0b111;
-
-          if (flag != 0) // check bits
-            {
-              Number temp[100];
-
-              const unsigned int d       = q / 2;
-              const unsigned int stride  = (d == 0) ? np : 1;
-              const unsigned int stride2 = (d == 2) ? np : np2;
-              const unsigned int begin =
-                ((q % 2) == 0) ? 0 : (Utilities::pow(np, q / 2) * degree);
-
-              // copy values into buffer
-              for (unsigned int g = 1, c = 0; g < degree; ++g)
-                for (unsigned int k = 1; k < degree; ++k, ++c)
-                  temp[c] = local_vector[begin + k * stride + stride2 * g];
-
-              // perform permuation
-              for (unsigned int g = 1, c = 0; g < degree; ++g)
-                for (unsigned int k = 1; k < degree; ++k, ++c)
-                  local_vector[begin + k * stride + stride2 * g] =
-                    temp[orientation_table[flag][c]];
-            }
-
-          orientation = orientation >> 3; //  go to next bits
         }
     }
 }
@@ -375,6 +413,7 @@ main(int argc, char *argv[])
     std::cout << std::string(argv[i]) << " ";
   std::cout << std::endl << std::endl;
 
+  const unsigned int dim    = 3;
   const unsigned int degree = atoi(argv[1]);
 
   std::vector<unsigned int> orientations(18, 0);
@@ -430,6 +469,7 @@ main(int argc, char *argv[])
 
   if (false)
     gather(global_vector,
+           dim,
            degree,
            dofs_of_cell,
            orientations,
@@ -437,6 +477,7 @@ main(int argc, char *argv[])
            local_vector);
   else
     gather_post(global_vector,
+                dim,
                 degree,
                 dofs_of_cell,
                 orientations,
