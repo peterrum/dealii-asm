@@ -466,6 +466,8 @@ adjust_for_orientation(const unsigned int            dim_non_template,
   if (dim_non_template == 1)
     return; // nothing to do for 1D
 
+  const unsigned int n_components = 1; // TODO
+
   const unsigned int dim =
     (dim_template != -1) ? dim_template : dim_non_template;
   const unsigned int degree =
@@ -479,6 +481,8 @@ adjust_for_orientation(const unsigned int            dim_non_template,
 
   const unsigned int np  = degree + 1;
   const unsigned int np2 = np * np;
+
+  const unsigned int dofs_per_comp = Utilities::pow(np, dim);
 
   if ((dim >= 2) && (orientation != 0)) // process lines
     {
@@ -536,9 +540,12 @@ adjust_for_orientation(const unsigned int            dim_non_template,
                     }
 
                   // perform reorientation
-                  for (unsigned int i0 = 0; i0 < (degree - 1) / 2; ++i0)
-                    std::swap(local_vector[begin + i0 * stride],
-                              local_vector[begin + (degree - 2 - i0) * stride]);
+                  for (unsigned int c = 0; c < n_components; ++c)
+                    for (unsigned int i0 = 0; i0 < (degree - 1) / 2; ++i0)
+                      std::swap(
+                        local_vector[(c * dofs_per_comp + begin) + i0 * stride],
+                        local_vector[(c * dofs_per_comp + begin) +
+                                     (degree - 2 - i0) * stride]);
                 }
 
               orientation = orientation >> 1; //  go to next bit
@@ -566,16 +573,21 @@ adjust_for_orientation(const unsigned int            dim_non_template,
               const unsigned int begin =
                 ((q % 2) == 0) ? 0 : (Utilities::pow(np, q / 2) * degree);
 
-              // copy values into buffer
-              for (unsigned int i1 = 1, i = 0; i1 < degree; ++i1)
-                for (unsigned int i0 = 1; i0 < degree; ++i0, ++i)
-                  temp[i] = local_vector[begin + i0 * stride0 + i1 * stride1];
+              for (unsigned int c = 0; c < n_components; ++c)
+                {
+                  // copy values into buffer
+                  for (unsigned int i1 = 1, i = 0; i1 < degree; ++i1)
+                    for (unsigned int i0 = 1; i0 < degree; ++i0, ++i)
+                      temp[i] = local_vector[(c * dofs_per_comp + begin) +
+                                             i0 * stride0 + i1 * stride1];
 
-              // perform permuation
-              for (unsigned int i1 = 1, i = 0; i1 < degree; ++i1)
-                for (unsigned int i0 = 1; i0 < degree; ++i0, ++i)
-                  local_vector[begin + i0 * stride0 + i1 * stride1] =
-                    temp[orientation_table[flag][i]];
+                  // perform permuation
+                  for (unsigned int i1 = 1, i = 0; i1 < degree; ++i1)
+                    for (unsigned int i0 = 1; i0 < degree; ++i0, ++i)
+                      local_vector[(c * dofs_per_comp + begin) + i0 * stride0 +
+                                   i1 * stride1] =
+                        temp[orientation_table[flag][i]];
+                }
             }
 
           orientation = orientation >> 3; //  go to next bits
