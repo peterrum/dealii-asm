@@ -465,31 +465,32 @@ gather_post(const std::vector<Number> &      global_vector,
 {
   unsigned int orientation = orientation_in;
 
-  for (unsigned int k = 0, compressed_k = 0, offset_k = 0, c = 0;
-       k <= (dim == 2 ? 0 : degree);
-       ++k)
+  for (unsigned int i2 = 0, compressed_i2 = 0, offset_k = 0, c = 0;
+       i2 <= (dim == 2 ? 0 : degree);
+       ++i2)
     {
-      for (unsigned int j = 0, compressed_j = 0, offset_j = 0; j <= degree; ++j)
+      for (unsigned int i1 = 0, compressed_i1 = 0, offset_j = 0; i1 <= degree;
+           ++i1)
         {
           const unsigned int offset =
-            (compressed_j == 1 ? degree - 1 : 1) * offset_k + offset_j;
+            (compressed_i1 == 1 ? degree - 1 : 1) * offset_k + offset_j;
 
           const auto indices =
-            dofs_of_cell.begin() + 3 * (compressed_k * 3 + compressed_j);
+            dofs_of_cell.begin() + 3 * (compressed_i2 * 3 + compressed_i1);
 
           local_vector[c] = global_vector[indices[0] + offset];
           ++c;
 
-          for (unsigned int i = 0; i < degree - 1; ++i, ++c)
+          for (unsigned int i0 = 0; i0 < degree - 1; ++i0, ++c)
             local_vector[c] =
-              global_vector[indices[1] + offset * (degree - 1) + i];
+              global_vector[indices[1] + offset * (degree - 1) + i0];
 
           local_vector[c] = global_vector[indices[2] + offset];
           ++c;
 
-          if (j == 0 || j == degree - 1)
+          if (i1 == 0 || i1 == degree - 1)
             {
-              ++compressed_j;
+              ++compressed_i1;
               offset_j = 0;
             }
           else
@@ -498,9 +499,9 @@ gather_post(const std::vector<Number> &      global_vector,
             }
         }
 
-      if (k == 0 || k == degree - 1)
+      if (i2 == 0 || i2 == degree - 1)
         {
-          ++compressed_k;
+          ++compressed_i2;
           offset_k = 0;
         }
       else
