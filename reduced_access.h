@@ -455,14 +455,22 @@ gather(const std::vector<Number> &      global_vector,
     }
 }
 
-template <typename Number>
+template <typename Number, int dim_template = -1, int degree_template = -1>
 void
-adjust_for_orientation(const unsigned int            dim,
-                       const unsigned int            degree,
+adjust_for_orientation(const unsigned int            dim_non_template,
+                       const unsigned int            degree_non_template,
                        const unsigned int            orientation_in,
                        const Table<2, unsigned int> &orientation_table,
                        std::vector<Number> &         local_vector)
 {
+  if (dim_non_template == 1)
+    return; // nothing to do for 1D
+
+  const unsigned int dim =
+    (dim_template != -1) ? dim_template : dim_non_template;
+  const unsigned int degree =
+    (degree_template != -1) ? degree_template : degree_non_template;
+
   unsigned int orientation = orientation_in;
 
   const unsigned int n_lines_per_cell    = dim == 2 ? 4 : 12;
