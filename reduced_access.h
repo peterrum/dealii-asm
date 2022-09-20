@@ -465,7 +465,7 @@ gather_post(const std::vector<Number> &      global_vector,
 {
   unsigned int orientation = orientation_in;
 
-  for (unsigned int i2 = 0, compressed_i2 = 0, offset_k = 0, c = 0;
+  for (unsigned int i2 = 0, compressed_i2 = 0, offset_k = 0, i = 0;
        i2 <= (dim == 2 ? 0 : degree);
        ++i2)
     {
@@ -478,15 +478,15 @@ gather_post(const std::vector<Number> &      global_vector,
           const auto indices =
             dofs_of_cell.begin() + 3 * (compressed_i2 * 3 + compressed_i1);
 
-          local_vector[c] = global_vector[indices[0] + offset];
-          ++c;
+          local_vector[i] = global_vector[indices[0] + offset];
+          ++i;
 
-          for (unsigned int i0 = 0; i0 < degree - 1; ++i0, ++c)
-            local_vector[c] =
+          for (unsigned int i0 = 0; i0 < degree - 1; ++i0, ++i)
+            local_vector[i] =
               global_vector[indices[1] + offset * (degree - 1) + i0];
 
-          local_vector[c] = global_vector[indices[2] + offset];
-          ++c;
+          local_vector[i] = global_vector[indices[2] + offset];
+          ++i;
 
           if (i1 == 0 || i1 == degree - 1)
             {
@@ -531,9 +531,9 @@ gather_post(const std::vector<Number> &      global_vector,
                   begin = degree * degree + degree + 1;
 
                 // perform reorientation
-                for (unsigned int i = 0; i < (degree - 1) / 2; ++i)
-                  std::swap(local_vector[begin + i * stride],
-                            local_vector[begin + (degree - 2 - i) * stride]);
+                for (unsigned int i0 = 0; i0 < (degree - 1) / 2; ++i0)
+                  std::swap(local_vector[begin + i0 * stride],
+                            local_vector[begin + (degree - 2 - i0) * stride]);
               }
 
             orientation = orientation >> 1; //  go to next bit
@@ -583,10 +583,10 @@ gather_post(const std::vector<Number> &      global_vector,
                         begin = np2 + np * degree + degree;
 
                       // perform reorientation
-                      for (unsigned int i = 0; i < (degree - 1) / 2; ++i)
+                      for (unsigned int i0 = 0; i0 < (degree - 1) / 2; ++i0)
                         std::swap(
-                          local_vector[begin + i * stride],
-                          local_vector[begin + (degree - 2 - i) * stride]);
+                          local_vector[begin + i0 * stride],
+                          local_vector[begin + (degree - 2 - i0) * stride]);
                     }
 
                   orientation = orientation >> 1; //  go to next bit
@@ -609,21 +609,22 @@ gather_post(const std::vector<Number> &      global_vector,
                   Number temp[100];
 
                   const unsigned int d       = q / 2;
-                  const unsigned int stride  = (d == 0) ? np : 1;
-                  const unsigned int stride2 = (d == 2) ? np : np2;
+                  const unsigned int stride0 = (d == 0) ? np : 1;
+                  const unsigned int stride1 = (d == 2) ? np : np2;
                   const unsigned int begin =
                     ((q % 2) == 0) ? 0 : (Utilities::pow(np, q / 2) * degree);
 
                   // copy values into buffer
-                  for (unsigned int g = 1, c = 0; g < degree; ++g)
-                    for (unsigned int k = 1; k < degree; ++k, ++c)
-                      temp[c] = local_vector[begin + k * stride + stride2 * g];
+                  for (unsigned int i1 = 1, i = 0; i1 < degree; ++i1)
+                    for (unsigned int i0 = 1; i0 < degree; ++i0, ++i)
+                      temp[i] =
+                        local_vector[begin + i0 * stride0 + i1 * stride1];
 
                   // perform permuation
-                  for (unsigned int g = 1, c = 0; g < degree; ++g)
-                    for (unsigned int k = 1; k < degree; ++k, ++c)
-                      local_vector[begin + k * stride + stride2 * g] =
-                        temp[orientation_table[flag][c]];
+                  for (unsigned int i1 = 1, i = 0; i1 < degree; ++i1)
+                    for (unsigned int i0 = 1; i0 < degree; ++i0, ++i)
+                      local_vector[begin + i0 * stride0 + i1 * stride1] =
+                        temp[orientation_table[flag][i]];
                 }
 
               orientation = orientation >> 3; //  go to next bits
