@@ -50,18 +50,28 @@ compress_orientation(const std::vector<unsigned int> &orientations,
 
   if (orientations.size() == 4) // 2D
     {
-      for (unsigned int i = 0; i < 4; ++i) // lines
-        orientation |= orientations[i] << i;
+      if (do_post)
+        {
+          for (unsigned int i = 0; i < 4; ++i) // lines
+            orientation |= orientations[i] << i;
+        }
+      else
+        {
+          // lines in lexicographic order
+          orientation += orientations[2] << 0;
+          orientation += orientations[0] << 1;
+          orientation += orientations[1] << 2;
+          orientation += orientations[3] << 3;
+        }
     }
   else if (orientations.size() == 18) // 3D
     {
-      // lines
       if (do_post)
         {
           unsigned int index_shift = 0;
           unsigned int dof_shift   = 0;
 
-          for (const auto i : {2, 3, 6, 7, 0, 1, 4, 5, 8, 9, 10, 11})
+          for (const auto i : {2, 3, 6, 7, 0, 1, 4, 5, 8, 9, 10, 11}) // lines
             orientation |= orientations[i] << (dof_shift++);
 
           index_shift += 12;
@@ -72,6 +82,7 @@ compress_orientation(const std::vector<unsigned int> &orientations,
         }
       else
         {
+          // lines and quads in lexicographic order
           std::vector<std::pair<unsigned int, unsigned int>> orientation_table{
             // bottom layer
             {1, orientations[2]},

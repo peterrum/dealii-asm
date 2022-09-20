@@ -78,7 +78,7 @@ main(int argc, char *argv[])
   // gather values and print to terminal
   std::vector<double> local_vector(dof_counter);
 
-  if (true)
+  if (false)
     gather(global_vector,
            dim,
            degree,
