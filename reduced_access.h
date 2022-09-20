@@ -477,13 +477,15 @@ gather_post(const std::vector<Number> &      global_vector,
           const auto indices =
             dofs_of_cell.begin() + 3 * (compressed_k * 3 + compressed_j);
 
-          local_vector[c++] = global_vector[indices[0] + offset];
+          local_vector[c] = global_vector[indices[0] + offset];
+          ++c;
 
-          for (unsigned int i = 0; i < degree - 1; ++i)
-            local_vector[c++] =
+          for (unsigned int i = 0; i < degree - 1; ++i, ++c)
+            local_vector[c] =
               global_vector[indices[1] + offset * (degree - 1) + i];
 
-          local_vector[c++] = global_vector[indices[2] + offset];
+          local_vector[c] = global_vector[indices[2] + offset];
+          ++c;
 
           if (j == 0 || j == degree - 1)
             {
