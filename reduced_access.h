@@ -457,60 +457,13 @@ gather(const std::vector<Number> &      global_vector,
 
 template <typename Number>
 void
-gather_post(const std::vector<Number> &      global_vector,
-            const unsigned int               dim,
-            const unsigned int               degree,
-            const std::vector<unsigned int> &dofs_of_cell,
-            const unsigned int               orientation_in,
-            const Table<2, unsigned int> &   orientation_table,
-            std::vector<Number> &            local_vector)
+adjust_for_orientation(const unsigned int            dim,
+                       const unsigned int            degree,
+                       const unsigned int            orientation_in,
+                       const Table<2, unsigned int> &orientation_table,
+                       std::vector<Number> &         local_vector)
 {
   unsigned int orientation = orientation_in;
-
-  for (unsigned int i2 = 0, compressed_i2 = 0, offset_k = 0, i = 0;
-       i2 <= (dim == 2 ? 0 : degree);
-       ++i2)
-    {
-      for (unsigned int i1 = 0, compressed_i1 = 0, offset_j = 0; i1 <= degree;
-           ++i1)
-        {
-          const unsigned int offset =
-            (compressed_i1 == 1 ? degree - 1 : 1) * offset_k + offset_j;
-
-          const auto indices =
-            dofs_of_cell.begin() + 3 * (compressed_i2 * 3 + compressed_i1);
-
-          local_vector[i] = global_vector[indices[0] + offset];
-          ++i;
-
-          for (unsigned int i0 = 0; i0 < degree - 1; ++i0, ++i)
-            local_vector[i] =
-              global_vector[indices[1] + offset * (degree - 1) + i0];
-
-          local_vector[i] = global_vector[indices[2] + offset];
-          ++i;
-
-          if (i1 == 0 || i1 == degree - 1)
-            {
-              ++compressed_i1;
-              offset_j = 0;
-            }
-          else
-            {
-              ++offset_j;
-            }
-        }
-
-      if (i2 == 0 || i2 == degree - 1)
-        {
-          ++compressed_i2;
-          offset_k = 0;
-        }
-      else
-        {
-          ++offset_k;
-        }
-    }
 
   const unsigned int n_lines_per_cell    = dim == 2 ? 4 : 12;
   const unsigned int n_vertices_per_face = dim == 2 ? 2 : 4;
@@ -620,4 +573,63 @@ gather_post(const std::vector<Number> &      global_vector,
           orientation = orientation >> 3; //  go to next bits
         }
     }
+}
+
+template <typename Number>
+void
+gather_post(const std::vector<Number> &      global_vector,
+            const unsigned int               dim,
+            const unsigned int               degree,
+            const std::vector<unsigned int> &dofs_of_cell,
+            const unsigned int               orientation,
+            const Table<2, unsigned int> &   orientation_table,
+            std::vector<Number> &            local_vector)
+{
+  for (unsigned int i2 = 0, compressed_i2 = 0, offset_k = 0, i = 0;
+       i2 <= (dim == 2 ? 0 : degree);
+       ++i2)
+    {
+      for (unsigned int i1 = 0, compressed_i1 = 0, offset_j = 0; i1 <= degree;
+           ++i1)
+        {
+          const unsigned int offset =
+            (compressed_i1 == 1 ? degree - 1 : 1) * offset_k + offset_j;
+
+          const auto indices =
+            dofs_of_cell.begin() + 3 * (compressed_i2 * 3 + compressed_i1);
+
+          local_vector[i] = global_vector[indices[0] + offset];
+          ++i;
+
+          for (unsigned int i0 = 0; i0 < degree - 1; ++i0, ++i)
+            local_vector[i] =
+              global_vector[indices[1] + offset * (degree - 1) + i0];
+
+          local_vector[i] = global_vector[indices[2] + offset];
+          ++i;
+
+          if (i1 == 0 || i1 == degree - 1)
+            {
+              ++compressed_i1;
+              offset_j = 0;
+            }
+          else
+            {
+              ++offset_j;
+            }
+        }
+
+      if (i2 == 0 || i2 == degree - 1)
+        {
+          ++compressed_i2;
+          offset_k = 0;
+        }
+      else
+        {
+          ++offset_k;
+        }
+    }
+
+  adjust_for_orientation(
+    dim, degree, orientation, orientation_table, local_vector);
 }
