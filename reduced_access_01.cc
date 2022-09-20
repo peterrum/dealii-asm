@@ -77,6 +77,7 @@ main(int argc, char *argv[])
                 dim,
                 degree,
                 1,
+                false,
                 dofs_of_cell,
                 {compress_orientation(orientations, true)},
                 {},

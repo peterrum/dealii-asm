@@ -462,6 +462,7 @@ void
 adjust_for_orientation(const unsigned int               dim_non_template,
                        const unsigned int               degree_non_template,
                        const unsigned int               n_components,
+                       const bool                       integrate,
                        const std::vector<unsigned int> &orientation_in,
                        const Table<2, unsigned int> &   orientation_table,
                        std::vector<Number> &            local_vector)
@@ -589,18 +590,31 @@ adjust_for_orientation(const unsigned int               dim_non_template,
                       // copy values into buffer
                       for (unsigned int i1 = 1, i = 0; i1 < degree; ++i1)
                         for (unsigned int i0 = 1; i0 < degree; ++i0, ++i)
-                          temp[i] = VectorizedArrayTrait::get(
-                            local_vector[(c * dofs_per_comp + begin) +
-                                         i0 * stride0 + i1 * stride1],
-                            v);
+                          if (integrate)
+                            temp[i] = VectorizedArrayTrait::get(
+                              local_vector[(c * dofs_per_comp + begin) +
+                                           i0 * stride0 + i1 * stride1],
+                              v);
+                          else
+                            temp[orientation_table[flag][i]] =
+                              VectorizedArrayTrait::get(
+                                local_vector[(c * dofs_per_comp + begin) +
+                                             i0 * stride0 + i1 * stride1],
+                                v);
 
                       // perform permuation
                       for (unsigned int i1 = 1, i = 0; i1 < degree; ++i1)
                         for (unsigned int i0 = 1; i0 < degree; ++i0, ++i)
-                          VectorizedArrayTrait::get(
-                            local_vector[(c * dofs_per_comp + begin) +
-                                         i0 * stride0 + i1 * stride1],
-                            v) = temp[orientation_table[flag][i]];
+                          if (integrate)
+                            VectorizedArrayTrait::get(
+                              local_vector[(c * dofs_per_comp + begin) +
+                                           i0 * stride0 + i1 * stride1],
+                              v) = temp[orientation_table[flag][i]];
+                          else
+                            VectorizedArrayTrait::get(
+                              local_vector[(c * dofs_per_comp + begin) +
+                                           i0 * stride0 + i1 * stride1],
+                              v) = temp[i];
                     }
                 }
 
@@ -616,6 +630,7 @@ gather_post(const std::vector<Number> &      global_vector,
             const unsigned int               dim,
             const unsigned int               degree,
             const unsigned int               n_components,
+            const bool                       integrate,
             const std::vector<unsigned int> &dofs_of_cell,
             const std::vector<unsigned int>  orientation,
             const Table<2, unsigned int> &   orientation_table,
@@ -666,6 +681,11 @@ gather_post(const std::vector<Number> &      global_vector,
         }
     }
 
-  adjust_for_orientation(
-    dim, degree, n_components, orientation, orientation_table, local_vector);
+  adjust_for_orientation(dim,
+                         degree,
+                         n_components,
+                         integrate,
+                         orientation,
+                         orientation_table,
+                         local_vector);
 }
