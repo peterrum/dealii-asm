@@ -381,7 +381,7 @@ public:
   unsigned int
   n_fdm_instances() const
   {
-    return fdm.size();
+    return fdm.storage_size();
   }
 
 
@@ -599,7 +599,8 @@ private:
                             constraint_info;
   std::vector<unsigned int> cell_ptr;
 
-  TensorProductMatrixSymmetricSumCache<dim, VectorizedArrayType, n_rows_1d> fdm;
+  TensorProductMatrixSymmetricSumCollection<dim, VectorizedArrayType, n_rows_1d>
+    fdm;
 
   mutable VectorType src_;
   mutable VectorType dst_;
