@@ -459,16 +459,15 @@ gather(const std::vector<Number> &      global_vector,
 
 template <typename Number, int dim_template = -1, int degree_template = -1>
 void
-adjust_for_orientation(const unsigned int            dim_non_template,
-                       const unsigned int            degree_non_template,
-                       const unsigned int            orientation_in,
-                       const Table<2, unsigned int> &orientation_table,
-                       std::vector<Number> &         local_vector)
+adjust_for_orientation(const unsigned int               dim_non_template,
+                       const unsigned int               degree_non_template,
+                       const unsigned int               n_components,
+                       const std::vector<unsigned int> &orientation_in,
+                       const Table<2, unsigned int> &   orientation_table,
+                       std::vector<Number> &            local_vector)
 {
-  if (dim_non_template == 1)
+  if (dim_non_template == 1 || orientation_in.empty())
     return; // nothing to do for 1D
-
-  const unsigned int n_components = 1; // TODO
 
   const unsigned int dim =
     (dim_template != -1) ? dim_template : dim_non_template;
@@ -488,7 +487,7 @@ adjust_for_orientation(const unsigned int            dim_non_template,
 
   for (unsigned int v = 0; v < VectorizedArrayTrait::width; ++v)
     {
-      unsigned int orientation = orientation_in;
+      unsigned int orientation = orientation_in[v];
 
       if ((dim >= 2) && (orientation != 0)) // process lines
         {
@@ -616,8 +615,9 @@ void
 gather_post(const std::vector<Number> &      global_vector,
             const unsigned int               dim,
             const unsigned int               degree,
+            const unsigned int               n_components,
             const std::vector<unsigned int> &dofs_of_cell,
-            const unsigned int               orientation,
+            const std::vector<unsigned int>  orientation,
             const Table<2, unsigned int> &   orientation_table,
             std::vector<Number> &            local_vector)
 {
@@ -667,5 +667,5 @@ gather_post(const std::vector<Number> &      global_vector,
     }
 
   adjust_for_orientation(
-    dim, degree, orientation, orientation_table, local_vector);
+    dim, degree, n_components, orientation, orientation_table, local_vector);
 }

@@ -91,8 +91,9 @@ main(int argc, char *argv[])
     gather_post(global_vector,
                 dim,
                 degree,
+                1,
                 dofs_of_cell,
-                compress_orientation(orientations, true),
+                {compress_orientation(orientations, true)},
                 orientation_table,
                 local_vector);
 
