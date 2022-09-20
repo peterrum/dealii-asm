@@ -18,20 +18,21 @@ using namespace dealii;
 int
 main(int argc, char *argv[])
 {
-  AssertThrow(argc == 2 || argc == 20, ExcNotImplemented());
+  AssertThrow(argc == 2 || argc == 3 || argc == 21, ExcNotImplemented());
 
   for (int i = 0; i < argc; ++i)
     std::cout << std::string(argv[i]) << " ";
   std::cout << std::endl << std::endl;
 
-  const unsigned int dim    = 3;
-  const unsigned int degree = atoi(argv[1]);
+  const unsigned int dim     = 3;
+  const unsigned int degree  = atoi(argv[1]);
+  const bool         do_post = argc >= 3 ? atoi(argv[2]) : 1;
 
   std::vector<unsigned int> orientations(18, 0);
 
-  if (argc == 20)
+  if (argc == 21)
     for (unsigned int i = 0; i < 18; ++i)
-      orientations[i] = atoi(argv[2 + i]);
+      orientations[i] = atoi(argv[3 + i]);
 
   // setup dpo object
   std::vector<std::pair<unsigned int, unsigned int>> dpo;
@@ -78,7 +79,7 @@ main(int argc, char *argv[])
   // gather values and print to terminal
   std::vector<double> local_vector(dof_counter);
 
-  if (false)
+  if (do_post == false)
     gather(global_vector,
            dim,
            degree,
