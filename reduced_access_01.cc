@@ -18,6 +18,10 @@ main(int argc, char *argv[])
 {
   AssertThrow(argc == 7, ExcNotImplemented());
 
+  for (int i = 0; i < argc; ++i)
+    std::cout << std::string(argv[i]) << " ";
+  std::cout << std::endl << std::endl;
+
   const unsigned int dim     = 2;
   const unsigned int degree  = atoi(argv[1]);
   const bool         do_post = atoi(argv[2]);
