@@ -11,16 +11,16 @@ using namespace dealii;
 #include "reduced_access.h"
 
 /**
- * ./reduced_access_01 3
  * ./reduced_access_01 3   0 0 0 1
  */
 int
 main(int argc, char *argv[])
 {
-  AssertThrow(argc == 6, ExcNotImplemented());
+  AssertThrow(argc == 7, ExcNotImplemented());
 
-  const unsigned int dim    = 2;
-  const unsigned int degree = atoi(argv[1]);
+  const unsigned int dim     = 2;
+  const unsigned int degree  = atoi(argv[1]);
+  const bool         do_post = atoi(argv[2]);
 
   std::vector<unsigned int> orientations(4);
 
@@ -60,7 +60,7 @@ main(int argc, char *argv[])
   // gather values and print to terminal
   std::vector<double> local_vector(dof_counter);
 
-  if (false)
+  if (do_post == false)
     gather(global_vector,
            dim,
            degree,
