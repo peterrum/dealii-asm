@@ -9,6 +9,8 @@
 
 using namespace dealii;
 
+#include "reduced_access.h"
+
 template <typename Number>
 void
 gather(const std::vector<Number> &      global_vector,
@@ -205,39 +207,10 @@ gather_post(const std::vector<Number> &      global_vector,
             const Table<2, unsigned int> &   orientation_table,
             std::vector<Number> &            local_vector)
 {
-  std::vector<std::pair<unsigned int, unsigned int>> orientations_{
-    // lines - x
-    {1, orientations[2]},
-    {1, orientations[3]},
-    {1, orientations[6]},
-    {1, orientations[7]},
-    // lines - y
-    {1, orientations[0]},
-    {1, orientations[1]},
-    {1, orientations[4]},
-    {1, orientations[5]},
-    // lines - z
-    {1, orientations[8]},
-    {1, orientations[9]},
-    {1, orientations[10]},
-    {1, orientations[11]},
-    // quads
-    {3, orientations[12]},
-    {3, orientations[13]},
-    {3, orientations[14]},
-    {3, orientations[15]},
-    {3, orientations[16]},
-    {3, orientations[17]}};
+  unsigned int orientation = compress_orientation(orientations, true);
 
-  unsigned int orientation = 0;
-
-  for (unsigned int i = 0, s = 0; i < orientations_.size(); ++i)
-    {
-      orientation += orientations_[i].second << s;
-      s += orientations_[i].first;
-    }
-
-  for (unsigned int k = 0, compressed_k = 0, offset_k = 0, c = 0; k <= degree;
+  for (unsigned int k = 0, compressed_k = 0, offset_k = 0, c = 0;
+       k <= (dim == 2 ? 0 : degree);
        ++k)
     {
       for (unsigned int j = 0, compressed_j = 0, offset_j = 0; j <= degree; ++j)
