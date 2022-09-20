@@ -78,10 +78,11 @@ main(int argc, char *argv[])
                 degree,
                 1,
                 false,
+                0,
                 dofs_of_cell,
                 {compress_orientation(orientations, true)},
                 {},
-                local_vector);
+                local_vector.data());
 
   for (unsigned int j = 0, c = 0; j <= degree; ++j)
     {

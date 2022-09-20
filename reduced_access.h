@@ -463,9 +463,10 @@ adjust_for_orientation(const unsigned int               dim_non_template,
                        const unsigned int               degree_non_template,
                        const unsigned int               n_components,
                        const bool                       integrate,
+                       const unsigned int               cell,
                        const std::vector<unsigned int> &orientation_in,
                        const Table<2, unsigned int> &   orientation_table,
-                       std::vector<Number> &            local_vector)
+                       Number *                         local_vector)
 {
   if (dim_non_template == 1 || orientation_in.empty())
     return; // nothing to do for 1D
@@ -488,7 +489,8 @@ adjust_for_orientation(const unsigned int               dim_non_template,
 
   for (unsigned int v = 0; v < VectorizedArrayTrait::width; ++v)
     {
-      unsigned int orientation = orientation_in[v];
+      unsigned int orientation =
+        orientation_in[cell * VectorizedArrayTrait::width + v];
 
       if ((dim >= 2) && (orientation != 0)) // process lines
         {
@@ -598,8 +600,8 @@ adjust_for_orientation(const unsigned int               dim_non_template,
                                                  [(i0 - 1) +
                                                   (i1 - 1) * (degree - 1)];
 
-                              const unsigned int i0_ = j % (degree - 1);
-                              const unsigned int i1_ = j / (degree - 1);
+                              const unsigned int i0_ = (j % (degree - 1)) + 1;
+                              const unsigned int i1_ = (j / (degree - 1)) + 1;
 
                               temp[i] = VectorizedArrayTrait::get(
                                 local_vector[(c * dofs_per_comp + begin) +
@@ -638,10 +640,11 @@ gather_post(const std::vector<Number> &      global_vector,
             const unsigned int               degree,
             const unsigned int               n_components,
             const bool                       integrate,
+            const unsigned int               cell,
             const std::vector<unsigned int> &dofs_of_cell,
             const std::vector<unsigned int>  orientation,
             const Table<2, unsigned int> &   orientation_table,
-            std::vector<Number> &            local_vector)
+            Number *                         local_vector)
 {
   for (unsigned int i2 = 0, compressed_i2 = 0, offset_k = 0, i = 0;
        i2 <= (dim == 2 ? 0 : degree);
@@ -692,6 +695,7 @@ gather_post(const std::vector<Number> &      global_vector,
                          degree,
                          n_components,
                          integrate,
+                         cell,
                          orientation,
                          orientation_table,
                          local_vector);
