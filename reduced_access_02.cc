@@ -9,7 +9,7 @@
 
 using namespace dealii;
 
-#include "reduced_access.h"
+#include "include/reduced_access.h"
 
 /**
  * ./reduced_access_02 3

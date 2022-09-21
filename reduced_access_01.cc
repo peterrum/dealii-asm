@@ -8,7 +8,7 @@
 
 using namespace dealii;
 
-#include "reduced_access.h"
+#include "include/reduced_access.h"
 
 /**
  * ./reduced_access_01 3   0 0 0 1

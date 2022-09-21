@@ -1,4 +1,4 @@
-
+#pragma once
 
 unsigned int
 get_orientation_line(const std::vector<types::global_dof_index> &dofs,
