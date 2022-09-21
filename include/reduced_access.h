@@ -126,7 +126,8 @@ compress_orientation(const std::vector<unsigned int> &orientations,
 std::pair<unsigned int, std::vector<types::global_dof_index>>
 compress_indices(const std::vector<types::global_dof_index> &dofs,
                  const unsigned int                          dim,
-                 const unsigned int                          degree)
+                 const unsigned int                          degree,
+                 const bool                                  do_post = false)
 {
   const auto orientation_table =
     internal::MatrixFreeFunctions::ShapeInfo<double>::compute_orientation_table(
@@ -170,10 +171,15 @@ compress_indices(const std::vector<types::global_dof_index> &dofs,
             dofs_of_object[j] = dofs[dof_counter + j];
 
           // store minimal index of object
-          obj_start_indices.emplace_back(
-            *std::min_element(dofs_of_object.begin(), dofs_of_object.end()));
+          const auto min_ptr =
+            std::min_element(dofs_of_object.begin(), dofs_of_object.end());
 
-          if (d == 2 && (i == 2 || i == 3)) // reorientate quad 2 + 3 (lex)
+          AssertThrow(min_ptr != dofs_of_object.end(), ExcInternalError());
+
+          obj_start_indices.emplace_back(*min_ptr);
+
+          if (dim == 3 &&
+              (d == 2 && (i == 2 || i == 3))) // reorientate quad 2 + 3 (lex)
             {
               auto dofs_of_object_copy = dofs_of_object;
 
@@ -198,15 +204,17 @@ compress_indices(const std::vector<types::global_dof_index> &dofs,
             }
 
           dof_counter += entry.second;
-        }
 
-      // no compression is possible
-      if (dim >= 2 && obj_orientations.back() == numbers::invalid_unsigned_int)
-        return {numbers::invalid_unsigned_int, {}};
+          // no compression is possible
+          if ((obj_orientations.empty() == false) &&
+              obj_orientations.back() == numbers::invalid_unsigned_int)
+            return {numbers::invalid_unsigned_int, {}};
+        }
     }
 
   // compress indices to a single
-  const auto orientation_compressed = compress_orientation(obj_orientations);
+  const auto orientation_compressed =
+    compress_orientation(obj_orientations, do_post);
 
   // return orientation and start indices
   return {orientation_compressed, obj_start_indices};
