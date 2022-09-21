@@ -33,6 +33,8 @@ public:
     const auto  fe_degree    = fe.degree;
     const auto  n_components = fe.n_components();
 
+    const auto part = data->get_dof_info().vector_partitioner;
+
     if (fe_degree > 2)
       {
         try
@@ -73,10 +75,44 @@ public:
 
                     cell->get_dof_indices(dof_indices);
 
+                    // resolve constraints and convert global to local
+                    for (auto &i : dof_indices)
+                      {
+                        const auto *entries_ptr =
+                          constraints.get_constraint_entries(i);
+
+                        if (entries_ptr != nullptr)
+                          {
+                            const auto &entries = *entries_ptr;
+                            const types::global_dof_index n_entries =
+                              entries.size();
+                            if (n_entries == 1 &&
+                                std::abs(entries[0].second - 1.) <
+                                  100 * std::numeric_limits<double>::epsilon())
+                              {
+                                i = part->global_to_local(
+                                  entries[0].first); // identity constraint
+                              }
+                            else if (n_entries == 0)
+                              {
+                                i = numbers::invalid_dof_index; // homogeneous
+                                                                // Dirichlet
+                              }
+                            else
+                              {
+                                // other constraints, e.g., hanging-node
+                                // constraints; not implemented yet
+                                AssertThrow(false, ExcNotImplemented());
+                              }
+                          }
+                        else
+                          {
+                            i = part->global_to_local(i);
+                          }
+                      }
+
                     // TODO: constraints, component
                     AssertThrow(n_components == 1, ExcNotImplemented());
-                    AssertThrow(constraints.n_constraints() == 0,
-                                ExcNotImplemented());
 
                     const auto [orientation, objec_indices] =
                       compress_indices(dof_indices, dim, fe_degree, true);

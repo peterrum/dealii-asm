@@ -5,6 +5,7 @@
 
 #include <deal.II/dofs/dof_handler.h>
 #include <deal.II/dofs/dof_renumbering.h>
+#include <deal.II/dofs/dof_tools.h>
 
 #include <deal.II/fe/fe_q.h>
 #include <deal.II/fe/mapping_q1.h>
@@ -22,7 +23,8 @@ using namespace dealii;
 
 template <int dim, typename Number, std::size_t width = 1>
 void
-test(const unsigned int fe_degree, const unsigned int n_global_refinements)
+test(const unsigned int fe_degree, const unsigned int n_global_refinements,
+     const bool apply_dbcs)
 {
   using VectorizedArrayType = VectorizedArray<Number, width>;
   using VectorType          = LinearAlgebra::distributed::Vector<Number>;
@@ -52,6 +54,12 @@ test(const unsigned int fe_degree, const unsigned int n_global_refinements)
   dof_handler.distribute_dofs(fe);
 
   AffineConstraints<Number> constraints;
+
+  if(apply_dbcs)
+  {
+    DoFTools::make_zero_boundary_constraints (dof_handler, 0, constraints);
+  }
+
   constraints.close();
 
   typename MatrixFree<dim, Number, VectorizedArrayType>::AdditionalData
@@ -126,11 +134,12 @@ main(int argc, char *argv[])
   const unsigned int dim           = (argc >= 2) ? std::atoi(argv[1]) : 2;
   const unsigned int fe_degree     = (argc >= 3) ? std::atoi(argv[2]) : 1;
   const unsigned int n_refinements = (argc >= 4) ? std::atoi(argv[3]) : 6;
+  const bool apply_dbcs    = (argc >= 5) ? std::atoi(argv[4]) : 0;
 
   if (dim == 2)
-    test<2, double>(fe_degree, n_refinements);
+    test<2, double>(fe_degree, n_refinements, apply_dbcs);
   else if (dim == 3)
-    test<3, double>(fe_degree, n_refinements);
+    test<3, double>(fe_degree, n_refinements, apply_dbcs);
   else
     AssertThrow(false, ExcInternalError());
 }

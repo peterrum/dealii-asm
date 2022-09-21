@@ -170,37 +170,58 @@ compress_indices(const std::vector<types::global_dof_index> &dofs,
           for (unsigned int j = 0; j < entry.second; ++j)
             dofs_of_object[j] = dofs[dof_counter + j];
 
-          // store minimal index of object
-          const auto min_ptr =
-            std::min_element(dofs_of_object.begin(), dofs_of_object.end());
+          const unsigned int n_constrained_dofs =
+            std::count(dofs_of_object.begin(),
+                       dofs_of_object.end(),
+                       numbers::invalid_unsigned_int);
 
-          AssertThrow(min_ptr != dofs_of_object.end(), ExcInternalError());
+          if (0 < n_constrained_dofs &&
+              n_constrained_dofs < dofs_of_object.size())
+            return {numbers::invalid_unsigned_int, {}};
 
-          obj_start_indices.emplace_back(*min_ptr);
-
-          if (dim == 3 &&
-              (d == 2 && (i == 2 || i == 3))) // reorientate quad 2 + 3 (lex)
+          if (n_constrained_dofs == dofs_of_object.size())
             {
-              auto dofs_of_object_copy = dofs_of_object;
-
-              for (unsigned int j = 0; j < entry.second; ++j)
-                dofs_of_object[j] =
-                  dofs_of_object_copy[orientation_table[1][j]];
+              // all dofs of object are constrained
+              obj_start_indices.emplace_back(numbers::invalid_unsigned_int);
+              obj_orientations.emplace_back(0);
             }
-
-          if (dim >= 2 && d == 1) // line orientations
+          else
             {
-              const auto orientation =
-                get_orientation_line(dofs_of_object, degree);
+              // no dof of object is constrained
 
-              obj_orientations.emplace_back(orientation);
-            }
-          else if (dim == 3 && d == 2) // quad orientations
-            {
-              const auto orientation =
-                get_orientation_quad(dofs_of_object, orientation_table);
+              // store minimal index of object
+              const auto min_ptr =
+                std::min_element(dofs_of_object.begin(), dofs_of_object.end());
 
-              obj_orientations.emplace_back(orientation);
+              AssertThrow(min_ptr != dofs_of_object.end(), ExcInternalError());
+
+              obj_start_indices.emplace_back(*min_ptr);
+
+              if (dim == 3 &&
+                  (d == 2 &&
+                   (i == 2 || i == 3))) // reorientate quad 2 + 3 (lex)
+                {
+                  auto dofs_of_object_copy = dofs_of_object;
+
+                  for (unsigned int j = 0; j < entry.second; ++j)
+                    dofs_of_object[j] =
+                      dofs_of_object_copy[orientation_table[1][j]];
+                }
+
+              if (dim >= 2 && d == 1) // line orientations
+                {
+                  const auto orientation =
+                    get_orientation_line(dofs_of_object, degree);
+
+                  obj_orientations.emplace_back(orientation);
+                }
+              else if (dim == 3 && d == 2) // quad orientations
+                {
+                  const auto orientation =
+                    get_orientation_quad(dofs_of_object, orientation_table);
+
+                  obj_orientations.emplace_back(orientation);
+                }
             }
 
           dof_counter += entry.second;
