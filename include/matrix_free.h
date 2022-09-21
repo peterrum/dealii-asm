@@ -299,6 +299,71 @@ public:
       weights.update_ghost_values();
     }
 
+    {
+      const auto &tria = matrix_free.get_dof_handler().get_triangulation();
+
+      std::vector<unsigned int> counter_vertices(tria.n_vertices(), 0);
+      std::vector<unsigned int> counter_lines(tria.n_lines(), 0);
+      std::vector<unsigned int> counter_quads;
+
+      if (dim == 3)
+        counter_quads.assign(tria.n_quads(), 0);
+
+
+      for (unsigned int cell = 0; cell < matrix_free.n_cell_batches(); ++cell)
+        {
+          for (unsigned int v = 0;
+               v < matrix_free.n_active_entries_per_cell_batch(cell);
+               ++v)
+            {
+              const auto cell_iterator = matrix_free.get_cell_iterator(cell, v);
+
+              for (const auto v : cell_iterator->vertex_indices())
+                counter_vertices[cell_iterator->vertex_index(v)]++;
+
+              for (const auto l : cell_iterator->line_indices())
+                counter_lines[cell_iterator->line(l)->index()]++;
+
+              if (dim == 3)
+                for (const auto f : cell_iterator->face_iterators())
+                  counter_quads[f->index()]++;
+            }
+        }
+
+      AlignedVector<std::array<VectorizedArrayType, Utilities::pow(3, dim)>>
+        weights_compressed(matrix_free.n_cell_batches());
+
+      const auto renumber_lex =
+        FETools::hierarchic_to_lexicographic_numbering<dim>(2);
+
+      for (unsigned int cell = 0; cell < matrix_free.n_cell_batches(); ++cell)
+        {
+          for (unsigned int v = 0;
+               v < matrix_free.n_active_entries_per_cell_batch(cell);
+               ++v)
+            {
+              const auto cell_iterator = matrix_free.get_cell_iterator(cell, v);
+
+              unsigned int c = 0;
+
+              for (const auto v : cell_iterator->vertex_indices())
+                weights_compressed[cell][renumber_lex[c++]][v] =
+                  1.0 / counter_vertices[cell_iterator->vertex_index(v)];
+
+              for (const auto l : cell_iterator->line_indices())
+                weights_compressed[cell][renumber_lex[c++]][v] =
+                  1.0 / counter_lines[cell_iterator->line(l)->index()];
+
+              if (dim == 3)
+                for (const auto f : cell_iterator->face_iterators())
+                  weights_compressed[cell][renumber_lex[c++]][v] =
+                    1.0 / counter_quads[f->index()];
+
+              weights_compressed[cell][renumber_lex[c]][v] = 1.0;
+            }
+        }
+    }
+
     if (weight_type == Restrictors::WeightingType::none)
       weights.reinit(0);
   }
