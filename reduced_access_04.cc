@@ -60,11 +60,9 @@ test(const unsigned int fe_degree,
 
   AffineConstraints<Number> constraints;
 
+  constraints.clear();
   if (apply_dbcs)
-    {
-      DoFTools::make_zero_boundary_constraints(dof_handler, 0, constraints);
-    }
-
+    DoFTools::make_zero_boundary_constraints(dof_handler, 0, constraints);
   constraints.close();
 
   typename MatrixFree<dim, Number, VectorizedArrayType>::AdditionalData
@@ -73,6 +71,11 @@ test(const unsigned int fe_degree,
   DoFRenumbering::matrix_free_data_locality(dof_handler,
                                             constraints,
                                             additional_data);
+
+  constraints.clear();
+  if (apply_dbcs)
+    DoFTools::make_zero_boundary_constraints(dof_handler, 0, constraints);
+  constraints.close();
 
   MatrixFree<dim, Number, VectorizedArrayType> matrix_free;
   matrix_free.reinit(

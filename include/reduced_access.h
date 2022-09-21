@@ -10,8 +10,8 @@ get_orientation_line(const std::vector<types::global_dof_index> &dofs,
   flag = true;
   for (unsigned int c = 0; c < n_components; ++c)
     for (unsigned int i = 0; i < degree - 1; ++i)
-      flag &=
-        ((dofs[i * n_components] + c) == (dofs[0] + i * n_components + c));
+      flag &= ((dofs[i + c * (degree - 1)]) ==
+               (dofs[0 + c * (degree - 1)] + i * n_components));
 
   if (flag)
     return 0; // normal ordering
@@ -19,11 +19,13 @@ get_orientation_line(const std::vector<types::global_dof_index> &dofs,
   flag = true;
   for (unsigned int c = 0; c < n_components; ++c)
     for (unsigned int i = 0; i < degree - 1; ++i)
-      flag &=
-        ((dofs[i * n_components] + c) == (dofs[0] - i * n_components + c));
+      flag &= ((dofs[i + c * (degree - 1)]) ==
+               (dofs[0 + c * (degree - 1)] - i * n_components));
 
   if (flag)
     return 1; // flipped
+
+  AssertThrow(false, ExcNotImplemented());
 
   return numbers::invalid_unsigned_int;
 }
@@ -33,20 +35,27 @@ get_orientation_quad(const std::vector<types::global_dof_index> &dofs,
                      const unsigned int                          n_components,
                      const Table<2, unsigned int> &orientation_table)
 {
-  const auto min = *std::min_element(dofs.begin(), dofs.end());
-
   for (unsigned int i = 0; i < orientation_table.n_rows(); ++i)
     {
       bool flag = true;
 
       for (unsigned int c = 0; c < n_components; ++c)
-        for (unsigned int j = 0; j < orientation_table.n_cols(); ++j)
-          flag &= ((dofs[j * n_components] + c) ==
-                   (min + orientation_table[i][j] * n_components + c));
+        {
+          const auto min =
+            *std::min_element(dofs.begin() + c * orientation_table.n_cols(),
+                              dofs.begin() +
+                                (c + 1) * orientation_table.n_cols());
+
+          for (unsigned int j = 0; j < orientation_table.n_cols(); ++j)
+            flag &= ((dofs[j + c * orientation_table.n_cols()]) ==
+                     (min + orientation_table[i][j] * n_components));
+        }
 
       if (flag)
         return i;
     }
+
+  AssertThrow(false, ExcNotImplemented()); // TODO
 
   return numbers::invalid_unsigned_int;
 }
@@ -181,19 +190,10 @@ compress_indices(const std::vector<types::global_dof_index> &dofs,
       for (unsigned int i = 0; i < entry.first; ++i)
         {
           // extract indices of object
-          std::vector<types::global_dof_index> dofs_of_object(entry.second);
-          for (unsigned int j = 0; j < entry.second; ++j)
+          std::vector<types::global_dof_index> dofs_of_object(entry.second *
+                                                              n_components);
+          for (unsigned int j = 0; j < entry.second * n_components; ++j)
             dofs_of_object[j] = dofs[dof_counter + j];
-
-          // sanity check for multiple components
-          if (n_components > 1)
-            {
-              for (unsigned int i = 0; i < dofs_of_object.size();
-                   i += n_components)
-                for (unsigned int j = 1; j < n_components; ++j)
-                  if ((dofs_of_object[i] + j) != (dofs_of_object[i + j]))
-                    return {numbers::invalid_unsigned_int, {}};
-            }
 
           // deal with constraints
           const unsigned int n_constrained_dofs =
@@ -203,17 +203,38 @@ compress_indices(const std::vector<types::global_dof_index> &dofs,
 
           if (0 < n_constrained_dofs &&
               n_constrained_dofs < dofs_of_object.size())
-            return {numbers::invalid_unsigned_int, {}};
+            {
+              AssertThrow(false, ExcNotImplemented());
+              return {numbers::invalid_unsigned_int, {}}; // TODO
+            }
 
           if (n_constrained_dofs == dofs_of_object.size())
             {
               // all dofs of object are constrained
               obj_start_indices.emplace_back(numbers::invalid_unsigned_int);
-              obj_orientations.emplace_back(0);
+
+              if ((dim >= 2 && d == 1) || (dim == 3 && d == 2))
+                obj_orientations.emplace_back(0);
             }
           else
             {
               // no dof of object is constrained
+
+
+
+              // sanity check for multiple components
+              if (n_components > 1)
+                {
+                  for (unsigned int j = 0; j < n_components; ++j)
+                    for (unsigned int i = 0; i < entry.second;
+                         i += n_components)
+                      if ((dofs_of_object[0] + i * n_components + j) !=
+                          (dofs_of_object[i + j * entry.second]))
+                        {
+                          AssertThrow(false, ExcNotImplemented());
+                          return {numbers::invalid_unsigned_int, {}};
+                        }
+                }
 
               // store minimal index of object
               const auto min_ptr =
@@ -229,12 +250,11 @@ compress_indices(const std::vector<types::global_dof_index> &dofs,
                 {
                   auto dofs_of_object_copy = dofs_of_object;
 
-                  for (unsigned int j = 0; j < entry.second; ++j)
-                    for (unsigned int c = 0; c < n_components; ++c)
-                      dofs_of_object[j * n_components + c] =
-                        dofs_of_object_copy[orientation_table[1][j] *
-                                              n_components +
-                                            c];
+                  for (unsigned int c = 0; c < n_components; ++c)
+                    for (unsigned int j = 0; j < entry.second; ++j)
+                      dofs_of_object[j + c * entry.second] =
+                        dofs_of_object_copy[orientation_table[1][j] +
+                                            c * entry.second];
                 }
 
               if (dim >= 2 && d == 1) // line orientations
