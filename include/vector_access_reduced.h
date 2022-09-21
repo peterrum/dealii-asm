@@ -111,11 +111,8 @@ public:
                           }
                       }
 
-                    // TODO: constraints, component
-                    AssertThrow(n_components == 1, ExcNotImplemented());
-
-                    const auto [orientation, objec_indices] =
-                      compress_indices(dof_indices, dim, fe_degree, true);
+                    const auto [orientation, objec_indices] = compress_indices(
+                      dof_indices, dim, fe_degree, n_components, true);
 
                     AssertThrow(orientation != numbers::invalid_unsigned_int,
                                 ExcExpectedContiguousNumbering());

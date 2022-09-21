@@ -8,6 +8,7 @@
 #include <deal.II/dofs/dof_tools.h>
 
 #include <deal.II/fe/fe_q.h>
+#include <deal.II/fe/fe_system.h>
 #include <deal.II/fe/mapping_q1.h>
 
 #include <deal.II/grid/grid_generator.h>
@@ -21,7 +22,7 @@ using namespace dealii;
 #include "include/vector_access_reduced.h"
 
 
-template <int dim, typename Number, std::size_t width = 1>
+template <int dim, int n_components, typename Number, std::size_t width = 1>
 void
 test(const unsigned int fe_degree, const unsigned int n_global_refinements,
      const bool apply_dbcs)
@@ -33,7 +34,7 @@ test(const unsigned int fe_degree, const unsigned int n_global_refinements,
                            Utilities::MPI::this_mpi_process(MPI_COMM_WORLD) ==
                              0);
 
-  FE_Q<dim>      fe(fe_degree);
+  FESystem<dim> fe(FE_Q<dim>(fe_degree), n_components);
   MappingQ1<dim> mapping;
   QGauss<dim>    quadrature(fe_degree + 1);
 
@@ -83,10 +84,11 @@ test(const unsigned int fe_degree, const unsigned int n_global_refinements,
 
   cir.initialize(matrix_free);
 
-  pcout << "Compression type: " << cir.compression_level() << std::endl;
+  pcout << "- n dofs:           " << dof_handler.n_dofs() << std::endl;
+  pcout << "- compression type: " << cir.compression_level() << std::endl;
 
-  FEEvaluation<dim, -1, 0, 1, Number, VectorizedArrayType> phi0(matrix_free);
-  FEEvaluation<dim, -1, 0, 1, Number, VectorizedArrayType> phi1(matrix_free);
+  FEEvaluation<dim, -1, 0, n_components, Number, VectorizedArrayType> phi0(matrix_free);
+  FEEvaluation<dim, -1, 0, n_components, Number, VectorizedArrayType> phi1(matrix_free);
 
   const auto print = [&](const auto & phi) {
     if (pcout.is_active())
@@ -133,13 +135,18 @@ main(int argc, char *argv[])
 
   const unsigned int dim           = (argc >= 2) ? std::atoi(argv[1]) : 2;
   const unsigned int fe_degree     = (argc >= 3) ? std::atoi(argv[2]) : 1;
-  const unsigned int n_refinements = (argc >= 4) ? std::atoi(argv[3]) : 6;
-  const bool apply_dbcs    = (argc >= 5) ? std::atoi(argv[4]) : 0;
+  const unsigned int n_components  = (argc >= 4) ? std::atoi(argv[3]) : 1;
+  const unsigned int n_refinements = (argc >= 5) ? std::atoi(argv[4]) : 6;
+  const bool apply_dbcs            = (argc >= 6) ? std::atoi(argv[5]) : 0;
 
-  if (dim == 2)
-    test<2, double>(fe_degree, n_refinements, apply_dbcs);
-  else if (dim == 3)
-    test<3, double>(fe_degree, n_refinements, apply_dbcs);
+  if (dim == 2 && n_components == 1)
+    test<2, 1, double>(fe_degree, n_refinements, apply_dbcs);
+  else if (dim == 3 && n_components == 1)
+    test<3, 1, double>(fe_degree, n_refinements, apply_dbcs);
+  else if (dim == 2 && n_components == 2)
+    test<2, 2, double>(fe_degree, n_refinements, apply_dbcs);
+  else if (dim == 3 && n_components == 3)
+    test<3, 3, double>(fe_degree, n_refinements, apply_dbcs);
   else
     AssertThrow(false, ExcInternalError());
 }

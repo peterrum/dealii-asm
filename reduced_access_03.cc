@@ -136,7 +136,7 @@ main(int argc, char *argv[])
       std::cout << "orientation: " << orientation << std::endl;
       std::cout << std::endl;
 
-      compress_indices(dofs, dim, degree);
+      compress_indices(dofs, dim, degree, 1);
     };
 
     print_indices();

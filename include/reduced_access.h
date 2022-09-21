@@ -2,23 +2,35 @@
 
 unsigned int
 get_orientation_line(const std::vector<types::global_dof_index> &dofs,
-                     const unsigned int                          degree)
+                     const unsigned int                          degree,
+                     const unsigned int                          n_components)
 {
   bool flag;
 
   flag = true;
-  for (unsigned int i = 0; i < degree - 1; ++i)
-    flag &= (dofs[i] == (dofs[0] + i));
+  for (unsigned int c = 0; c < n_components; ++c)
+    for (unsigned int i = 0; i < degree - 1; ++i)
+      flag &=
+        ((dofs[i * n_components] + c) == (dofs[0] + i * n_components + c));
 
   if (flag)
-    return 0;
+    return 0; // normal ordering
 
+  flag = true;
+  for (unsigned int c = 0; c < n_components; ++c)
+    for (unsigned int i = 0; i < degree - 1; ++i)
+      flag &=
+        ((dofs[i * n_components] + c) == (dofs[0] - i * n_components + c));
+
+  if (flag)
+    return 1; // flipped
 
   return numbers::invalid_unsigned_int;
 }
 
 unsigned int
 get_orientation_quad(const std::vector<types::global_dof_index> &dofs,
+                     const unsigned int                          n_components,
                      const Table<2, unsigned int> &orientation_table)
 {
   const auto min = *std::min_element(dofs.begin(), dofs.end());
@@ -27,8 +39,10 @@ get_orientation_quad(const std::vector<types::global_dof_index> &dofs,
     {
       bool flag = true;
 
-      for (unsigned int j = 0; j < orientation_table.n_cols(); ++j)
-        flag &= (dofs[j] == (min + orientation_table[i][j]));
+      for (unsigned int c = 0; c < n_components; ++c)
+        for (unsigned int j = 0; j < orientation_table.n_cols(); ++j)
+          flag &= ((dofs[j * n_components] + c) ==
+                   (min + orientation_table[i][j] * n_components + c));
 
       if (flag)
         return i;
@@ -127,6 +141,7 @@ std::pair<unsigned int, std::vector<types::global_dof_index>>
 compress_indices(const std::vector<types::global_dof_index> &dofs,
                  const unsigned int                          dim,
                  const unsigned int                          degree,
+                 const unsigned int                          n_components,
                  const bool                                  do_post = false)
 {
   const auto orientation_table =
@@ -170,6 +185,17 @@ compress_indices(const std::vector<types::global_dof_index> &dofs,
           for (unsigned int j = 0; j < entry.second; ++j)
             dofs_of_object[j] = dofs[dof_counter + j];
 
+          // sanity check for multiple components
+          if (n_components > 1)
+            {
+              for (unsigned int i = 0; i < dofs_of_object.size();
+                   i += n_components)
+                for (unsigned int j = 1; j < n_components; ++j)
+                  if ((dofs_of_object[i] + j) != (dofs_of_object[i + j]))
+                    return {numbers::invalid_unsigned_int, {}};
+            }
+
+          // deal with constraints
           const unsigned int n_constrained_dofs =
             std::count(dofs_of_object.begin(),
                        dofs_of_object.end(),
@@ -204,27 +230,32 @@ compress_indices(const std::vector<types::global_dof_index> &dofs,
                   auto dofs_of_object_copy = dofs_of_object;
 
                   for (unsigned int j = 0; j < entry.second; ++j)
-                    dofs_of_object[j] =
-                      dofs_of_object_copy[orientation_table[1][j]];
+                    for (unsigned int c = 0; c < n_components; ++c)
+                      dofs_of_object[j * n_components + c] =
+                        dofs_of_object_copy[orientation_table[1][j] *
+                                              n_components +
+                                            c];
                 }
 
               if (dim >= 2 && d == 1) // line orientations
                 {
                   const auto orientation =
-                    get_orientation_line(dofs_of_object, degree);
+                    get_orientation_line(dofs_of_object, degree, n_components);
 
                   obj_orientations.emplace_back(orientation);
                 }
               else if (dim == 3 && d == 2) // quad orientations
                 {
                   const auto orientation =
-                    get_orientation_quad(dofs_of_object, orientation_table);
+                    get_orientation_quad(dofs_of_object,
+                                         n_components,
+                                         orientation_table);
 
                   obj_orientations.emplace_back(orientation);
                 }
             }
 
-          dof_counter += entry.second;
+          dof_counter += entry.second * n_components;
 
           // no compression is possible
           if ((obj_orientations.empty() == false) &&
