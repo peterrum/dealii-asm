@@ -75,11 +75,12 @@ test(const unsigned int fe_degree, const unsigned int n_global_refinements)
 
   cir.initialize(matrix_free);
 
-  pcout << cir.compression_level() << std::endl;
+  pcout << "Compression type: " << cir.compression_level() << std::endl;
 
-  FEEvaluation<dim, -1, 0, 1, Number, VectorizedArrayType> phi(matrix_free);
+  FEEvaluation<dim, -1, 0, 1, Number, VectorizedArrayType> phi0(matrix_free);
+  FEEvaluation<dim, -1, 0, 1, Number, VectorizedArrayType> phi1(matrix_free);
 
-  const auto print = [&]() {
+  const auto print = [&](const auto & phi) {
     if (pcout.is_active())
       {
         for (unsigned int i = 0; i < phi.dofs_per_cell; ++i)
@@ -88,16 +89,33 @@ test(const unsigned int fe_degree, const unsigned int n_global_refinements)
       }
   };
 
+
   for (unsigned int cell = 0; cell < matrix_free.n_cell_batches(); ++cell)
     {
-      phi.reinit(cell);
+      phi0.reinit(cell);
+      phi0.read_dof_values(src);
 
-      phi.read_dof_values(src);
-      print();
+      phi1.reinit(cell);
+      cir.read_dof_values(src, phi1);
+      
+      for (unsigned int i = 0; i < phi0.dofs_per_cell; ++i)
+      {
+        if(phi0.begin_dof_values()[i][0] != phi1.begin_dof_values()[i][0])
+        {
+      print(phi0);
+      print(phi1);
 
-      cir.read_dof_values(src, phi);
-      print();
+        AssertThrow(false, 
+           ExcMessage("Values do not match <" + 
+           std::to_string(phi0.begin_dof_values()[i][0]) + "> vs. <" +
+           std::to_string(phi1.begin_dof_values()[i][0]) + "> !"
+           ));
+            
+        }
+      }
     }
+
+    pcout << "OK!" << std::endl;
 }
 
 int

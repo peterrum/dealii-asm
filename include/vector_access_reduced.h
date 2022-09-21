@@ -28,8 +28,10 @@ public:
   void
   initialize(const MatrixFree<dim, Number, VectorizedArrayType> &data_)
   {
-    const auto data      = &data_;
-    const auto fe_degree = data->get_dof_handler().get_fe().degree;
+    const auto  data         = &data_;
+    const auto &fe           = data->get_dof_handler().get_fe();
+    const auto  fe_degree    = fe.degree;
+    const auto  n_components = fe.n_components();
 
     if (fe_degree > 2)
       {
@@ -64,7 +66,7 @@ public:
                      ++l)
                   {
                     const unsigned int offset =
-                      std::pow(3.0, 2.0) * n_lanes * c + l;
+                      Utilities::pow(3, dim) * n_lanes * c + l;
 
                     const typename DoFHandler<dim>::cell_iterator cell =
                       data->get_cell_iterator(c, l);
@@ -72,13 +74,18 @@ public:
                     cell->get_dof_indices(dof_indices);
 
                     // TODO: constraints, component
-                    (void)constraints;
+                    AssertThrow(n_components == 1, ExcNotImplemented());
+                    AssertThrow(constraints.n_constraints() == 0,
+                                ExcNotImplemented());
 
                     const auto [orientation, objec_indices] =
                       compress_indices(dof_indices, dim, fe_degree, true);
 
                     AssertThrow(orientation != numbers::invalid_unsigned_int,
                                 ExcExpectedContiguousNumbering());
+
+                    AssertThrow(objec_indices.size() == renumber_lex.size(),
+                                ExcInternalError());
 
                     for (unsigned int i = 0; i < objec_indices.size(); ++i)
                       compressed_dof_indices[offset + renumber_lex[i]] =
