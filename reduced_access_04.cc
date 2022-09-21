@@ -22,7 +22,10 @@ using namespace dealii;
 #include "include/vector_access_reduced.h"
 
 
-template <int dim, int n_components, typename Number, std::size_t width = 1>
+template <int dim,
+          int n_components,
+          typename Number,
+          std::size_t width = VectorizedArray<Number>::size()>
 void
 test(const unsigned int fe_degree,
      const unsigned int n_global_refinements,
@@ -111,21 +114,24 @@ test(const unsigned int fe_degree,
       phi1.reinit(cell);
       cir.read_dof_values(src, phi1);
 
-      for (unsigned int i = 0; i < phi0.dofs_per_cell; ++i)
-        {
-          if (phi0.begin_dof_values()[i][0] != phi1.begin_dof_values()[i][0])
-            {
-              print(phi0);
-              print(phi1);
+      for (unsigned int v = 0;
+           v < matrix_free.n_active_entries_per_cell_batch(cell);
+           ++v)
+        for (unsigned int i = 0; i < phi0.dofs_per_cell; ++i)
+          {
+            if (phi0.begin_dof_values()[i][v] != phi1.begin_dof_values()[i][v])
+              {
+                print(phi0);
+                print(phi1);
 
-              AssertThrow(
-                false,
-                ExcMessage(
-                  "Values do not match <" +
-                  std::to_string(phi0.begin_dof_values()[i][0]) + "> vs. <" +
-                  std::to_string(phi1.begin_dof_values()[i][0]) + "> !"));
-            }
-        }
+                AssertThrow(
+                  false,
+                  ExcMessage(
+                    "Values do not match <" +
+                    std::to_string(phi0.begin_dof_values()[i][v]) + "> vs. <" +
+                    std::to_string(phi1.begin_dof_values()[i][v]) + "> !"));
+              }
+          }
     }
 
   pcout << "OK!" << std::endl;
