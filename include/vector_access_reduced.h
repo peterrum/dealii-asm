@@ -73,7 +73,9 @@ public:
 
                     const auto [orientation, objec_indices] = compress_indices(dof_indices, dim, fe_degree, true);
 
-                    AssertThrow(orientation == 0, ExcExpectedContiguousNumbering());
+                    AssertThrow(orientation == 0, ExcNotImplemented());
+
+                    AssertThrow(orientation != numbers::invalid_unsigned_int, ExcExpectedContiguousNumbering());
 
                     for(unsigned int i = 0; i < objec_indices.size(); ++i)
                       compressed_dof_indices[offset + renumber_lex[i]] = objec_indices[i];                      
@@ -90,6 +92,9 @@ public:
                         numbers::invalid_unsigned_int)
                       all_indices_uniform[Utilities::pow(3, dim) * c + i] = 0;
               }
+
+              orientation_table = internal::MatrixFreeFunctions::ShapeInfo<double>::compute_orientation_table(
+                fe_degree - 1);
           }
         catch (const ExcExpectedContiguousNumbering &)
           {
@@ -319,6 +324,9 @@ private:
         else
           ++offset_i2;
       }
+
+  adjust_for_orientation<VectorizedArrayType, dim, fe_degree>(
+    dim, fe_degree, n_components, false, cell_no, orientations, orientation_table, dof_values);      
   }
 
   template <int dim,
@@ -346,6 +354,9 @@ private:
     dealii::internal::VectorDistributorLocalToGlobal<Number,
                                                      VectorizedArrayType>
       distributor;
+
+  adjust_for_orientation<VectorizedArrayType, dim, fe_degree>(
+    dim, fe_degree, n_components, true, cell_no, orientations, orientation_table, dof_values);   
 
     for (int i2 = 0, i = 0, compressed_i2 = 0, offset_i2 = 0;
          i2 < (dim == 3 ? (fe_degree + 1) : 1);
@@ -455,4 +466,7 @@ private:
 
   std::vector<unsigned int>  compressed_dof_indices;
   std::vector<unsigned char> all_indices_uniform;
+
+  Table<2, unsigned int> orientation_table; // for reorienation
+  std::vector<unsigned int> orientations;
 };
