@@ -44,6 +44,9 @@ public:
             all_indices_uniform.resize(Utilities::pow(3, dim) *
                                          data->n_cell_batches(),
                                        1);
+            orientations.resize(data->n_cell_batches() *
+                                  VectorizedArrayType::size(),
+                                0);
 
             std::vector<types::global_dof_index> dof_indices(
               data->get_dof_handler().get_fe().dofs_per_cell);
@@ -74,14 +77,14 @@ public:
                     const auto [orientation, objec_indices] =
                       compress_indices(dof_indices, dim, fe_degree, true);
 
-                    AssertThrow(orientation == 0, ExcNotImplemented());
-
                     AssertThrow(orientation != numbers::invalid_unsigned_int,
                                 ExcExpectedContiguousNumbering());
 
                     for (unsigned int i = 0; i < objec_indices.size(); ++i)
                       compressed_dof_indices[offset + renumber_lex[i]] =
                         objec_indices[i];
+
+                    orientations[n_lanes * c + l] = orientation;
                   }
 
                 for (unsigned int i = 0;
@@ -98,11 +101,18 @@ public:
 
             orientation_table = internal::MatrixFreeFunctions::ShapeInfo<
               double>::compute_orientation_table(fe_degree - 1);
+
+            if (std::all_of(orientations.begin(),
+                            orientations.end(),
+                            [&](const auto &e) { return e == 0; }))
+              orientations.clear();
           }
         catch (const ExcExpectedContiguousNumbering &)
           {
             compressed_dof_indices.clear();
             all_indices_uniform.clear();
+
+            orientations.clear();
           }
       }
   }
@@ -110,10 +120,12 @@ public:
   unsigned int
   compression_level() const
   {
-    if (compressed_dof_indices.size() == 0)
+    if (compressed_dof_indices.empty())
       return 0;
-
-    return 1;
+    else if (orientations.empty())
+      return 1;
+    else
+      return 2;
   }
 
   template <int dim,

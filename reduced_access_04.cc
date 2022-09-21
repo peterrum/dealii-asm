@@ -36,7 +36,16 @@ test(const unsigned int fe_degree, const unsigned int n_global_refinements)
   QGauss<dim>    quadrature(fe_degree + 1);
 
   parallel::distributed::Triangulation<dim> tria(MPI_COMM_WORLD);
+
+  if(false)
+  {
   GridGenerator::hyper_cube(tria);
+  }
+  else
+  {
+  GridGenerator::hyper_ball_balanced(tria);
+  }
+
   tria.refine_global(n_global_refinements);
 
   DoFHandler<dim> dof_handler(tria);
@@ -103,7 +112,7 @@ main(int argc, char *argv[])
   if (dim == 2)
     test<2, double>(fe_degree, n_refinements);
   else if (dim == 3)
-    test<2, double>(fe_degree, n_refinements);
+    test<3, double>(fe_degree, n_refinements);
   else
     AssertThrow(false, ExcInternalError());
 }
