@@ -24,8 +24,9 @@ using namespace dealii;
 
 template <int dim, int n_components, typename Number, std::size_t width = 1>
 void
-test(const unsigned int fe_degree, const unsigned int n_global_refinements,
-     const bool apply_dbcs)
+test(const unsigned int fe_degree,
+     const unsigned int n_global_refinements,
+     const bool         apply_dbcs)
 {
   using VectorizedArrayType = VectorizedArray<Number, width>;
   using VectorType          = LinearAlgebra::distributed::Vector<Number>;
@@ -34,20 +35,20 @@ test(const unsigned int fe_degree, const unsigned int n_global_refinements,
                            Utilities::MPI::this_mpi_process(MPI_COMM_WORLD) ==
                              0);
 
-  FESystem<dim> fe(FE_Q<dim>(fe_degree), n_components);
+  FESystem<dim>  fe(FE_Q<dim>(fe_degree), n_components);
   MappingQ1<dim> mapping;
   QGauss<dim>    quadrature(fe_degree + 1);
 
   parallel::distributed::Triangulation<dim> tria(MPI_COMM_WORLD);
 
-  if(false)
-  {
-  GridGenerator::hyper_cube(tria);
-  }
+  if (false)
+    {
+      GridGenerator::hyper_cube(tria);
+    }
   else
-  {
-  GridGenerator::hyper_ball_balanced(tria);
-  }
+    {
+      GridGenerator::hyper_ball_balanced(tria);
+    }
 
   tria.refine_global(n_global_refinements);
 
@@ -56,10 +57,10 @@ test(const unsigned int fe_degree, const unsigned int n_global_refinements,
 
   AffineConstraints<Number> constraints;
 
-  if(apply_dbcs)
-  {
-    DoFTools::make_zero_boundary_constraints (dof_handler, 0, constraints);
-  }
+  if (apply_dbcs)
+    {
+      DoFTools::make_zero_boundary_constraints(dof_handler, 0, constraints);
+    }
 
   constraints.close();
 
@@ -87,10 +88,12 @@ test(const unsigned int fe_degree, const unsigned int n_global_refinements,
   pcout << "- n dofs:           " << dof_handler.n_dofs() << std::endl;
   pcout << "- compression type: " << cir.compression_level() << std::endl;
 
-  FEEvaluation<dim, -1, 0, n_components, Number, VectorizedArrayType> phi0(matrix_free);
-  FEEvaluation<dim, -1, 0, n_components, Number, VectorizedArrayType> phi1(matrix_free);
+  FEEvaluation<dim, -1, 0, n_components, Number, VectorizedArrayType> phi0(
+    matrix_free);
+  FEEvaluation<dim, -1, 0, n_components, Number, VectorizedArrayType> phi1(
+    matrix_free);
 
-  const auto print = [&](const auto & phi) {
+  const auto print = [&](const auto &phi) {
     if (pcout.is_active())
       {
         for (unsigned int i = 0; i < phi.dofs_per_cell; ++i)
@@ -107,25 +110,25 @@ test(const unsigned int fe_degree, const unsigned int n_global_refinements,
 
       phi1.reinit(cell);
       cir.read_dof_values(src, phi1);
-      
-      for (unsigned int i = 0; i < phi0.dofs_per_cell; ++i)
-      {
-        if(phi0.begin_dof_values()[i][0] != phi1.begin_dof_values()[i][0])
-        {
-      print(phi0);
-      print(phi1);
 
-        AssertThrow(false, 
-           ExcMessage("Values do not match <" + 
-           std::to_string(phi0.begin_dof_values()[i][0]) + "> vs. <" +
-           std::to_string(phi1.begin_dof_values()[i][0]) + "> !"
-           ));
-            
+      for (unsigned int i = 0; i < phi0.dofs_per_cell; ++i)
+        {
+          if (phi0.begin_dof_values()[i][0] != phi1.begin_dof_values()[i][0])
+            {
+              print(phi0);
+              print(phi1);
+
+              AssertThrow(
+                false,
+                ExcMessage(
+                  "Values do not match <" +
+                  std::to_string(phi0.begin_dof_values()[i][0]) + "> vs. <" +
+                  std::to_string(phi1.begin_dof_values()[i][0]) + "> !"));
+            }
         }
-      }
     }
 
-    pcout << "OK!" << std::endl;
+  pcout << "OK!" << std::endl;
 }
 
 int
@@ -137,7 +140,7 @@ main(int argc, char *argv[])
   const unsigned int fe_degree     = (argc >= 3) ? std::atoi(argv[2]) : 1;
   const unsigned int n_components  = (argc >= 4) ? std::atoi(argv[3]) : 1;
   const unsigned int n_refinements = (argc >= 5) ? std::atoi(argv[4]) : 6;
-  const bool apply_dbcs            = (argc >= 6) ? std::atoi(argv[5]) : 0;
+  const bool         apply_dbcs    = (argc >= 6) ? std::atoi(argv[5]) : 0;
 
   if (dim == 2 && n_components == 1)
     test<2, 1, double>(fe_degree, n_refinements, apply_dbcs);
