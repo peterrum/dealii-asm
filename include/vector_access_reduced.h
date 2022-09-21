@@ -190,6 +190,15 @@ public:
       }
   }
 
+  unsigned int
+  compression_level() const
+  {
+    if (compressed_dof_indices.size() == 0)
+      return 0;
+
+    return 1;
+  }
+
   template <int dim,
             int fe_degree,
             int n_q_points,
