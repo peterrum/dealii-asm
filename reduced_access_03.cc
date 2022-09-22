@@ -103,7 +103,7 @@ main(int argc, char *argv[])
               if (d == 1)
                 {
                   const auto orientation =
-                    get_orientation_line(dofs_of_object, degree);
+                    get_orientation_line(dofs_of_object, 1, degree);
                   printf(" -> %1u", orientation);
 
                   obj_orientations.emplace_back(orientation);
@@ -111,7 +111,7 @@ main(int argc, char *argv[])
               else if (d == 2)
                 {
                   const auto orientation =
-                    get_orientation_quad(dofs_of_object, orientation_table);
+                    get_orientation_quad(dofs_of_object, 1, orientation_table);
                   printf(" -> %1u", orientation);
 
                   obj_orientations.emplace_back(orientation);
