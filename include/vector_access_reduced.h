@@ -251,6 +251,12 @@ public:
       }
   }
 
+  void
+  set_do_adjust_for_orientation(const bool do_adjust_for_orientation)
+  {
+    this->do_adjust_for_orientation = do_adjust_for_orientation;
+  }
+
 private:
   template <int dim,
             int fe_degree,
@@ -380,15 +386,16 @@ private:
           ++offset_i2;
       }
 
-    adjust_for_orientation<VectorizedArrayType, dim, fe_degree>(
-      dim,
-      fe_degree,
-      n_components,
-      false,
-      cell_no,
-      orientations,
-      orientation_table,
-      dof_values);
+    if (do_adjust_for_orientation)
+      adjust_for_orientation<VectorizedArrayType, dim, fe_degree>(
+        dim,
+        fe_degree,
+        n_components,
+        false,
+        cell_no,
+        orientations,
+        orientation_table,
+        dof_values);
   }
 
   template <int dim,
@@ -417,15 +424,16 @@ private:
                                                      VectorizedArrayType>
       distributor;
 
-    adjust_for_orientation<VectorizedArrayType, dim, fe_degree>(
-      dim,
-      fe_degree,
-      n_components,
-      true,
-      cell_no,
-      orientations,
-      orientation_table,
-      dof_values);
+    if (do_adjust_for_orientation)
+      adjust_for_orientation<VectorizedArrayType, dim, fe_degree>(
+        dim,
+        fe_degree,
+        n_components,
+        true,
+        cell_no,
+        orientations,
+        orientation_table,
+        dof_values);
 
     for (int i2 = 0, i = 0, compressed_i2 = 0, offset_i2 = 0;
          i2 < (dim == 3 ? (fe_degree + 1) : 1);
@@ -533,9 +541,12 @@ private:
       }
   }
 
+
   std::vector<unsigned int>  compressed_dof_indices;
   std::vector<unsigned char> all_indices_uniform;
 
   Table<2, unsigned int>    orientation_table; // for reorienation
   std::vector<unsigned int> orientations;
+
+  bool do_adjust_for_orientation = true;
 };
