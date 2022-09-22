@@ -340,9 +340,9 @@ public:
 
                 unsigned int c = 0;
 
-                for (const auto v : cell_iterator->vertex_indices())
+                for (const auto vertex : cell_iterator->vertex_indices())
                   weights_compressed[cell][renumber_lex[c++]][v] =
-                    counter_vertices[cell_iterator->vertex_index(v)];
+                    counter_vertices[cell_iterator->vertex_index(vertex)];
 
                 for (const auto l : cell_iterator->line_indices())
                   weights_compressed[cell][renumber_lex[c++]][v] =
@@ -649,22 +649,41 @@ private:
                       FECellIntegrator &phi,
                       const bool        first_call) const
   {
-    if ((first_call == true) &&
-        (weight_type != Restrictors::WeightingType::none))
-      {
-        phi_weights.reinit(phi.get_current_cell_index());
-        phi_weights.read_dof_values_plain(weights);
-      }
+    const unsigned int cell = phi.get_current_cell_index();
 
-    if (((first_call == true) &&
-         (weight_type == Restrictors::WeightingType::symm ||
-          weight_type == Restrictors::WeightingType::pre)) ||
-        ((first_call == false) &&
-         (weight_type == Restrictors::WeightingType::symm ||
-          weight_type == Restrictors::WeightingType::post)))
+    if (weights_compressed.size() > 0)
       {
-        for (unsigned int i = 0; i < phi_weights.dofs_per_cell; ++i)
-          phi.begin_dof_values()[i] *= phi_weights.begin_dof_values()[i];
+        if (((first_call == true) &&
+             (weight_type == Restrictors::WeightingType::symm ||
+              weight_type == Restrictors::WeightingType::pre)) ||
+            ((first_call == false) &&
+             (weight_type == Restrictors::WeightingType::symm ||
+              weight_type == Restrictors::WeightingType::post)))
+          internal::weight_fe_q_dofs_by_entity<dim, -1, VectorizedArrayType>(
+            &weights_compressed[cell][0],
+            1 /* TODO*/,
+            fe_degree + 1,
+            phi.begin_dof_values());
+      }
+    else
+      {
+        if ((first_call == true) &&
+            (weight_type != Restrictors::WeightingType::none))
+          {
+            phi_weights.reinit(cell);
+            phi_weights.read_dof_values_plain(weights);
+          }
+
+        if (((first_call == true) &&
+             (weight_type == Restrictors::WeightingType::symm ||
+              weight_type == Restrictors::WeightingType::pre)) ||
+            ((first_call == false) &&
+             (weight_type == Restrictors::WeightingType::symm ||
+              weight_type == Restrictors::WeightingType::post)))
+          {
+            for (unsigned int i = 0; i < phi_weights.dofs_per_cell; ++i)
+              phi.begin_dof_values()[i] *= phi_weights.begin_dof_values()[i];
+          }
       }
   }
 
