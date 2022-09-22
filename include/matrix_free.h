@@ -605,16 +605,8 @@ private:
             else
               phi_src.read_dof_values(src);
 
-            if (weight_type == Restrictors::WeightingType::symm ||
-                weight_type == Restrictors::WeightingType::pre)
-              {
-                phi_weights.reinit(cell);
-                phi_weights.read_dof_values_plain(weights);
-
-                for (unsigned int i = 0; i < phi_weights.dofs_per_cell; ++i)
-                  phi_src.begin_dof_values()[i] *=
-                    phi_weights.begin_dof_values()[i];
-              }
+            if (weight_type != Restrictors::WeightingType::post)
+              apply_weights_local(phi_weights, phi_src, true);
 
             fdm.apply_inverse(
               cell,
@@ -624,12 +616,8 @@ private:
                                                    phi_src.dofs_per_cell),
               tmp);
 
-            if (weight_type == Restrictors::WeightingType::symm)
-              {
-                for (unsigned int i = 0; i < phi_weights.dofs_per_cell; ++i)
-                  phi_dst.begin_dof_values()[i] *=
-                    phi_weights.begin_dof_values()[i];
-              }
+            if (weight_type != Restrictors::WeightingType::post)
+              apply_weights_local(phi_weights, phi_dst, false);
 
             if (compressed_rw)
               compressed_rw->distribute_local_to_global(dst, phi_dst);
@@ -654,6 +642,30 @@ private:
         if (operation_after_matrix_vector_product)
           operation_after_matrix_vector_product(begin, end);
       });
+  }
+
+  void
+  apply_weights_local(FECellIntegrator &phi_weights,
+                      FECellIntegrator &phi,
+                      const bool        first_call) const
+  {
+    if ((first_call == true) &&
+        (weight_type != Restrictors::WeightingType::none))
+      {
+        phi_weights.reinit(phi.get_current_cell_index());
+        phi_weights.read_dof_values_plain(weights);
+      }
+
+    if (((first_call == true) &&
+         (weight_type == Restrictors::WeightingType::symm ||
+          weight_type == Restrictors::WeightingType::pre)) ||
+        ((first_call == false) &&
+         (weight_type == Restrictors::WeightingType::symm ||
+          weight_type == Restrictors::WeightingType::post)))
+      {
+        for (unsigned int i = 0; i < phi_weights.dofs_per_cell; ++i)
+          phi.begin_dof_values()[i] *= phi_weights.begin_dof_values()[i];
+      }
   }
 
   const MatrixFree<dim, Number, VectorizedArrayType> &matrix_free;

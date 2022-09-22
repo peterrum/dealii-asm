@@ -37,7 +37,7 @@
 - Setting up coarse-grid solver on level 0
 
 - Create system preconditioner: FDM
-    - n overlap:              3
+    - n overlap:              1
     - sub mesh approximation: 2
     - reuse partitioner:      true
 
@@ -50,48 +50,48 @@
 - Setting up smoother on level 1
 
 - Create system preconditioner: FDM
-    - n overlap:              3
+    - n overlap:              1
     - sub mesh approximation: 2
     - reuse partitioner:      true
 
 - Create system preconditioner: Chebyshev
     - degree: 1
-    - min ev: 1
-    - max ev: 1.2
-    - omega:  0.909091
+    - min ev: 1.47743
+    - max ev: 1.77291
+    - omega:  0.615321
 
 - Setting up smoother on level 2
 
 - Create system preconditioner: FDM
-    - n overlap:              3
+    - n overlap:              1
     - sub mesh approximation: 2
     - reuse partitioner:      true
 
 - Create system preconditioner: Chebyshev
     - degree: 1
-    - min ev: 1.10372
-    - max ev: 1.32446
-    - omega:  0.823662
+    - min ev: 1.65422
+    - max ev: 1.98507
+    - omega:  0.549557
 
 - Setting up smoother on level 3
 
 - Create system preconditioner: FDM
-    - n overlap:              3
+    - n overlap:              1
     - sub mesh approximation: 2
     - reuse partitioner:      true
 
 - Create system preconditioner: Chebyshev
     - degree: 1
-    - min ev: 1.16311
-    - max ev: 1.39573
-    - omega:  0.781605
+    - min ev: 1.71231
+    - max ev: 2.05477
+    - omega:  0.530914
 
  - Solving with GMRES
    - max iterations: 1000
    - abs tolerance:  1e-10
    - rel tolrance:   0.01
-   - n iterations:   4
+   - n iterations:   2
 
 | name | n_cells | L | n_dofs | it | 
-| ---  | 64      | 4 | 625    | 4  | 
+| ---  | 64      | 4 | 625    | 2  | 
 
