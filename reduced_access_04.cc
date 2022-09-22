@@ -135,6 +135,9 @@ test(const unsigned int fe_degree,
                     std::to_string(phi1.begin_dof_values()[i][v]) + "> !"));
               }
           }
+
+      phi0.distribute_local_to_global(src);
+      cir.distribute_local_to_global(src, phi1);
     }
 
   pcout << "OK!" << std::endl;
