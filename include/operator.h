@@ -2,8 +2,29 @@
 
 #include "vector_access_reduced.h"
 
+/**
+ * Base class for LaplaceOperatorMatrixBased and
+ * LaplaceOperatorMatrixFree. It provedes an interface
+ * for a simle vmult and not the version with pre/post operations.
+ */
+template <typename VectorType>
+class LaplaceOperatorBase : public Subscriptor
+{
+public:
+  virtual void
+  vmult(VectorType &dst, const VectorType &src) const = 0;
+
+private:
+};
+
+
+
+/**
+ * Matrix-based implementation of the Laplace operator.
+ */
 template <int dim, typename Number>
-class LaplaceOperatorMatrixBased : public Subscriptor
+class LaplaceOperatorMatrixBased
+  : public LaplaceOperatorBase<LinearAlgebra::distributed::Vector<Number>>
 {
 public:
   static const int dimension = dim;
@@ -172,10 +193,15 @@ private:
 };
 
 
+
+/**
+ * Matrix-free implementation of the Laplace operator.
+ */
 template <int dim,
           typename Number,
           typename VectorizedArrayType = VectorizedArray<Number>>
-class LaplaceOperatorMatrixFree : public Subscriptor
+class LaplaceOperatorMatrixFree
+  : public LaplaceOperatorBase<LinearAlgebra::distributed::Vector<Number>>
 {
 public:
   static const int dimension  = dim;
