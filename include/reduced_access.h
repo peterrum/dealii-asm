@@ -220,22 +220,6 @@ compress_indices(const std::vector<types::global_dof_index> &dofs,
             {
               // no dof of object is constrained
 
-
-
-              // sanity check for multiple components
-              if (n_components > 1)
-                {
-                  for (unsigned int j = 0; j < n_components; ++j)
-                    for (unsigned int i = 0; i < entry.second;
-                         i += n_components)
-                      if ((dofs_of_object[0] + i * n_components + j) !=
-                          (dofs_of_object[i + j * entry.second]))
-                        {
-                          AssertThrow(false, ExcNotImplemented());
-                          return {numbers::invalid_unsigned_int, {}};
-                        }
-                }
-
               // store minimal index of object
               const auto min_ptr =
                 std::min_element(dofs_of_object.begin(), dofs_of_object.end());
@@ -244,6 +228,7 @@ compress_indices(const std::vector<types::global_dof_index> &dofs,
 
               obj_start_indices.emplace_back(*min_ptr);
 
+              //if(false)
               if (dim == 3 &&
                   (d == 2 &&
                    (i == 2 || i == 3))) // reorientate quad 2 + 3 (lex)
@@ -253,9 +238,11 @@ compress_indices(const std::vector<types::global_dof_index> &dofs,
                   for (unsigned int c = 0; c < n_components; ++c)
                     for (unsigned int j = 0; j < entry.second; ++j)
                       dofs_of_object[j + c * entry.second] =
-                        dofs_of_object_copy[orientation_table[1][j] +
+                        dofs_of_object_copy[orientation_table[1][j]+
                                             c * entry.second];
                 }
+
+              // sanity check for multiple components
 
               if (dim >= 2 && d == 1) // line orientations
                 {

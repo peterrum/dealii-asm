@@ -1,4 +1,5 @@
 #include <deal.II/base/conditional_ostream.h>
+#include <deal.II/base/convergence_table.h>
 #include <deal.II/base/quadrature_lib.h>
 
 #include <deal.II/distributed/tria.h>
@@ -33,7 +34,8 @@ template <int dim,
 void
 test(const unsigned int fe_degree,
      const unsigned int n_global_refinements,
-     const bool         apply_dbcs)
+     const bool         apply_dbcs,
+     ConvergenceTable & table)
 {
   using VectorizedArrayType        = VectorizedArray<Number, width>;
   using VectorType                 = LinearAlgebra::distributed::Vector<Number>;
@@ -98,12 +100,13 @@ test(const unsigned int fe_degree,
   cir.initialize(matrix_free);
 
   pcout << "- n dofs:           " << dof_handler.n_dofs() << std::endl;
-  pcout << "- compression type: " << cir.compression_level() << std::endl;
-
-  FEEvaluation<dim, -1, 0, n_components, Number, VectorizedArrayType> phi(
-    matrix_free);
+  pcout << "- compression type: "
+        << Utilities::MPI::max(cir.compression_level(), MPI_COMM_WORLD)
+        << std::endl;
 
   static unsigned int likwid_counter = 1;
+
+  table.add_value("n_dofs", dof_handler.n_dofs());
 
   for (unsigned int i = 0; i < 3; ++i)
     {
@@ -111,32 +114,58 @@ test(const unsigned int fe_degree,
 
       if (i == 2)
         cir.set_do_adjust_for_orientation(false);
+      MPI_Barrier(MPI_COMM_WORLD);
+      LIKWID_MARKER_START(label.c_str());
+
+      const auto timer = std::chrono::system_clock::now();
 
       for (unsigned int c = 0; c < n_repetitions; ++c)
         {
-          MPI_Barrier(MPI_COMM_WORLD);
-          LIKWID_MARKER_START(label.c_str());
+          matrix_free.template cell_loop<VectorType, VectorType>(
+            [&](const auto &matrix_free,
+                auto &      dst,
+                const auto &src,
+                const auto  range) {
+              FEEvaluation<dim,
+                           -1,
+                           0,
+                           n_components,
+                           Number,
+                           VectorizedArrayType>
+                phi(matrix_free);
 
-          for (unsigned int cell = 0; cell < matrix_free.n_cell_batches();
-               ++cell)
-            {
-              if (i == 0)
+              for (unsigned int cell = range.first; cell < range.second; ++cell)
                 {
-                  phi.reinit(cell);
-                  phi.read_dof_values(src);
-                  phi.distribute_local_to_global(dst);
+                  if (i == 0)
+                    {
+                      phi.reinit(cell);
+                      phi.read_dof_values(src);
+                      phi.distribute_local_to_global(dst);
+                    }
+                  else
+                    {
+                      phi.reinit(cell);
+                      cir.read_dof_values(src, phi);
+                      cir.distribute_local_to_global(dst, phi);
+                    }
                 }
-              else
-                {
-                  phi.reinit(cell);
-                  cir.read_dof_values(src, phi);
-                  cir.distribute_local_to_global(dst, phi);
-                }
-            }
-
-          MPI_Barrier(MPI_COMM_WORLD);
-          LIKWID_MARKER_STOP(label.c_str());
+            },
+            dst,
+            src);
         }
+
+      const double time_total =
+        std::chrono::duration_cast<std::chrono::nanoseconds>(
+          std::chrono::system_clock::now() - timer)
+          .count() /
+        1e9;
+
+      MPI_Barrier(MPI_COMM_WORLD);
+      LIKWID_MARKER_STOP(label.c_str());
+
+      table.add_value("time_" + std::to_string(i), time_total);
+      table.set_scientific("time_" + std::to_string(i), true);
+
       likwid_counter++;
     }
 }
@@ -158,31 +187,41 @@ main(int argc, char *argv[])
   const bool         apply_dbcs    = (argc >= 6) ? std::atoi(argv[5]) : 0;
   const bool         use_float     = (argc >= 7) ? std::atoi(argv[6]) : 1;
 
+  const bool is_root = Utilities::MPI::this_mpi_process(MPI_COMM_WORLD) == 0;
+
+  ConvergenceTable table;
+
   if (use_float)
     {
       if (dim == 2 && n_components == 1)
-        test<2, 1, float>(fe_degree, n_refinements, apply_dbcs);
+        test<2, 1, float>(fe_degree, n_refinements, apply_dbcs, table);
       else if (dim == 3 && n_components == 1)
-        test<3, 1, float>(fe_degree, n_refinements, apply_dbcs);
+        test<3, 1, float>(fe_degree, n_refinements, apply_dbcs, table);
       else if (dim == 2 && n_components == 2)
-        test<2, 2, float>(fe_degree, n_refinements, apply_dbcs);
+        test<2, 2, float>(fe_degree, n_refinements, apply_dbcs, table);
       else if (dim == 3 && n_components == 3)
-        test<3, 3, float>(fe_degree, n_refinements, apply_dbcs);
+        test<3, 3, float>(fe_degree, n_refinements, apply_dbcs, table);
       else
         AssertThrow(false, ExcInternalError());
     }
   else
     {
       if (dim == 2 && n_components == 1)
-        test<2, 1, double>(fe_degree, n_refinements, apply_dbcs);
+        test<2, 1, double>(fe_degree, n_refinements, apply_dbcs, table);
       else if (dim == 3 && n_components == 1)
-        test<3, 1, double>(fe_degree, n_refinements, apply_dbcs);
+        test<3, 1, double>(fe_degree, n_refinements, apply_dbcs, table);
       else if (dim == 2 && n_components == 2)
-        test<2, 2, double>(fe_degree, n_refinements, apply_dbcs);
+        test<2, 2, double>(fe_degree, n_refinements, apply_dbcs, table);
       else if (dim == 3 && n_components == 3)
-        test<3, 3, double>(fe_degree, n_refinements, apply_dbcs);
+        test<3, 3, double>(fe_degree, n_refinements, apply_dbcs, table);
       else
         AssertThrow(false, ExcInternalError());
+    }
+
+  if (is_root)
+    {
+      table.write_text(std::cout, ConvergenceTable::org_mode_table);
+      std::cout << std::endl;
     }
 
 #ifdef LIKWID_PERFMON
