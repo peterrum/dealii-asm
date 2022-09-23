@@ -49,24 +49,6 @@ using namespace dealii;
 #define COMPILE_2D 0
 #define COMPILE_3D 1
 
-// clang-format off
-#define EXPAND_OPERATIONS(OPERATION)                                     \
-  switch (n_rows)                                                        \
-    {                                                                    \
-      case  2: OPERATION((( 2 <= MAX_N_ROWS_FDM) ?  2 : -1), -1); break; \
-      case  3: OPERATION((( 3 <= MAX_N_ROWS_FDM) ?  3 : -1), -1); break; \
-      case  4: OPERATION((( 4 <= MAX_N_ROWS_FDM) ?  4 : -1), -1); break; \
-      case  5: OPERATION((( 5 <= MAX_N_ROWS_FDM) ?  5 : -1), -1); break; \
-      case  6: OPERATION((( 6 <= MAX_N_ROWS_FDM) ?  6 : -1), -1); break; \
-      case  7: OPERATION((( 7 <= MAX_N_ROWS_FDM) ?  7 : -1), -1); break; \
-      case  8: OPERATION((( 8 <= MAX_N_ROWS_FDM) ?  8 : -1), -1); break; \
-      case  9: OPERATION((( 9 <= MAX_N_ROWS_FDM) ?  9 : -1), -1); break; \
-      case 10: OPERATION(((10 <= MAX_N_ROWS_FDM) ? 10 : -1), -1); break; \
-      default:                                                           \
-        OPERATION(-1, -1);                                               \
-    }
-// clang-format on
-
 template <typename OperatorType>
 class MyOperator : public Subscriptor
 {

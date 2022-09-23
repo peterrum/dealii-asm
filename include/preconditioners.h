@@ -5,6 +5,7 @@
 
 #include <deal.II/dofs/dof_handler.h>
 
+#include <deal.II/lac/precondition.h>
 #include <deal.II/lac/solver_cg.h>
 #include <deal.II/lac/sparse_matrix_tools.h>
 
@@ -880,4 +881,52 @@ public:
 
 private:
   const std::shared_ptr<const PreconditionerType> preconditioner;
+};
+
+
+template <typename VectorType>
+class DiagonalMatrixPrePost : public Subscriptor
+{
+public:
+  DiagonalMatrixPrePost(const std::shared_ptr<DiagonalMatrix<VectorType>> op)
+    : op(op)
+  {}
+
+  void
+  vmult(VectorType &dst, const VectorType &src) const
+  {
+    op->vmult(dst, src);
+  }
+
+  void
+  vmult(VectorType &      dst,
+        const VectorType &src,
+        const std::function<void(const unsigned int, const unsigned int)>
+          &operation_before_matrix_vector_product,
+        const std::function<void(const unsigned int, const unsigned int)>
+          &operation_after_matrix_vector_product = {}) const
+  {
+    const auto dst_ptr  = dst.begin();
+    const auto src_ptr  = src.begin();
+    const auto diag_ptr = op->get_vector().begin();
+
+    const auto locally_owned_size = dst.locally_owned_size();
+
+    for (unsigned int i = 0; i < locally_owned_size; i += 100)
+      {
+        const unsigned int begin = i;
+        const unsigned int end   = std::min(begin + 100, locally_owned_size);
+
+        operation_before_matrix_vector_product(begin, end);
+
+        for (unsigned int j = begin; j < end; ++j)
+          dst_ptr[j] = src_ptr[j] * diag_ptr[j];
+
+        if (operation_after_matrix_vector_product)
+          operation_after_matrix_vector_product(begin, end);
+      }
+  }
+
+private:
+  const std::shared_ptr<DiagonalMatrix<VectorType>> op;
 };
