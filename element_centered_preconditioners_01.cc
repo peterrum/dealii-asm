@@ -590,6 +590,9 @@ create_system_preconditioner(const OperatorType &              op,
           const auto preconditioner_optimize =
             params.get<unsigned int>("optimize", (n_overlap == 1) ? 2 : 1);
 
+          const auto fdm =
+            create_fdm_preconditioner(op, preconditioner_parameters);
+
           if (preconditioner_optimize == 0)
             {
               // optimization 0: A (-) and P (-)
@@ -598,7 +601,7 @@ create_system_preconditioner(const OperatorType &              op,
                 std::make_shared<PreconditionerAdapter<
                   VectorType,
                   ASPoissonPreconditioner<dim, Number, VectorizedArrayType>>>(
-                  create_fdm_preconditioner(op, params)));
+                  fdm));
             }
           else if (preconditioner_optimize == 1)
             {
@@ -607,7 +610,7 @@ create_system_preconditioner(const OperatorType &              op,
                 static_cast<const LaplaceOperatorBase<VectorType> &>(op),
                 std::const_pointer_cast<
                   ASPoissonPreconditioner<dim, Number, VectorizedArrayType>>(
-                  create_fdm_preconditioner(op, preconditioner_parameters)));
+                  fdm));
             }
           else if (preconditioner_optimize == 2)
             {
@@ -616,7 +619,7 @@ create_system_preconditioner(const OperatorType &              op,
                 op,
                 std::const_pointer_cast<
                   ASPoissonPreconditioner<dim, Number, VectorizedArrayType>>(
-                  create_fdm_preconditioner(op, preconditioner_parameters)));
+                  fdm));
             }
           else
             {
