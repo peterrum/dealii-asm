@@ -451,7 +451,7 @@ create_system_preconditioner(const OperatorType &              op,
 
       AssertThrow(preconditioner_type != "", ExcNotImplemented());
 
-      const auto setup_chebshev = [&](const auto precon) {
+      const auto setup_relaxation = [&](const auto precon) {
         using RelaxationPreconditionerType = PreconditionRelaxation<
           OperatorType,
           typename std::remove_cv<
@@ -515,14 +515,14 @@ create_system_preconditioner(const OperatorType &              op,
           const auto precon = std::make_shared<DiagonalMatrix<VectorType>>();
           op.compute_inverse_diagonal(precon->get_vector());
 
-          return setup_chebshev(precon);
+          return setup_relaxation(precon);
         }
       else
         {
           const auto precon =
             create_system_preconditioner(op, preconditioner_parameters);
 
-          return setup_chebshev(
+          return setup_relaxation(
             std::const_pointer_cast<
               PreconditionerBase<typename OperatorType::vector_type>>(precon));
         }
@@ -539,7 +539,7 @@ create_system_preconditioner(const OperatorType &              op,
 
       AssertThrow(preconditioner_type != "", ExcNotImplemented());
 
-      const auto setup_chebshev = [&](const auto precon) {
+      const auto setup_chebshev = [&](const auto &op, const auto precon) {
         using PreconditionerType = PreconditionChebyshev<
           OperatorType,
           VectorType,
@@ -577,11 +577,12 @@ create_system_preconditioner(const OperatorType &              op,
           const auto precon = std::make_shared<DiagonalMatrix<VectorType>>();
           op.compute_inverse_diagonal(precon->get_vector());
 
-          return setup_chebshev(precon);
+          return setup_chebshev(op, precon);
         }
       else if (preconditioner_optimize && (preconditioner_type == "FDM"))
         {
           return setup_chebshev(
+            op,
             std::const_pointer_cast<ASPoissonPreconditionerBase<VectorType>>(
               create_fdm_preconditioner(op, preconditioner_parameters)));
         }
@@ -591,6 +592,7 @@ create_system_preconditioner(const OperatorType &              op,
             create_system_preconditioner(op, preconditioner_parameters);
 
           return setup_chebshev(
+            op,
             std::const_pointer_cast<
               PreconditionerBase<typename OperatorType::vector_type>>(precon));
         }
