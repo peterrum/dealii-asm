@@ -1,6 +1,11 @@
 #pragma once
 
+#include <deal.II/fe/fe_q.h>
+#include <deal.II/fe/fe_q_iso_q1.h>
+
+#include "matrix_free.h"
 #include "precondition.h"
+#include "restrictors.h"
 
 Restrictors::WeightingType
 get_weighting_type(const boost::property_tree::ptree params)

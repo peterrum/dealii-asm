@@ -1,5 +1,7 @@
 #pragma once
 
+#include <deal.II/matrix_free/fe_evaluation.h>
+
 #include "reduced_access.h"
 
 #define MAX_DEGREE_RW 6

@@ -1,5 +1,8 @@
 #pragma once
 
+#include <deal.II/matrix_free/shape_info.h>
+#include <deal.II/matrix_free/vector_access_internal.h>
+
 unsigned int
 get_orientation_line(const std::vector<types::global_dof_index> &dofs,
                      const unsigned int                          degree,
@@ -228,7 +231,7 @@ compress_indices(const std::vector<types::global_dof_index> &dofs,
 
               obj_start_indices.emplace_back(*min_ptr);
 
-              //if(false)
+              // if(false)
               if (dim == 3 &&
                   (d == 2 &&
                    (i == 2 || i == 3))) // reorientate quad 2 + 3 (lex)
@@ -238,7 +241,7 @@ compress_indices(const std::vector<types::global_dof_index> &dofs,
                   for (unsigned int c = 0; c < n_components; ++c)
                     for (unsigned int j = 0; j < entry.second; ++j)
                       dofs_of_object[j + c * entry.second] =
-                        dofs_of_object_copy[orientation_table[1][j]+
+                        dofs_of_object_copy[orientation_table[1][j] +
                                             c * entry.second];
                 }
 

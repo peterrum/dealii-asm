@@ -1,5 +1,22 @@
 #pragma once
 
+#include <deal.II/base/conditional_ostream.h>
+
+#include <deal.II/dofs/dof_tools.h>
+
+#include <deal.II/lac/trilinos_precondition.h>
+#include <deal.II/lac/trilinos_sparse_matrix.h>
+#include <deal.II/lac/trilinos_sparsity_pattern.h>
+
+#include <deal.II/matrix_free/constraint_info.h>
+#include <deal.II/matrix_free/fe_evaluation.h>
+#include <deal.II/matrix_free/matrix_free.h>
+#include <deal.II/matrix_free/tools.h>
+
+#include <deal.II/numerics/matrix_creator.h>
+
+#include "dof_tools.h"
+#include "grid_tools.h"
 #include "vector_access_reduced.h"
 
 /**

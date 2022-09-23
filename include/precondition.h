@@ -1,6 +1,7 @@
 #pragma once
 
-#include "precondition.h"
+#include "multigrid.h"
+#include "preconditioners.h"
 
 template <typename OperatorType>
 std::shared_ptr<const PreconditionerBase<typename OperatorType::vector_type>>
