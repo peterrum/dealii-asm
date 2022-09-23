@@ -220,7 +220,8 @@ test(const unsigned int fe_degree,
     LaplaceOperatorMatrixFree<dim, Number, VectorizedArrayType>;
   using MyOperatorType = MyOperator<OperatorType>;
 
-  using PreconditionerType   = ASPoissonPreconditionerBase<VectorType>;
+  using PreconditionerType =
+    ASPoissonPreconditioner<dim, Number, VectorizedArrayType>;
   using MyPreconditionerType = Adapter<PreconditionerType>;
 
   OperatorType op(mapping_q_cache, tria, fe, quadrature);
@@ -231,26 +232,15 @@ test(const unsigned int fe_degree,
 
   std::shared_ptr<PreconditionerType> precon_fdm;
 
-  const unsigned int n_rows = fe_degree + 2 * n_overlap - 1;
-
-#define OPERATION(c, d)                                            \
-  if (c == -1)                                                     \
-    pcout << "Warning: FDM with <" + std::to_string(n_rows) +      \
-               "> is not precompiled!"                             \
-          << std::endl;                                            \
-                                                                   \
-  precon_fdm = std::make_shared<                                   \
-    ASPoissonPreconditioner<dim, Number, VectorizedArrayType, c>>( \
-    matrix_free,                                                   \
-    n_overlap,                                                     \
-    dim,                                                           \
-    mapping_q_cache,                                               \
-    fe_1D,                                                         \
-    quadrature_face,                                               \
-    quadrature_1D);
-
-  EXPAND_OPERATIONS(OPERATION);
-#undef OPERATION
+  precon_fdm =
+    std::make_shared<ASPoissonPreconditioner<dim, Number, VectorizedArrayType>>(
+      matrix_free,
+      n_overlap,
+      dim,
+      mapping_q_cache,
+      fe_1D,
+      quadrature_face,
+      quadrature_1D);
 
   op.set_partitioner(precon_fdm->get_partitioner());
 

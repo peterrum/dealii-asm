@@ -8,7 +8,9 @@ class LaplaceOperatorMatrixBased : public Subscriptor
 public:
   static const int dimension = dim;
   using value_type           = Number;
-  using vector_type          = LinearAlgebra::distributed::Vector<Number>;
+  using vectorized_array_type =
+    VectorizedArray<Number>; // dummy: for compilation
+  using vector_type = LinearAlgebra::distributed::Vector<Number>;
 
   using VectorType = vector_type;
 

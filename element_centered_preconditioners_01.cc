@@ -352,7 +352,10 @@ create_chebyshev_preconditioner(
 
 template <typename OperatorType>
 std::shared_ptr<
-  const ASPoissonPreconditionerBase<typename OperatorType::vector_type>>
+  const ASPoissonPreconditioner<OperatorType::dimension,
+                                typename OperatorType::value_type,
+                                typename OperatorType::vectorized_array_type,
+                                -1>>
 create_fdm_preconditioner(const OperatorType &              op,
                           const boost::property_tree::ptree params)
 {
@@ -399,9 +402,7 @@ create_fdm_preconditioner(const OperatorType &              op,
             << (reuse_partitioner ? "true" : "false") << std::endl;
       pcout << std::endl;
 
-      std::shared_ptr<const ASPoissonPreconditionerBase<VectorType>> precon;
-
-      precon = std::make_shared<
+      auto precon = std::make_shared<
         const ASPoissonPreconditioner<dim, Number, VectorizedArrayType, -1>>(
         matrix_free,
         n_overlap,
@@ -432,8 +433,10 @@ std::shared_ptr<const PreconditionerBase<typename OperatorType::vector_type>>
 create_system_preconditioner(const OperatorType &              op,
                              const boost::property_tree::ptree params)
 {
-  using VectorType = typename OperatorType::vector_type;
-  using Number     = typename VectorType::value_type;
+  const int dim             = OperatorType::dimension;
+  using VectorType          = typename OperatorType::vector_type;
+  using Number              = typename VectorType::value_type;
+  using VectorizedArrayType = typename OperatorType::vectorized_array_type;
 
   const auto type = params.get<std::string>("type", "");
 
@@ -583,7 +586,8 @@ create_system_preconditioner(const OperatorType &              op,
         {
           return setup_chebshev(
             op,
-            std::const_pointer_cast<ASPoissonPreconditionerBase<VectorType>>(
+            std::const_pointer_cast<
+              ASPoissonPreconditioner<dim, Number, VectorizedArrayType>>(
               create_fdm_preconditioner(op, preconditioner_parameters)));
         }
       else
@@ -599,9 +603,9 @@ create_system_preconditioner(const OperatorType &              op,
     }
   else if (type == "FDM")
     {
-      return std::make_shared<
-        PreconditionerAdapter<VectorType,
-                              ASPoissonPreconditionerBase<VectorType>>>(
+      return std::make_shared<PreconditionerAdapter<
+        VectorType,
+        ASPoissonPreconditioner<dim, Number, VectorizedArrayType>>>(
         create_fdm_preconditioner(op, params));
     }
   else if (type == "AMG")

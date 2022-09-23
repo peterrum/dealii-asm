@@ -13,53 +13,12 @@
 #include "tensor_product_matrix.h"
 #include "vector_access_reduced.h"
 
-template <typename VectorType>
-class ASPoissonPreconditionerBase : public PreconditionerBase<VectorType>
-{
-public:
-  virtual void
-  vmult(VectorType &dst, const VectorType &src) const
-  {
-    (void)dst;
-    (void)src;
-
-    AssertThrow(false, ExcNotImplemented());
-  }
-
-  virtual void
-  vmult(VectorType &      dst,
-        const VectorType &src,
-        const std::function<void(const unsigned int, const unsigned int)>
-          &operation_before_matrix_vector_product,
-        const std::function<void(const unsigned int, const unsigned int)>
-          &operation_after_matrix_vector_product = {}) const
-  {
-    (void)dst;
-    (void)src;
-    (void)operation_before_matrix_vector_product;
-    (void)operation_after_matrix_vector_product;
-
-    AssertThrow(false, ExcNotImplemented());
-  }
-
-  virtual std::shared_ptr<const Utilities::MPI::Partitioner>
-  get_partitioner() const = 0;
-
-  virtual std::size_t
-  memory_consumption() const
-  {
-    return 0.0;
-  }
-
-private:
-};
-
 template <int dim,
           typename Number,
           typename VectorizedArrayType,
           int n_rows_1d = -1>
-class ASPoissonPreconditioner : public ASPoissonPreconditionerBase<
-                                  LinearAlgebra::distributed::Vector<Number>>
+class ASPoissonPreconditioner
+  : public PreconditionerBase<LinearAlgebra::distributed::Vector<Number>>
 {
 public:
   using VectorType = LinearAlgebra::distributed::Vector<Number>;
@@ -441,7 +400,7 @@ public:
   }
 
   std::shared_ptr<const Utilities::MPI::Partitioner>
-  get_partitioner() const final
+  get_partitioner() const
   {
     return partitioner_for_fdm;
   }
