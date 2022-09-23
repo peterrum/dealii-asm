@@ -241,9 +241,11 @@ create_system_preconditioner(const OperatorType &              op,
 
       AssertThrow(preconditioner_type != "", ExcNotImplemented());
 
-      const auto setup_relaxation = [&](const auto precon) {
+      const auto setup_relaxation = [&](const auto &op, const auto precon) {
+        using MyOperatorType = typename std::remove_cv<
+          typename std::remove_reference<decltype(op)>::type>::type;
         using RelaxationPreconditionerType = PreconditionRelaxation<
-          OperatorType,
+          MyOperatorType,
           typename std::remove_cv<
             typename std::remove_reference<decltype(*precon)>::type>::type>;
 
@@ -302,10 +304,89 @@ create_system_preconditioner(const OperatorType &              op,
           pcout << "- Create system preconditioner: Diagonal" << std::endl
                 << std::endl;
 
-          const auto precon = std::make_shared<DiagonalMatrix<VectorType>>();
-          op.compute_inverse_diagonal(precon->get_vector());
+          const auto preconditioner_optimize =
+            params.get<unsigned int>("optimize", 3);
 
-          return setup_relaxation(precon);
+          const auto diag = std::make_shared<DiagonalMatrix<VectorType>>();
+          op.compute_inverse_diagonal(diag->get_vector());
+
+          const auto my_diag =
+            std::make_shared<DiagonalMatrixPrePost<VectorType>>(diag);
+
+          if (preconditioner_optimize == 0)
+            {
+              // optimization 0: A (-) and P (-)
+              return setup_relaxation(
+                static_cast<const LaplaceOperatorBase<VectorType> &>(op),
+                std::make_shared<
+                  PreconditionerAdapter<VectorType,
+                                        DiagonalMatrix<VectorType>>>(diag));
+            }
+          else if (preconditioner_optimize == 1)
+            {
+              // optimization 1: A (-) and P (pp)
+              return setup_relaxation(
+                static_cast<const LaplaceOperatorBase<VectorType> &>(op),
+                my_diag);
+            }
+          else if (preconditioner_optimize == 2)
+            {
+              // optimization 2: A (pp) and P (pp)
+              return setup_relaxation(op, my_diag);
+            }
+          else if (preconditioner_optimize == 3)
+            {
+              // optimization 2: A (pp) and P (diag)
+              return setup_relaxation(op, diag);
+            }
+          else
+            {
+              AssertThrow(false, ExcNotImplemented());
+            }
+        }
+      else if (preconditioner_type == "FDM")
+        {
+          const unsigned int n_overlap =
+            preconditioner_parameters.get<unsigned int>("n overlap", 1);
+
+          const auto preconditioner_optimize =
+            params.get<unsigned int>("optimize", (n_overlap == 1) ? 2 : 1);
+
+          const auto fdm =
+            create_fdm_preconditioner(op, preconditioner_parameters);
+
+          if (preconditioner_optimize == 0)
+            {
+              // optimization 0: A (-) and P (-)
+              return setup_relaxation(
+                static_cast<const LaplaceOperatorBase<VectorType> &>(op),
+                std::make_shared<PreconditionerAdapter<
+                  VectorType,
+                  ASPoissonPreconditioner<dim, Number, VectorizedArrayType>>>(
+                  fdm));
+            }
+          else if (preconditioner_optimize == 1)
+            {
+              // optimization 1: A (-) and P (pp)
+              return setup_relaxation(
+                static_cast<const LaplaceOperatorBase<VectorType> &>(op),
+                std::const_pointer_cast<
+                  ASPoissonPreconditioner<dim, Number, VectorizedArrayType>>(
+                  fdm));
+            }
+          else if (preconditioner_optimize == 2)
+            {
+              // optimization 2: A (pp) and P (pp)
+              return setup_relaxation(
+                op,
+                std::const_pointer_cast<
+                  ASPoissonPreconditioner<dim, Number, VectorizedArrayType>>(
+                  fdm));
+            }
+          else
+            {
+              AssertThrow(false, ExcNotImplemented());
+            }
         }
       else
         {
@@ -313,6 +394,7 @@ create_system_preconditioner(const OperatorType &              op,
             create_system_preconditioner(op, preconditioner_parameters);
 
           return setup_relaxation(
+            op,
             std::const_pointer_cast<
               PreconditionerBase<typename OperatorType::vector_type>>(precon));
         }
@@ -392,11 +474,12 @@ create_system_preconditioner(const OperatorType &              op,
           else if (preconditioner_optimize == 2)
             {
               // optimization 2: A (pp) and P (pp)
+              return setup_chebshev(op, my_diag);
             }
           else if (preconditioner_optimize == 3)
             {
               // optimization 2: A (pp) and P (diag)
-              return setup_chebshev(op, my_diag);
+              return setup_chebshev(op, diag);
             }
           else
             {
