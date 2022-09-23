@@ -11,8 +11,18 @@ template <typename VectorType>
 class LaplaceOperatorBase : public Subscriptor
 {
 public:
+  using vector_type = VectorType;
+  using Number      = typename vector_type::value_type;
+  using value_type  = Number;
+
   virtual void
   vmult(VectorType &dst, const VectorType &src) const = 0;
+
+  virtual void
+  initialize_dof_vector(VectorType &vec) const = 0;
+
+  virtual const AffineConstraints<Number> &
+  get_constraints() const = 0;
 
 private:
 };

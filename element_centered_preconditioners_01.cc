@@ -535,16 +535,16 @@ create_system_preconditioner(const OperatorType &              op,
       const auto preconditioner_parameters =
         try_get_child(params, "preconditioner");
 
-      const auto preconditioner_optimize = params.get<bool>("optimize", true);
-
       const auto preconditioner_type =
         preconditioner_parameters.get<std::string>("type", "");
 
       AssertThrow(preconditioner_type != "", ExcNotImplemented());
 
       const auto setup_chebshev = [&](const auto &op, const auto precon) {
+        using MyOperatorType = typename std::remove_cv<
+          typename std::remove_reference<decltype(op)>::type>::type;
         using PreconditionerType = PreconditionChebyshev<
-          OperatorType,
+          MyOperatorType,
           VectorType,
           typename std::remove_cv<
             typename std::remove_reference<decltype(*precon)>::type>::type>;
@@ -572,7 +572,7 @@ create_system_preconditioner(const OperatorType &              op,
           PreconditionerAdapter<VectorType, PreconditionerType>>(chebyshev);
       };
 
-      if (preconditioner_optimize && (preconditioner_type == "Diagonal"))
+      if (preconditioner_type == "Diagonal")
         {
           pcout << "- Create system preconditioner: Diagonal" << std::endl
                 << std::endl;
@@ -582,13 +582,46 @@ create_system_preconditioner(const OperatorType &              op,
 
           return setup_chebshev(op, precon);
         }
-      else if (preconditioner_optimize && (preconditioner_type == "FDM"))
+      else if (preconditioner_type == "FDM")
         {
-          return setup_chebshev(
-            op,
-            std::const_pointer_cast<
-              ASPoissonPreconditioner<dim, Number, VectorizedArrayType>>(
-              create_fdm_preconditioner(op, preconditioner_parameters)));
+          const unsigned int n_overlap =
+            preconditioner_parameters.get<unsigned int>("n overlap", 1);
+
+          const auto preconditioner_optimize =
+            params.get<unsigned int>("optimize", (n_overlap == 1) ? 2 : 1);
+
+          if (preconditioner_optimize == 0)
+            {
+              // optimization 0: A (-) and P (-)
+              return setup_chebshev(
+                static_cast<const LaplaceOperatorBase<VectorType> &>(op),
+                std::make_shared<PreconditionerAdapter<
+                  VectorType,
+                  ASPoissonPreconditioner<dim, Number, VectorizedArrayType>>>(
+                  create_fdm_preconditioner(op, params)));
+            }
+          else if (preconditioner_optimize == 1)
+            {
+              // optimization 1: A (-) and P (pp)
+              return setup_chebshev(
+                static_cast<const LaplaceOperatorBase<VectorType> &>(op),
+                std::const_pointer_cast<
+                  ASPoissonPreconditioner<dim, Number, VectorizedArrayType>>(
+                  create_fdm_preconditioner(op, preconditioner_parameters)));
+            }
+          else if (preconditioner_optimize == 2)
+            {
+              // optimization 2: A (pp) and P (pp)
+              return setup_chebshev(
+                op,
+                std::const_pointer_cast<
+                  ASPoissonPreconditioner<dim, Number, VectorizedArrayType>>(
+                  create_fdm_preconditioner(op, preconditioner_parameters)));
+            }
+          else
+            {
+              AssertThrow(false, ExcNotImplemented());
+            }
         }
       else
         {
