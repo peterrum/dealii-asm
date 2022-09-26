@@ -132,6 +132,8 @@ test(const Parameters params_in)
 
   src = 1.0;
 
+  std::vector<double> times;
+
   // loop over a range of smoothing degrees
   for (unsigned int degree = 1; degree <= params_in.max_degree; ++degree)
     {
@@ -174,6 +176,7 @@ test(const Parameters params_in)
 
       MPI_Barrier(MPI_COMM_WORLD);
       LIKWID_MARKER_START(label.c_str());
+      const auto timer = std::chrono::system_clock::now();
 
       for (unsigned int i = 0; i < params_in.n_repetitions; ++i)
         {
@@ -183,9 +186,17 @@ test(const Parameters params_in)
 
       MPI_Barrier(MPI_COMM_WORLD);
       LIKWID_MARKER_STOP(label.c_str());
+      times.push_back(std::chrono::duration_cast<std::chrono::nanoseconds>(
+                        std::chrono::system_clock::now() - timer)
+                        .count() /
+                      1e9);
 
       likwid_counter++;
     }
+
+  for (const auto time : times)
+    pcout << time << " ";
+  pcout << std::endl << std::endl;
 }
 
 
