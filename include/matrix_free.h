@@ -49,6 +49,10 @@ public:
     const auto &dof_handler = matrix_free.get_dof_handler();
     const auto &constraints = matrix_free.get_affine_constraints();
 
+    ConditionalOStream pcout(std::cout,
+                             Utilities::MPI::this_mpi_process(
+                               dof_handler.get_communicator()) == 0);
+
     // set up ConstraintInfo
     // ... allocate memory
     constraint_info.reinit(matrix_free.n_physical_cells());
@@ -139,6 +143,10 @@ public:
         partitioner_for_fdm = std::make_shared<Utilities::MPI::Partitioner>(
           locally_owned_dofs, is_ghost_indices, dof_handler.get_communicator());
       }
+
+
+    pcout << "    - compress indices:       "
+          << ((this->compressed_rw != nullptr) ? "true" : "false") << std::endl;
 
     fdm.reserve(matrix_free.n_cell_batches());
 

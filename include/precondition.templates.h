@@ -187,7 +187,6 @@ create_fdm_preconditioner(const OperatorType &              op,
             << std::endl;
       pcout << "    - reuse partitioner:      "
             << (reuse_partitioner ? "true" : "false") << std::endl;
-      pcout << std::endl;
 
       auto precon = std::make_shared<
         const ASPoissonPreconditioner<dim, Number, VectorizedArrayType, -1>>(
@@ -203,6 +202,8 @@ create_fdm_preconditioner(const OperatorType &              op,
 
       if (reuse_partitioner)
         op.set_partitioner(precon->get_partitioner());
+
+      pcout << std::endl;
 
       return precon;
     }
