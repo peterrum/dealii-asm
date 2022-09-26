@@ -39,6 +39,20 @@ public:
   }
 
   void
+  step(VectorType &dst, const VectorType &src) const
+  {
+    base->step(dst, src);
+  }
+
+  void
+  Tstep(VectorType &dst, const VectorType &src) const
+  {
+    Assert(false, ExcNotImplemented());
+    (void)dst;
+    (void)src;
+  }
+
+  void
   clear()
   {
     Assert(false, ExcNotImplemented());

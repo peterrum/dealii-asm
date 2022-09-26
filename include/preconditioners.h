@@ -733,6 +733,15 @@ public:
 
   virtual void
   vmult(VectorType &dst, const VectorType &src) const = 0;
+
+  virtual void
+  step(VectorType &dst, const VectorType &src) const
+  {
+    AssertThrow(false, ExcNotImplemented());
+
+    (void)dst;
+    (void)src;
+  }
 };
 
 
@@ -857,6 +866,38 @@ namespace internal_
 
       dst = dst_;
     }
+
+    template <class PreconditionerNumer,
+              class VectorType,
+              class PreconditionerType,
+              std::enable_if_t<dealii::internal::PreconditionRelaxation::
+                                 has_step<PreconditionerType, VectorType>,
+                               PreconditionerType> * = nullptr>
+    void
+    step(const std::shared_ptr<const PreconditionerType> preconditioner,
+         VectorType &                                    dst,
+         const VectorType &                              src)
+    {
+      if (preconditioner != nullptr)
+        preconditioner->step(dst, src);
+    }
+
+    template <class PreconditionerNumer,
+              class VectorType,
+              class PreconditionerType,
+              std::enable_if_t<!dealii::internal::PreconditionRelaxation::
+                                 has_step<PreconditionerType, VectorType>,
+                               PreconditionerType> * = nullptr>
+    void
+    step(const std::shared_ptr<const PreconditionerType> preconditioner,
+         VectorType &                                    dst,
+         const VectorType &                              src)
+    {
+      AssertThrow(false, ExcNotImplemented());
+      (void)preconditioner;
+      (void)dst;
+      (void)src;
+    }
   } // namespace PreconditionerAdapter
 } // namespace internal_
 
@@ -877,6 +918,14 @@ public:
     internal_::PreconditionerAdapter::solve<PreconditionerNumer>(preconditioner,
                                                                  dst,
                                                                  src);
+  }
+
+  void
+  step(VectorType &dst, const VectorType &src) const override
+  {
+    internal_::PreconditionerAdapter::step<PreconditionerNumer>(preconditioner,
+                                                                dst,
+                                                                src);
   }
 
 private:

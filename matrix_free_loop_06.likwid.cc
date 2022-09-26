@@ -165,8 +165,10 @@ test(const Parameters params_in)
       // warm up
       for (unsigned int i = 0; i < params_in.n_repetitions; ++i)
         {
-          (void)params_in.do_vmult;
-          precondition->vmult(dst, src);
+          if (params_in.do_vmult)
+            precondition->vmult(dst, src);
+          else
+            precondition->step(dst, src);
         }
 
       // time vmult
@@ -180,8 +182,10 @@ test(const Parameters params_in)
 
       for (unsigned int i = 0; i < params_in.n_repetitions; ++i)
         {
-          (void)params_in.do_vmult;
-          precondition->vmult(dst, src);
+          if (params_in.do_vmult)
+            precondition->vmult(dst, src);
+          else
+            precondition->step(dst, src);
         }
 
       MPI_Barrier(MPI_COMM_WORLD);
