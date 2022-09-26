@@ -126,13 +126,6 @@ test(const Parameters params_in)
 
   LaplaceOperatorMatrixFree<dim, Number> op(matrix_free, ad_operator);
 
-  VectorType src, dst;
-
-  op.initialize_dof_vector(src);
-  op.initialize_dof_vector(dst);
-
-  src = 1.0;
-
   std::vector<double> times;
 
   // loop over a range of smoothing degrees
@@ -158,10 +151,17 @@ test(const Parameters params_in)
 
           params.put("preconditioner.type", "FDM");
           params.put("preconditioner.weighting type", props[1]);
-          params.put("preconditioner.overlap", props[2]);
+          params.put("preconditioner.n overlap", props[2]);
         }
 
       const auto precondition = create_system_preconditioner(op, params);
+
+      VectorType src, dst;
+
+      op.initialize_dof_vector(src);
+      op.initialize_dof_vector(dst);
+
+      src = 1.0;
 
       // warm up
       for (unsigned int i = 0; i < params_in.n_repetitions; ++i)
