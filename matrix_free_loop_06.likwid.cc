@@ -30,6 +30,7 @@ struct Parameters
   std::string  preconditioner_type = "Diagonal";
   unsigned int optimization_level  = 2;
   bool         do_vmult            = true;
+  bool         compress_indices    = true;
 
   unsigned int n_repetitions = 10;
   unsigned int max_degree    = 5;
@@ -120,7 +121,7 @@ test(const Parameters params_in)
 
   // create linear operator
   typename LaplaceOperatorMatrixFree<dim, Number>::AdditionalData ad_operator;
-  ad_operator.compress_indices = false;
+  ad_operator.compress_indices = params_in.compress_indices;
   ad_operator.mapping_type     = "";
 
   LaplaceOperatorMatrixFree<dim, Number> op(matrix_free, ad_operator);
@@ -246,6 +247,7 @@ main(int argc, char *argv[])
     (argc >= 7) ? std::string(argv[6]) : std::string("Diagonal");
   const unsigned int optimization_level = (argc >= 8) ? std::atoi(argv[7]) : 3;
   const bool         do_vmult           = (argc >= 9) ? std::atoi(argv[8]) : 1;
+  const bool         compress_indices   = (argc >= 10) ? std::atoi(argv[9]) : 1;
 
   Parameters params;
   params.fe_degree           = fe_degree;
@@ -254,6 +256,7 @@ main(int argc, char *argv[])
   params.preconditioner_type = preconditioner_type;
   params.optimization_level  = optimization_level;
   params.do_vmult            = do_vmult;
+  params.compress_indices    = compress_indices;
 
   if (dim == 2 && use_float)
     test<2, float>(params);

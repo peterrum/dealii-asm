@@ -198,7 +198,8 @@ create_fdm_preconditioner(const OperatorType &              op,
         fe_1D,
         quadrature_face,
         quadrature_1D,
-        weight_type);
+        weight_type,
+        op.uses_compressed_indices());
 
       if (reuse_partitioner)
         op.set_partitioner(precon->get_partitioner());

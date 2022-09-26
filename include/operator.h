@@ -113,6 +113,12 @@ public:
       dof_handler.get_communicator());
   }
 
+  virtual bool
+  uses_compressed_indices() const
+  {
+    return false;
+  }
+
   static constexpr bool
   is_matrix_free()
   {
@@ -307,6 +313,12 @@ public:
     pcout << std::endl;
 
     setup_mapping_and_indices(ad.compress_indices, ad.mapping_type);
+  }
+
+  virtual bool
+  uses_compressed_indices() const
+  {
+    return compressed_rw != nullptr;
   }
 
   void

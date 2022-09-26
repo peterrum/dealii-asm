@@ -35,7 +35,8 @@ public:
     const Quadrature<dim - 1> &                         quadrature_face,
     const Quadrature<1> &                               quadrature_1D,
     const Restrictors::WeightingType                    weight_type =
-      Restrictors::WeightingType::post)
+      Restrictors::WeightingType::post,
+    const bool compress_indices = true)
     : matrix_free(matrix_free)
     , fe_degree(matrix_free.get_dof_handler().get_fe().tensor_degree())
     , n_overlap(n_overlap)
@@ -44,8 +45,6 @@ public:
     AssertThrow((n_rows_1d == -1) || (static_cast<unsigned int>(n_rows_1d) ==
                                       fe_1D.degree + 2 * n_overlap - 1),
                 ExcNotImplemented());
-
-    const bool compress_indices = true;
 
     const auto &dof_handler = matrix_free.get_dof_handler();
     const auto &constraints = matrix_free.get_affine_constraints();
