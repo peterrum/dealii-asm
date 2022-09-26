@@ -47,6 +47,21 @@ setup_constraints(const DoFHandler<dim> &    dof_handler,
   constraints.close();
 }
 
+std::vector<std::string>
+split_string(const std::string text)
+{
+  std::stringstream stream;
+  stream << text;
+
+  std::string              substring;
+  std::vector<std::string> substring_list;
+
+  while (std::getline(stream, substring, '-'))
+    substring_list.push_back(substring);
+
+  return substring_list;
+}
+
 template <int dim, typename Number>
 void
 test(const Parameters params_in)
@@ -126,7 +141,22 @@ test(const Parameters params_in)
       params.put("type", params_in.type);
       params.put("degree", std::to_string(degree));
       params.put("optimize", params_in.optimization_level);
-      params.put("preconditioner.type", params_in.preconditioner_type);
+
+      if (params_in.preconditioner_type == "Diagonal")
+        {
+          params.put("preconditioner.type", params_in.preconditioner_type);
+        }
+      else
+        {
+          const auto props = split_string(params_in.preconditioner_type);
+
+          AssertThrow(props.size() == 3, ExcInternalError());
+          AssertThrow(props[0] == "FDM", ExcInternalError());
+
+          params.put("preconditioner.type", "FDM");
+          params.put("preconditioner.weighting type", props[1]);
+          params.put("preconditioner.overlap", props[2]);
+        }
 
       const auto precondition = create_system_preconditioner(op, params);
 
@@ -162,16 +192,16 @@ test(const Parameters params_in)
 /**
 // clang-format off
 Test relaxation:
-likwid-mpirun -np 40 -f -g CACHES -m -O ./matrix_free_loop_06 3 4 40 1 Relaxation Diagonal 0 1 | tee temp
-likwid-mpirun -np 40 -f -g CACHES -m -O ./matrix_free_loop_06 3 4 40 1 Relaxation Diagonal 1 1 | tee temp
-likwid-mpirun -np 40 -f -g CACHES -m -O ./matrix_free_loop_06 3 4 40 1 Relaxation Diagonal 2 1 | tee temp
-likwid-mpirun -np 40 -f -g CACHES -m -O ./matrix_free_loop_06 3 4 40 1 Relaxation Diagonal 3 1 | tee temp
+likwid-mpirun -np 40 -f -g CACHES -m -O ./matrix_free_loop_06 3 4 40 1 Relaxation Diagonal 0 1 | tee test
+likwid-mpirun -np 40 -f -g CACHES -m -O ./matrix_free_loop_06 3 4 40 1 Relaxation Diagonal 1 1 | tee test
+likwid-mpirun -np 40 -f -g CACHES -m -O ./matrix_free_loop_06 3 4 40 1 Relaxation Diagonal 2 1 | tee test
+likwid-mpirun -np 40 -f -g CACHES -m -O ./matrix_free_loop_06 3 4 40 1 Relaxation Diagonal 3 1 | tee test
 
 Test Chebyshev:
-likwid-mpirun -np 40 -f -g CACHES -m -O ./matrix_free_loop_06 3 4 40 1 Chebyshev Diagonal 0 1 | tee temp
-likwid-mpirun -np 40 -f -g CACHES -m -O ./matrix_free_loop_06 3 4 40 1 Chebyshev Diagonal 1 1 | tee temp
-likwid-mpirun -np 40 -f -g CACHES -m -O ./matrix_free_loop_06 3 4 40 1 Chebyshev Diagonal 2 1 | tee temp
-likwid-mpirun -np 40 -f -g CACHES -m -O ./matrix_free_loop_06 3 4 40 1 Chebyshev Diagonal 3 1 | tee temp
+likwid-mpirun -np 40 -f -g CACHES -m -O ./matrix_free_loop_06 3 4 40 1 Chebyshev Diagonal 0 1 | tee test
+likwid-mpirun -np 40 -f -g CACHES -m -O ./matrix_free_loop_06 3 4 40 1 Chebyshev Diagonal 1 1 | tee test
+likwid-mpirun -np 40 -f -g CACHES -m -O ./matrix_free_loop_06 3 4 40 1 Chebyshev Diagonal 2 1 | tee test
+likwid-mpirun -np 40 -f -g CACHES -m -O ./matrix_free_loop_06 3 4 40 1 Chebyshev Diagonal 3 1 | tee test
 
 Postprocess each file with:
 cat test | grep "Memory read data volume" | awk 'NR % 2 == 0'
