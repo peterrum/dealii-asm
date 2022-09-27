@@ -286,11 +286,59 @@ public:
             AssertThrow(success, ExcInternalError());
           }
       }
+    else if ((n_overlap > 1) && ((fe_1D.degree - 1 + n_overlap * 2) >= 4))
+      {
+        weights_compressed_q4.resize(matrix_free.n_cell_batches());
+
+        AlignedVector<VectorizedArrayType> weights_local(
+          Utilities::pow(fe_degree + 2 * n_overlap - 1, dim));
+
+        for (unsigned int cell = 0; cell < matrix_free.n_cell_batches(); ++cell)
+          {
+            pcout << cell << std::endl;
+
+            internal::VectorReader<Number, VectorizedArrayType> reader;
+            constraint_info.read_write_operation(reader,
+                                                 weights,
+                                                 weights_local.data(),
+                                                 cell_ptr[cell],
+                                                 cell_ptr[cell + 1] -
+                                                   cell_ptr[cell],
+                                                 weights_local.size(),
+                                                 true);
+
+            for (unsigned int i_1 = 0, c = 0;
+                 i_1 < (fe_degree - 1 + 2 * n_overlap);
+                 ++i_1)
+              {
+                for (unsigned int i_0 = 0;
+                     i_0 < (fe_degree - 1 + 2 * n_overlap);
+                     ++i_0, ++c)
+                  pcout << weights_local[c][0] << " ";
+                pcout << std::endl;
+              }
+            pcout << std::endl;
+
+            const bool success =
+              dealii::internal::compute_weights_fe_q_dofs_by_entity<
+                dim,
+                -1,
+                -1,
+                VectorizedArrayType>(weights_local.data(),
+                                     1,
+                                     fe_degree + 1,
+                                     n_overlap - 1,
+                                     weights_compressed_q4[cell].begin());
+
+            AssertThrow(success, ExcInternalError());
+          }
+      }
 
     if (weight_type == Restrictors::WeightingType::none)
       {
         weights.reinit(0);
         weights_compressed_q2.clear();
+        weights_compressed_q4.clear();
       }
   }
 
