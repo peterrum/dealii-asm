@@ -267,66 +267,23 @@ public:
 
     if (fe_1D.degree >= 2 && n_overlap == 1)
       {
-        const auto &tria = matrix_free.get_dof_handler().get_triangulation();
-
-        std::vector<unsigned int> counter_vertices(tria.n_vertices(), 0);
-        std::vector<unsigned int> counter_lines(tria.n_lines(), 0);
-        std::vector<unsigned int> counter_quads;
-
-        if (dim == 3)
-          counter_quads.assign(tria.n_quads(), 0);
-
-        for (const auto &cell : tria.active_cell_iterators())
-          if (cell->is_artificial() == false)
-            {
-              for (const auto v : cell->vertex_indices())
-                counter_vertices[cell->vertex_index(v)]++;
-
-              for (const auto l : cell->line_indices())
-                counter_lines[cell->line(l)->index()]++;
-
-              if (dim == 3)
-                for (const auto f : cell->face_iterators())
-                  counter_quads[f->index()]++;
-            }
-
-        const auto renumber_lex =
-          FETools::hierarchic_to_lexicographic_numbering<dim>(2);
-
         weights_compressed_q2.resize(matrix_free.n_cell_batches());
+
+        FECellIntegrator phi(matrix_free);
 
         for (unsigned int cell = 0; cell < matrix_free.n_cell_batches(); ++cell)
           {
-            for (unsigned int v = 0;
-                 v < matrix_free.n_active_entries_per_cell_batch(cell);
-                 ++v)
-              {
-                const auto cell_iterator =
-                  matrix_free.get_cell_iterator(cell, v);
+            phi.reinit(cell);
+            phi.read_dof_values_plain(weights);
 
-                unsigned int c = 0;
+            const bool success = dealii::internal::
+              compute_weights_fe_q_dofs_by_entity<dim, -1, VectorizedArrayType>(
+                phi.begin_dof_values(),
+                1,
+                fe_degree + 1,
+                weights_compressed_q2[cell].begin());
 
-                for (const auto vertex : cell_iterator->vertex_indices())
-                  weights_compressed_q2[cell][renumber_lex[c++]][v] =
-                    counter_vertices[cell_iterator->vertex_index(vertex)];
-
-                for (const auto l : cell_iterator->line_indices())
-                  weights_compressed_q2[cell][renumber_lex[c++]][v] =
-                    counter_lines[cell_iterator->line(l)->index()];
-
-                if (dim == 3)
-                  for (const auto f : cell_iterator->face_iterators())
-                    weights_compressed_q2[cell][renumber_lex[c++]][v] =
-                      counter_quads[f->index()];
-
-                weights_compressed_q2[cell][renumber_lex[c]][v] = 1.0;
-
-                for (auto &entry : weights_compressed_q2[cell])
-                  entry[v] =
-                    1.0 / ((weight_type == Restrictors::WeightingType::symm) ?
-                             std::sqrt(entry[v]) :
-                             entry[v]);
-              }
+            AssertThrow(success, ExcInternalError());
           }
       }
 
