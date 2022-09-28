@@ -1,14 +1,64 @@
 #pragma once
 
+#include <deal.II/base/conditional_ostream.h>
+
+#include <deal.II/dofs/dof_tools.h>
+
+#include <deal.II/lac/trilinos_precondition.h>
+#include <deal.II/lac/trilinos_sparse_matrix.h>
+#include <deal.II/lac/trilinos_sparsity_pattern.h>
+
+#include <deal.II/matrix_free/constraint_info.h>
+#include <deal.II/matrix_free/fe_evaluation.h>
+#include <deal.II/matrix_free/matrix_free.h>
+#include <deal.II/matrix_free/tools.h>
+
+#include <deal.II/numerics/matrix_creator.h>
+
+#include "dof_tools.h"
+#include "grid_tools.h"
 #include "vector_access_reduced.h"
 
+/**
+ * Base class for LaplaceOperatorMatrixBased and
+ * LaplaceOperatorMatrixFree. It provedes an interface
+ * for a simle vmult and not the version with pre/post operations.
+ */
+template <typename VectorType>
+class LaplaceOperatorBase : public Subscriptor
+{
+public:
+  using vector_type = VectorType;
+  using Number      = typename vector_type::value_type;
+  using value_type  = Number;
+
+  virtual void
+  vmult(VectorType &dst, const VectorType &src) const = 0;
+
+  virtual void
+  initialize_dof_vector(VectorType &vec) const = 0;
+
+  virtual const AffineConstraints<Number> &
+  get_constraints() const = 0;
+
+private:
+};
+
+
+
+/**
+ * Matrix-based implementation of the Laplace operator.
+ */
 template <int dim, typename Number>
-class LaplaceOperatorMatrixBased : public Subscriptor
+class LaplaceOperatorMatrixBased
+  : public LaplaceOperatorBase<LinearAlgebra::distributed::Vector<Number>>
 {
 public:
   static const int dimension = dim;
   using value_type           = Number;
-  using vector_type          = LinearAlgebra::distributed::Vector<Number>;
+  using vectorized_array_type =
+    VectorizedArray<Number>; // dummy: for compilation
+  using vector_type = LinearAlgebra::distributed::Vector<Number>;
 
   using VectorType = vector_type;
 
@@ -61,6 +111,12 @@ public:
       dof_handler.locally_owned_dofs(),
       DoFTools::extract_locally_relevant_dofs(dof_handler),
       dof_handler.get_communicator());
+  }
+
+  virtual bool
+  uses_compressed_indices() const
+  {
+    return false;
   }
 
   static constexpr bool
@@ -170,10 +226,15 @@ private:
 };
 
 
+
+/**
+ * Matrix-free implementation of the Laplace operator.
+ */
 template <int dim,
           typename Number,
           typename VectorizedArrayType = VectorizedArray<Number>>
-class LaplaceOperatorMatrixFree : public Subscriptor
+class LaplaceOperatorMatrixFree
+  : public LaplaceOperatorBase<LinearAlgebra::distributed::Vector<Number>>
 {
 public:
   static const int dimension  = dim;
@@ -252,6 +313,12 @@ public:
     pcout << std::endl;
 
     setup_mapping_and_indices(ad.compress_indices, ad.mapping_type);
+  }
+
+  virtual bool
+  uses_compressed_indices() const
+  {
+    return compressed_rw != nullptr;
   }
 
   void

@@ -223,7 +223,7 @@ public:
       coarse_grid_solver);
 
     // setup smoothers on each level
-    mg_smoother.initialize_matrices(mg_operators);
+    mg_smoother.smoothers.resize(min_level, max_level);
 
     for (unsigned int level = min_level + 1; level <= max_level; ++level)
       mg_smoother.smoothers[level] =
@@ -349,7 +349,7 @@ protected:
   mutable std::unique_ptr<MGCoarseGridBase<VectorType>> mg_coarse;
 
   // smoothers
-  mutable MGSmootherPrecondition<LevelMatrixType, SmootherType, VectorType>
+  mutable MGSmootherRelaxation<LevelMatrixType, SmootherType, VectorType>
     mg_smoother;
 
   // multigrid

@@ -139,7 +139,8 @@ namespace dealii
     template <int dim>
     unsigned int
     subdivided_hyper_cube_balanced(Triangulation<dim> &tria,
-                                   const unsigned int  s)
+                                   const unsigned int  s,
+                                   const bool          colorize = false)
     {
       const auto [n_refine, subdivisions] =
         internal::decompose_for_subdivided_hyper_cube_balanced(dim, s);
@@ -148,10 +149,8 @@ namespace dealii
       for (unsigned int d = 0; d < dim; ++d)
         p2[d] = subdivisions[d];
 
-      GridGenerator::subdivided_hyper_rectangle(tria,
-                                                subdivisions,
-                                                Point<dim>(),
-                                                p2);
+      GridGenerator::subdivided_hyper_rectangle(
+        tria, subdivisions, Point<dim>(), p2, colorize);
 
       return n_refine;
     }

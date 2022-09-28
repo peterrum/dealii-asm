@@ -32,6 +32,7 @@
     - n overlap:              1
     - sub mesh approximation: 2
     - reuse partitioner:      true
+    - compress indices:       false
 
 - Create system preconditioner: Chebyshev
     - degree: 1

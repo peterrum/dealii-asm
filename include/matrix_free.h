@@ -13,53 +13,12 @@
 #include "tensor_product_matrix.h"
 #include "vector_access_reduced.h"
 
-template <typename VectorType>
-class ASPoissonPreconditionerBase : public PreconditionerBase<VectorType>
-{
-public:
-  virtual void
-  vmult(VectorType &dst, const VectorType &src) const
-  {
-    (void)dst;
-    (void)src;
-
-    AssertThrow(false, ExcNotImplemented());
-  }
-
-  virtual void
-  vmult(VectorType &      dst,
-        const VectorType &src,
-        const std::function<void(const unsigned int, const unsigned int)>
-          &operation_before_matrix_vector_product,
-        const std::function<void(const unsigned int, const unsigned int)>
-          &operation_after_matrix_vector_product = {}) const
-  {
-    (void)dst;
-    (void)src;
-    (void)operation_before_matrix_vector_product;
-    (void)operation_after_matrix_vector_product;
-
-    AssertThrow(false, ExcNotImplemented());
-  }
-
-  virtual std::shared_ptr<const Utilities::MPI::Partitioner>
-  get_partitioner() const = 0;
-
-  virtual std::size_t
-  memory_consumption() const
-  {
-    return 0.0;
-  }
-
-private:
-};
-
 template <int dim,
           typename Number,
           typename VectorizedArrayType,
           int n_rows_1d = -1>
-class ASPoissonPreconditioner : public ASPoissonPreconditionerBase<
-                                  LinearAlgebra::distributed::Vector<Number>>
+class ASPoissonPreconditioner
+  : public PreconditionerBase<LinearAlgebra::distributed::Vector<Number>>
 {
 public:
   using VectorType = LinearAlgebra::distributed::Vector<Number>;
@@ -76,7 +35,8 @@ public:
     const Quadrature<dim - 1> &                         quadrature_face,
     const Quadrature<1> &                               quadrature_1D,
     const Restrictors::WeightingType                    weight_type =
-      Restrictors::WeightingType::post)
+      Restrictors::WeightingType::post,
+    const bool compress_indices = true)
     : matrix_free(matrix_free)
     , fe_degree(matrix_free.get_dof_handler().get_fe().tensor_degree())
     , n_overlap(n_overlap)
@@ -86,10 +46,12 @@ public:
                                       fe_1D.degree + 2 * n_overlap - 1),
                 ExcNotImplemented());
 
-    const bool compress_indices = true;
-
     const auto &dof_handler = matrix_free.get_dof_handler();
     const auto &constraints = matrix_free.get_affine_constraints();
+
+    ConditionalOStream pcout(std::cout,
+                             Utilities::MPI::this_mpi_process(
+                               dof_handler.get_communicator()) == 0);
 
     // set up ConstraintInfo
     // ... allocate memory
@@ -181,6 +143,10 @@ public:
         partitioner_for_fdm = std::make_shared<Utilities::MPI::Partitioner>(
           locally_owned_dofs, is_ghost_indices, dof_handler.get_communicator());
       }
+
+
+    pcout << "    - compress indices:       "
+          << ((this->compressed_rw != nullptr) ? "true" : "false") << std::endl;
 
     fdm.reserve(matrix_free.n_cell_batches());
 
@@ -301,73 +267,30 @@ public:
 
     if (fe_1D.degree >= 2 && n_overlap == 1)
       {
-        const auto &tria = matrix_free.get_dof_handler().get_triangulation();
+        weights_compressed_q2.resize(matrix_free.n_cell_batches());
 
-        std::vector<unsigned int> counter_vertices(tria.n_vertices(), 0);
-        std::vector<unsigned int> counter_lines(tria.n_lines(), 0);
-        std::vector<unsigned int> counter_quads;
-
-        if (dim == 3)
-          counter_quads.assign(tria.n_quads(), 0);
-
-        for (const auto &cell : tria.active_cell_iterators())
-          if (cell->is_artificial() == false)
-            {
-              for (const auto v : cell->vertex_indices())
-                counter_vertices[cell->vertex_index(v)]++;
-
-              for (const auto l : cell->line_indices())
-                counter_lines[cell->line(l)->index()]++;
-
-              if (dim == 3)
-                for (const auto f : cell->face_iterators())
-                  counter_quads[f->index()]++;
-            }
-
-        const auto renumber_lex =
-          FETools::hierarchic_to_lexicographic_numbering<dim>(2);
-
-        weights_compressed.resize(matrix_free.n_cell_batches());
+        FECellIntegrator phi(matrix_free);
 
         for (unsigned int cell = 0; cell < matrix_free.n_cell_batches(); ++cell)
           {
-            for (unsigned int v = 0;
-                 v < matrix_free.n_active_entries_per_cell_batch(cell);
-                 ++v)
-              {
-                const auto cell_iterator =
-                  matrix_free.get_cell_iterator(cell, v);
+            phi.reinit(cell);
+            phi.read_dof_values_plain(weights);
 
-                unsigned int c = 0;
+            const bool success = dealii::internal::
+              compute_weights_fe_q_dofs_by_entity<dim, -1, VectorizedArrayType>(
+                phi.begin_dof_values(),
+                1,
+                fe_degree + 1,
+                weights_compressed_q2[cell].begin());
 
-                for (const auto vertex : cell_iterator->vertex_indices())
-                  weights_compressed[cell][renumber_lex[c++]][v] =
-                    counter_vertices[cell_iterator->vertex_index(vertex)];
-
-                for (const auto l : cell_iterator->line_indices())
-                  weights_compressed[cell][renumber_lex[c++]][v] =
-                    counter_lines[cell_iterator->line(l)->index()];
-
-                if (dim == 3)
-                  for (const auto f : cell_iterator->face_iterators())
-                    weights_compressed[cell][renumber_lex[c++]][v] =
-                      counter_quads[f->index()];
-
-                weights_compressed[cell][renumber_lex[c]][v] = 1.0;
-
-                for (auto &entry : weights_compressed[cell])
-                  entry[v] =
-                    1.0 / ((weight_type == Restrictors::WeightingType::symm) ?
-                             std::sqrt(entry[v]) :
-                             entry[v]);
-              }
+            AssertThrow(success, ExcInternalError());
           }
       }
 
     if (weight_type == Restrictors::WeightingType::none)
       {
         weights.reinit(0);
-        weights_compressed.clear();
+        weights_compressed_q2.clear();
       }
   }
 
@@ -441,7 +364,7 @@ public:
   }
 
   std::shared_ptr<const Utilities::MPI::Partitioner>
-  get_partitioner() const final
+  get_partitioner() const
   {
     return partitioner_for_fdm;
   }
@@ -506,7 +429,7 @@ private:
     // loop over cells
     for (unsigned int cell = 0; cell < matrix_free.n_cell_batches(); ++cell)
       {
-        // 1) gather src and weights (optional)
+        // 1) gather src (optional)
         internal::VectorReader<Number, VectorizedArrayType> reader;
         constraint_info.read_write_operation(reader,
                                              src_ptr,
@@ -517,22 +440,9 @@ private:
                                              src_local.size(),
                                              true);
 
-        if (weights_local.size() > 0)
-          constraint_info.read_write_operation(reader,
-                                               weights,
-                                               weights_local.data(),
-                                               cell_ptr[cell],
-                                               cell_ptr[cell + 1] -
-                                                 cell_ptr[cell],
-                                               weights_local.size(),
-                                               true);
-
         // 2) apply weights (optional)
-        if ((weights_local.size() > 0) &&
-            (weight_type == Restrictors::WeightingType::pre ||
-             weight_type == Restrictors::WeightingType::symm))
-          for (unsigned int i = 0; i < weights_local.size(); ++i)
-            src_local[i] *= weights_local[i];
+        if (weight_type != Restrictors::WeightingType::post)
+          apply_weights_local(cell, weights_local, src_local, true);
 
         // 3) cell operation: fast diagonalization method
         fdm.apply_inverse(cell,
@@ -541,11 +451,8 @@ private:
                           tmp);
 
         // 4) apply weights (optional)
-        if ((weights_local.size() > 0) &&
-            (weight_type == Restrictors::WeightingType::post ||
-             weight_type == Restrictors::WeightingType::symm))
-          for (unsigned int i = 0; i < weights_local.size(); ++i)
-            dst_local[i] *= weights_local[i];
+        if (weight_type != Restrictors::WeightingType::post)
+          apply_weights_local(cell, weights_local, dst_local, true);
 
         // 5) scatter
         internal::VectorDistributorLocalToGlobal<Number, VectorizedArrayType>
@@ -651,7 +558,7 @@ private:
   {
     const unsigned int cell = phi.get_current_cell_index();
 
-    if (weights_compressed.size() > 0)
+    if (weights_compressed_q2.size() > 0)
       {
         if (((first_call == true) &&
              (weight_type == Restrictors::WeightingType::symm ||
@@ -660,7 +567,7 @@ private:
              (weight_type == Restrictors::WeightingType::symm ||
               weight_type == Restrictors::WeightingType::post)))
           internal::weight_fe_q_dofs_by_entity<dim, -1, VectorizedArrayType>(
-            &weights_compressed[cell][0],
+            &weights_compressed_q2[cell][0],
             1 /* TODO*/,
             fe_degree + 1,
             phi.begin_dof_values());
@@ -687,6 +594,38 @@ private:
       }
   }
 
+  void
+  apply_weights_local(const unsigned int                  cell,
+                      AlignedVector<VectorizedArrayType> &weights_local,
+                      AlignedVector<VectorizedArrayType> &data,
+                      const bool                          first_call) const
+  {
+    if ((first_call == true) &&
+        (weight_type != Restrictors::WeightingType::none))
+      {
+        internal::VectorReader<Number, VectorizedArrayType> reader;
+        constraint_info.read_write_operation(reader,
+                                             weights,
+                                             weights_local.data(),
+                                             cell_ptr[cell],
+                                             cell_ptr[cell + 1] -
+                                               cell_ptr[cell],
+                                             weights_local.size(),
+                                             true);
+      }
+
+    if (((first_call == true) &&
+         (weight_type == Restrictors::WeightingType::symm ||
+          weight_type == Restrictors::WeightingType::pre)) ||
+        ((first_call == false) &&
+         (weight_type == Restrictors::WeightingType::symm ||
+          weight_type == Restrictors::WeightingType::post)))
+      {
+        for (unsigned int i = 0; i < weights_local.size(); ++i)
+          data[i] *= weights_local[i];
+      }
+  }
+
   const MatrixFree<dim, Number, VectorizedArrayType> &matrix_free;
   const unsigned int                                  fe_degree;
   const unsigned int                                  n_overlap;
@@ -706,7 +645,7 @@ private:
 
   VectorType weights;
   AlignedVector<std::array<VectorizedArrayType, Utilities::pow(3, dim)>>
-    weights_compressed;
+    weights_compressed_q2;
 
   std::shared_ptr<ConstraintInfoReduced> compressed_rw;
 };

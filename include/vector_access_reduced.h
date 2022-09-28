@@ -1,5 +1,9 @@
 #pragma once
 
+#include <deal.II/matrix_free/fe_evaluation.h>
+
+#include "reduced_access.h"
+
 #define MAX_DEGREE_RW 6
 
 // clang-format off
@@ -26,8 +30,12 @@ public:
   void
   initialize(const MatrixFree<dim, Number, VectorizedArrayType> &data_)
   {
-    const auto data      = &data_;
-    const auto fe_degree = data->get_dof_handler().get_fe().degree;
+    const auto  data         = &data_;
+    const auto &fe           = data->get_dof_handler().get_fe();
+    const auto  fe_degree    = fe.degree;
+    const auto  n_components = fe.n_components();
+
+    const auto part = data->get_dof_info().vector_partitioner;
 
     if (fe_degree > 2)
       {
@@ -42,6 +50,9 @@ public:
             all_indices_uniform.resize(Utilities::pow(3, dim) *
                                          data->n_cell_batches(),
                                        1);
+            orientations.resize(data->n_cell_batches() *
+                                  VectorizedArrayType::size(),
+                                0);
 
             std::vector<types::global_dof_index> dof_indices(
               data->get_dof_handler().get_fe().dofs_per_cell);
@@ -58,116 +69,64 @@ public:
                      l < data->n_active_entries_per_cell_batch(c);
                      ++l)
                   {
+                    const unsigned int offset =
+                      Utilities::pow(3, dim) * n_lanes * c + l;
+
                     const typename DoFHandler<dim>::cell_iterator cell =
                       data->get_cell_iterator(c, l);
 
                     cell->get_dof_indices(dof_indices);
-                    const unsigned int n_components =
-                      cell->get_fe().n_components();
-                    const unsigned int offset =
-                      Utilities::pow(3, dim) * (n_lanes * c) + l;
-                    const Utilities::MPI::Partitioner &part =
-                      *data->get_dof_info().vector_partitioner;
-                    unsigned int cc = 0, cf = 0;
-                    for (unsigned int i = 0;
-                         i < GeometryInfo<dim>::vertices_per_cell;
-                         ++i, ++cc, cf += n_components)
+
+                    // resolve constraints and convert global to local
+                    for (auto &i : dof_indices)
                       {
-                        if (!constraints.is_constrained(dof_indices[cf]))
-                          compressed_dof_indices[offset + renumber_lex[cc]] =
-                            part.global_to_local(dof_indices[cf]);
-                        for (unsigned int c = 0; c < n_components; ++c)
-                          AssertThrow(dof_indices[cf + c] ==
-                                        dof_indices[cf] + c,
-                                      ExcExpectedContiguousNumbering());
+                        const auto *entries_ptr =
+                          constraints.get_constraint_entries(i);
+
+                        if (entries_ptr != nullptr)
+                          {
+                            const auto &entries = *entries_ptr;
+                            const types::global_dof_index n_entries =
+                              entries.size();
+                            if (n_entries == 1 &&
+                                std::abs(entries[0].second - 1.) <
+                                  100 * std::numeric_limits<double>::epsilon())
+                              {
+                                i = part->global_to_local(
+                                  entries[0].first); // identity constraint
+                              }
+                            else if (n_entries == 0)
+                              {
+                                i = numbers::invalid_dof_index; // homogeneous
+                                                                // Dirichlet
+                              }
+                            else
+                              {
+                                // other constraints, e.g., hanging-node
+                                // constraints; not implemented yet
+                                AssertThrow(false, ExcNotImplemented());
+                              }
+                          }
+                        else
+                          {
+                            i = part->global_to_local(i);
+                          }
                       }
 
-                    for (unsigned int line = 0;
-                         line < GeometryInfo<dim>::lines_per_cell;
-                         ++line)
-                      {
-                        const unsigned int size = fe_degree - 1;
-                        if (!constraints.is_constrained(dof_indices[cf]))
-                          {
-                            for (unsigned int i = 0; i < size; ++i)
-                              for (unsigned int c = 0; c < n_components; ++c)
-                                AssertThrow(dof_indices[cf + c * size + i] ==
-                                              dof_indices[cf] +
-                                                i * n_components + c,
-                                            ExcExpectedContiguousNumbering());
-                            compressed_dof_indices[offset + renumber_lex[cc]] =
-                              part.global_to_local(dof_indices[cf]);
-                          }
-                        ++cc;
-                        cf += size * n_components;
-                      }
-                    for (unsigned int quad = 0;
-                         quad < GeometryInfo<dim>::quads_per_cell;
-                         ++quad)
-                      {
-                        const unsigned int size =
-                          (fe_degree - 1) * (fe_degree - 1);
-                        if (!constraints.is_constrained(dof_indices[cf]))
-                          {
-                            // switch order x-z for y faces in 3D to
-                            // lexicographic layout
-                            if (dim == 3 && (quad == 2 || quad == 3))
-                              for (unsigned int i1 = 0, i = 0;
-                                   i1 < fe_degree - 1;
-                                   ++i1)
-                                for (unsigned int i0 = 0; i0 < fe_degree - 1;
-                                     ++i0, ++i)
-                                  for (unsigned int c = 0; c < n_components;
-                                       ++c)
-                                    {
-                                      AssertThrow(
-                                        dof_indices[cf + c * size +
-                                                    i0 * (fe_degree - 1) +
-                                                    i1] == dof_indices[cf] +
-                                                             i * n_components +
-                                                             c,
-                                        ExcExpectedContiguousNumbering());
-                                    }
-                            else
-                              for (unsigned int i = 0; i < size; ++i)
-                                for (unsigned int c = 0; c < n_components; ++c)
-                                  AssertThrow(dof_indices[cf + c * size + i] ==
-                                                dof_indices[cf] +
-                                                  i * n_components + c,
-                                              ExcExpectedContiguousNumbering());
-                            compressed_dof_indices[offset + renumber_lex[cc]] =
-                              part.global_to_local(dof_indices[cf]);
-                          }
-                        ++cc;
-                        cf += size * n_components;
-                      }
-                    for (unsigned int hex = 0;
-                         hex < GeometryInfo<dim>::hexes_per_cell;
-                         ++hex)
-                      {
-                        const unsigned int size =
-                          (fe_degree - 1) * (fe_degree - 1) * (fe_degree - 1);
-                        if (!constraints.is_constrained(dof_indices[cf]))
-                          {
-                            for (unsigned int i = 0; i < size; ++i)
-                              for (unsigned int c = 0; c < n_components; ++c)
-                                AssertThrow(dof_indices[cf + c * size + i] ==
-                                              dof_indices[cf] +
-                                                i * n_components + c,
-                                            ExcExpectedContiguousNumbering());
-                            compressed_dof_indices[offset + renumber_lex[cc]] =
-                              part.global_to_local(dof_indices[cf]);
-                          }
-                        ++cc;
-                        cf += size * n_components;
-                      }
-                    AssertThrow(cc == Utilities::pow<unsigned int>(3, dim),
-                                ExcMessage("Expected 3^dim dofs, got " +
-                                           std::to_string(cc)));
-                    AssertThrow(cf == dof_indices.size(),
-                                ExcMessage(
-                                  "Expected (fe_degree+1)^dim dofs, got " +
-                                  std::to_string(cf)));
+                    const auto [orientation, objec_indices] = compress_indices(
+                      dof_indices, dim, fe_degree, n_components, true);
+
+                    AssertThrow(orientation != numbers::invalid_unsigned_int,
+                                ExcExpectedContiguousNumbering());
+
+                    AssertThrow(objec_indices.size() == renumber_lex.size(),
+                                ExcInternalError());
+
+                    for (unsigned int i = 0; i < objec_indices.size(); ++i)
+                      compressed_dof_indices[offset + renumber_lex[i]] =
+                        objec_indices[i];
+
+                    orientations[n_lanes * c + l] = orientation;
                   }
 
                 for (unsigned int i = 0;
@@ -181,13 +140,34 @@ public:
                         numbers::invalid_unsigned_int)
                       all_indices_uniform[Utilities::pow(3, dim) * c + i] = 0;
               }
+
+            orientation_table = internal::MatrixFreeFunctions::ShapeInfo<
+              double>::compute_orientation_table(fe_degree - 1);
+
+            if (std::all_of(orientations.begin(),
+                            orientations.end(),
+                            [&](const auto &e) { return e == 0; }))
+              orientations.clear();
           }
         catch (const ExcExpectedContiguousNumbering &)
           {
             compressed_dof_indices.clear();
             all_indices_uniform.clear();
+
+            orientations.clear();
           }
       }
+  }
+
+  unsigned int
+  compression_level() const
+  {
+    if (compressed_dof_indices.empty())
+      return 0;
+    else if (orientations.empty())
+      return 1;
+    else
+      return 2;
   }
 
   template <int dim,
@@ -271,6 +251,12 @@ public:
         EXPAND_OPERATIONS_RW(OPERATION);
 #undef OPERATION
       }
+  }
+
+  void
+  set_do_adjust_for_orientation(const bool do_adjust_for_orientation)
+  {
+    this->do_adjust_for_orientation = do_adjust_for_orientation;
   }
 
 private:
@@ -401,6 +387,17 @@ private:
         else
           ++offset_i2;
       }
+
+    if (do_adjust_for_orientation)
+      adjust_for_orientation<VectorizedArrayType, dim, fe_degree>(
+        dim,
+        fe_degree,
+        n_components,
+        false,
+        cell_no,
+        orientations,
+        orientation_table,
+        dof_values);
   }
 
   template <int dim,
@@ -428,6 +425,17 @@ private:
     dealii::internal::VectorDistributorLocalToGlobal<Number,
                                                      VectorizedArrayType>
       distributor;
+
+    if (do_adjust_for_orientation)
+      adjust_for_orientation<VectorizedArrayType, dim, fe_degree>(
+        dim,
+        fe_degree,
+        n_components,
+        true,
+        cell_no,
+        orientations,
+        orientation_table,
+        dof_values);
 
     for (int i2 = 0, i = 0, compressed_i2 = 0, offset_i2 = 0;
          i2 < (dim == 3 ? (fe_degree + 1) : 1);
@@ -535,6 +543,12 @@ private:
       }
   }
 
+
   std::vector<unsigned int>  compressed_dof_indices;
   std::vector<unsigned char> all_indices_uniform;
+
+  Table<2, unsigned int>    orientation_table; // for reorienation
+  std::vector<unsigned int> orientations;
+
+  bool do_adjust_for_orientation = true;
 };

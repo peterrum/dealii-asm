@@ -49,24 +49,6 @@ using namespace dealii;
 #define COMPILE_2D 0
 #define COMPILE_3D 1
 
-// clang-format off
-#define EXPAND_OPERATIONS(OPERATION)                                     \
-  switch (n_rows)                                                        \
-    {                                                                    \
-      case  2: OPERATION((( 2 <= MAX_N_ROWS_FDM) ?  2 : -1), -1); break; \
-      case  3: OPERATION((( 3 <= MAX_N_ROWS_FDM) ?  3 : -1), -1); break; \
-      case  4: OPERATION((( 4 <= MAX_N_ROWS_FDM) ?  4 : -1), -1); break; \
-      case  5: OPERATION((( 5 <= MAX_N_ROWS_FDM) ?  5 : -1), -1); break; \
-      case  6: OPERATION((( 6 <= MAX_N_ROWS_FDM) ?  6 : -1), -1); break; \
-      case  7: OPERATION((( 7 <= MAX_N_ROWS_FDM) ?  7 : -1), -1); break; \
-      case  8: OPERATION((( 8 <= MAX_N_ROWS_FDM) ?  8 : -1), -1); break; \
-      case  9: OPERATION((( 9 <= MAX_N_ROWS_FDM) ?  9 : -1), -1); break; \
-      case 10: OPERATION(((10 <= MAX_N_ROWS_FDM) ? 10 : -1), -1); break; \
-      default:                                                           \
-        OPERATION(-1, -1);                                               \
-    }
-// clang-format on
-
 template <typename OperatorType>
 class MyOperator : public Subscriptor
 {
@@ -220,7 +202,8 @@ test(const unsigned int fe_degree,
     LaplaceOperatorMatrixFree<dim, Number, VectorizedArrayType>;
   using MyOperatorType = MyOperator<OperatorType>;
 
-  using PreconditionerType   = ASPoissonPreconditionerBase<VectorType>;
+  using PreconditionerType =
+    ASPoissonPreconditioner<dim, Number, VectorizedArrayType>;
   using MyPreconditionerType = Adapter<PreconditionerType>;
 
   OperatorType op(mapping_q_cache, tria, fe, quadrature);
@@ -231,26 +214,15 @@ test(const unsigned int fe_degree,
 
   std::shared_ptr<PreconditionerType> precon_fdm;
 
-  const unsigned int n_rows = fe_degree + 2 * n_overlap - 1;
-
-#define OPERATION(c, d)                                            \
-  if (c == -1)                                                     \
-    pcout << "Warning: FDM with <" + std::to_string(n_rows) +      \
-               "> is not precompiled!"                             \
-          << std::endl;                                            \
-                                                                   \
-  precon_fdm = std::make_shared<                                   \
-    ASPoissonPreconditioner<dim, Number, VectorizedArrayType, c>>( \
-    matrix_free,                                                   \
-    n_overlap,                                                     \
-    dim,                                                           \
-    mapping_q_cache,                                               \
-    fe_1D,                                                         \
-    quadrature_face,                                               \
-    quadrature_1D);
-
-  EXPAND_OPERATIONS(OPERATION);
-#undef OPERATION
+  precon_fdm =
+    std::make_shared<ASPoissonPreconditioner<dim, Number, VectorizedArrayType>>(
+      matrix_free,
+      n_overlap,
+      dim,
+      mapping_q_cache,
+      fe_1D,
+      quadrature_face,
+      quadrature_1D);
 
   op.set_partitioner(precon_fdm->get_partitioner());
 
