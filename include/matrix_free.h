@@ -41,6 +41,7 @@ public:
     , fe_degree(matrix_free.get_dof_handler().get_fe().tensor_degree())
     , n_overlap(n_overlap)
     , weight_type(weight_type)
+    , do_weights_global(weight_type == Restrictors::WeightingType::post)
   {
     AssertThrow((n_rows_1d == -1) || (static_cast<unsigned int>(n_rows_1d) ==
                                       fe_1D.degree + 2 * n_overlap - 1),
@@ -294,6 +295,22 @@ public:
       }
   }
 
+  VectorType &
+  get_scratch_src_vector(const VectorType &src) const
+  {
+    if (do_weights_global && (weight_type == Restrictors::WeightingType::pre ||
+                              weight_type == Restrictors::WeightingType::symm))
+      return this->src_;
+    else
+      return const_cast<VectorType &>(src);
+  }
+
+  VectorType &
+  get_scratch_src_vector(VectorType &src) const
+  {
+    return src;
+  }
+
   /**
    * General matrix-vector product.
    */
@@ -307,6 +324,7 @@ public:
         // use matrix-free version
         vmult_internal(dst,
                        src,
+                       get_scratch_src_vector(src),
                        [&](const auto start_range, const auto end_range) {
                          if (end_range > start_range)
                            std::memset(dst.begin() + start_range,
@@ -342,6 +360,42 @@ public:
         // use matrix-free version
         vmult_internal(dst,
                        src,
+                       get_scratch_src_vector(src),
+                       operation_before_matrix_vector_product,
+                       operation_after_matrix_vector_product);
+      }
+    else
+      {
+        // use general version; note: the pre-operation cleares the content
+        // of dst so that we can skip zeroing
+        operation_before_matrix_vector_product(0, src.locally_owned_size());
+        vmult_internal(dst, src, /*dst is zero*/ true);
+
+        if (operation_after_matrix_vector_product)
+          operation_after_matrix_vector_product(0, src.locally_owned_size());
+      }
+  }
+
+  /**
+   * Matrix-vector product with pre- and post-operations to be used
+   * by PreconditionRelaxation and PreconditionChebyshev.
+   */
+  virtual void
+  vmult(VectorType &dst,
+        VectorType &src,
+        const std::function<void(const unsigned int, const unsigned int)>
+          &operation_before_matrix_vector_product,
+        const std::function<void(const unsigned int, const unsigned int)>
+          &operation_after_matrix_vector_product = {}) const
+  {
+    if ((partitioner_for_fdm.get() ==
+         matrix_free.get_vector_partitioner().get()) &&
+        (partitioner_for_fdm.get() == src.get_partitioner().get()))
+      {
+        // use matrix-free version
+        vmult_internal(dst,
+                       src,
+                       get_scratch_src_vector(src),
                        operation_before_matrix_vector_product,
                        operation_after_matrix_vector_product);
       }
@@ -488,22 +542,12 @@ private:
   vmult_internal(
     VectorType &      dst,
     const VectorType &src,
+    VectorType &      src_scratch,
     const std::function<void(const unsigned int, const unsigned int)>
       &operation_before_matrix_vector_product,
     const std::function<void(const unsigned int, const unsigned int)>
       &operation_after_matrix_vector_product) const
   {
-    const bool do_weights_global =
-      weight_type == Restrictors::WeightingType::post; // TODO
-
-    VectorType *src_scratch = const_cast<VectorType *>(&src);
-
-    if (do_weights_global && (vmult_counter != numbers::invalid_unsigned_int) &&
-        (weight_type == Restrictors::WeightingType::pre ||
-         weight_type == Restrictors::WeightingType::symm))
-      if ((vmult_counter++) == 0)
-        src_scratch = &this->src_;
-
     matrix_free.template cell_loop<VectorType, VectorType>(
       [&](
         const auto &matrix_free, auto &dst, const auto &src, const auto cells) {
@@ -544,7 +588,7 @@ private:
           }
       },
       dst,
-      *src_scratch,
+      src_scratch,
       [&](const auto begin, const auto end) {
         if (operation_before_matrix_vector_product)
           operation_before_matrix_vector_product(begin, end);
@@ -553,7 +597,7 @@ private:
             (weight_type == Restrictors::WeightingType::pre ||
              weight_type == Restrictors::WeightingType::symm))
           {
-            const auto src_scratch_ptr = src_scratch->begin();
+            const auto src_scratch_ptr = src_scratch.begin();
             const auto src_ptr         = src.begin();
             const auto weights_ptr     = weights.begin();
 
@@ -659,6 +703,7 @@ private:
   const unsigned int                                  fe_degree;
   const unsigned int                                  n_overlap;
   const Restrictors::WeightingType                    weight_type;
+  const bool                                          do_weights_global;
 
   std::shared_ptr<const Utilities::MPI::Partitioner> partitioner_for_fdm;
 
@@ -677,8 +722,6 @@ private:
     weights_compressed_q2;
 
   std::shared_ptr<ConstraintInfoReduced> compressed_rw;
-
-  mutable unsigned int vmult_counter = numbers::invalid_unsigned_int;
 };
 
 
