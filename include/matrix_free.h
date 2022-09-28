@@ -36,13 +36,13 @@ public:
     const Quadrature<1> &                               quadrature_1D,
     const Restrictors::WeightingType                    weight_type =
       Restrictors::WeightingType::post,
-    const bool compress_indices  = true,
-    const bool do_weights_global = true)
+    const bool        compress_indices    = true,
+    const std::string weight_local_global = "global")
     : matrix_free(matrix_free)
     , fe_degree(matrix_free.get_dof_handler().get_fe().tensor_degree())
     , n_overlap(n_overlap)
     , weight_type(weight_type)
-    , do_weights_global(do_weights_global)
+    , do_weights_global(weight_local_global == "global")
   {
     AssertThrow((n_rows_1d == -1) || (static_cast<unsigned int>(n_rows_1d) ==
                                       fe_1D.degree + 2 * n_overlap - 1),
@@ -267,27 +267,31 @@ public:
       weights.update_ghost_values();
     }
 
-    if (fe_1D.degree >= 2 && n_overlap == 1)
-      {
-        weights_compressed_q2.resize(matrix_free.n_cell_batches());
+    if (weight_local_global == "compressed")
+      if (fe_1D.degree >= 2 && n_overlap == 1)
+        {
+          weights_compressed_q2.resize(matrix_free.n_cell_batches());
 
-        FECellIntegrator phi(matrix_free);
+          FECellIntegrator phi(matrix_free);
 
-        for (unsigned int cell = 0; cell < matrix_free.n_cell_batches(); ++cell)
-          {
-            phi.reinit(cell);
-            phi.read_dof_values_plain(weights);
+          for (unsigned int cell = 0; cell < matrix_free.n_cell_batches();
+               ++cell)
+            {
+              phi.reinit(cell);
+              phi.read_dof_values_plain(weights);
 
-            const bool success = dealii::internal::
-              compute_weights_fe_q_dofs_by_entity<dim, -1, VectorizedArrayType>(
-                phi.begin_dof_values(),
-                1,
-                fe_degree + 1,
-                weights_compressed_q2[cell].begin());
+              const bool success =
+                dealii::internal::compute_weights_fe_q_dofs_by_entity<
+                  dim,
+                  -1,
+                  VectorizedArrayType>(phi.begin_dof_values(),
+                                       1,
+                                       fe_degree + 1,
+                                       weights_compressed_q2[cell].begin());
 
-            AssertThrow(success, ExcInternalError());
-          }
-      }
+              AssertThrow(success, ExcInternalError());
+            }
+        }
 
     if (weight_type == Restrictors::WeightingType::none)
       {

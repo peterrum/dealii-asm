@@ -182,7 +182,8 @@ create_fdm_preconditioner(const OperatorType &              op,
       const auto reuse_partitioner =
         params.get<bool>("reuse partitioner", true);
 
-      const auto do_weights_global = params.get<bool>("weight global", false);
+      const auto do_weights_global =
+        params.get<std::string>("weight sequence", "compressed");
 
       pcout << "    - n overlap:              " << n_overlap << std::endl;
       pcout << "    - sub mesh approximation: " << sub_mesh_approximation
