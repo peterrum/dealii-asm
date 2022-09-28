@@ -286,59 +286,11 @@ public:
             AssertThrow(success, ExcInternalError());
           }
       }
-    else if ((n_overlap > 1) && ((fe_1D.degree - 1 + n_overlap * 2) >= 4))
-      {
-        weights_compressed_q4.resize(matrix_free.n_cell_batches());
-
-        AlignedVector<VectorizedArrayType> weights_local(
-          Utilities::pow(fe_degree + 2 * n_overlap - 1, dim));
-
-        for (unsigned int cell = 0; cell < matrix_free.n_cell_batches(); ++cell)
-          {
-            pcout << cell << std::endl;
-
-            internal::VectorReader<Number, VectorizedArrayType> reader;
-            constraint_info.read_write_operation(reader,
-                                                 weights,
-                                                 weights_local.data(),
-                                                 cell_ptr[cell],
-                                                 cell_ptr[cell + 1] -
-                                                   cell_ptr[cell],
-                                                 weights_local.size(),
-                                                 true);
-
-            for (unsigned int i_1 = 0, c = 0;
-                 i_1 < (fe_degree - 1 + 2 * n_overlap);
-                 ++i_1)
-              {
-                for (unsigned int i_0 = 0;
-                     i_0 < (fe_degree - 1 + 2 * n_overlap);
-                     ++i_0, ++c)
-                  pcout << weights_local[c][0] << " ";
-                pcout << std::endl;
-              }
-            pcout << std::endl;
-
-            const bool success =
-              dealii::internal::compute_weights_fe_q_dofs_by_entity<
-                dim,
-                -1,
-                -1,
-                VectorizedArrayType>(weights_local.data(),
-                                     1,
-                                     fe_degree + 1,
-                                     n_overlap - 1,
-                                     weights_compressed_q4[cell].begin());
-
-            AssertThrow(success, ExcInternalError());
-          }
-      }
 
     if (weight_type == Restrictors::WeightingType::none)
       {
         weights.reinit(0);
         weights_compressed_q2.clear();
-        weights_compressed_q4.clear();
       }
   }
 
@@ -648,50 +600,29 @@ private:
                       AlignedVector<VectorizedArrayType> &data,
                       const bool                          first_call) const
   {
-    if (weights_compressed_q4.size() > 0)
+    if ((first_call == true) &&
+        (weight_type != Restrictors::WeightingType::none))
       {
-        AssertThrow(false, ExcNotImplemented());
-
-        if (((first_call == true) &&
-             (weight_type == Restrictors::WeightingType::symm ||
-              weight_type == Restrictors::WeightingType::pre)) ||
-            ((first_call == false) &&
-             (weight_type == Restrictors::WeightingType::symm ||
-              weight_type == Restrictors::WeightingType::post)))
-          internal::
-            weight_fe_q_dofs_by_entity<dim, -1, -1, VectorizedArrayType>(
-              &weights_compressed_q4[cell][0],
-              1 /* TODO*/,
-              fe_degree + 1,
-              n_overlap - 1,
-              data.data());
+        internal::VectorReader<Number, VectorizedArrayType> reader;
+        constraint_info.read_write_operation(reader,
+                                             weights,
+                                             weights_local.data(),
+                                             cell_ptr[cell],
+                                             cell_ptr[cell + 1] -
+                                               cell_ptr[cell],
+                                             weights_local.size(),
+                                             true);
       }
-    else
-      {
-        if ((first_call == true) &&
-            (weight_type != Restrictors::WeightingType::none))
-          {
-            internal::VectorReader<Number, VectorizedArrayType> reader;
-            constraint_info.read_write_operation(reader,
-                                                 weights,
-                                                 weights_local.data(),
-                                                 cell_ptr[cell],
-                                                 cell_ptr[cell + 1] -
-                                                   cell_ptr[cell],
-                                                 weights_local.size(),
-                                                 true);
-          }
 
-        if (((first_call == true) &&
-             (weight_type == Restrictors::WeightingType::symm ||
-              weight_type == Restrictors::WeightingType::pre)) ||
-            ((first_call == false) &&
-             (weight_type == Restrictors::WeightingType::symm ||
-              weight_type == Restrictors::WeightingType::post)))
-          {
-            for (unsigned int i = 0; i < weights_local.size(); ++i)
-              data[i] *= weights_local[i];
-          }
+    if (((first_call == true) &&
+         (weight_type == Restrictors::WeightingType::symm ||
+          weight_type == Restrictors::WeightingType::pre)) ||
+        ((first_call == false) &&
+         (weight_type == Restrictors::WeightingType::symm ||
+          weight_type == Restrictors::WeightingType::post)))
+      {
+        for (unsigned int i = 0; i < weights_local.size(); ++i)
+          data[i] *= weights_local[i];
       }
   }
 
@@ -715,8 +646,6 @@ private:
   VectorType weights;
   AlignedVector<std::array<VectorizedArrayType, Utilities::pow(3, dim)>>
     weights_compressed_q2;
-  AlignedVector<std::array<VectorizedArrayType, Utilities::pow(5, dim)>>
-    weights_compressed_q4;
 
   std::shared_ptr<ConstraintInfoReduced> compressed_rw;
 };
