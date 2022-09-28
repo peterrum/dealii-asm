@@ -138,7 +138,7 @@ solve(const MatrixType &                              A,
                         ExcMessage("Solver <" + type + "> is not known!"))
           }
       }
-    catch (...)
+    catch (const SolverControl::NoConvergence &)
       {
         return false;
       }
