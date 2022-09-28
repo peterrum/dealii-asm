@@ -138,6 +138,9 @@ test(const Parameters params_in)
   params.put("weighting type", props[1]);
   params.put("n overlap", props[2]);
 
+  if (props.size() > 3)
+    params.put("weight global", props[3] == "g" ? true : false);
+
   const auto precondition = create_system_preconditioner(op, params);
 
   VectorType src, dst;

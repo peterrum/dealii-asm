@@ -36,12 +36,13 @@ public:
     const Quadrature<1> &                               quadrature_1D,
     const Restrictors::WeightingType                    weight_type =
       Restrictors::WeightingType::post,
-    const bool compress_indices = true)
+    const bool compress_indices  = true,
+    const bool do_weights_global = true)
     : matrix_free(matrix_free)
     , fe_degree(matrix_free.get_dof_handler().get_fe().tensor_degree())
     , n_overlap(n_overlap)
     , weight_type(weight_type)
-    , do_weights_global(weight_type == Restrictors::WeightingType::post)
+    , do_weights_global(do_weights_global)
   {
     AssertThrow((n_rows_1d == -1) || (static_cast<unsigned int>(n_rows_1d) ==
                                       fe_1D.degree + 2 * n_overlap - 1),

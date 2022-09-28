@@ -182,6 +182,8 @@ create_fdm_preconditioner(const OperatorType &              op,
       const auto reuse_partitioner =
         params.get<bool>("reuse partitioner", true);
 
+      const auto do_weights_global = params.get<bool>("weight global", false);
+
       pcout << "    - n overlap:              " << n_overlap << std::endl;
       pcout << "    - sub mesh approximation: " << sub_mesh_approximation
             << std::endl;
@@ -198,7 +200,8 @@ create_fdm_preconditioner(const OperatorType &              op,
         quadrature_face,
         quadrature_1D,
         weight_type,
-        op.uses_compressed_indices());
+        op.uses_compressed_indices(),
+        do_weights_global);
 
       if (reuse_partitioner)
         op.set_partitioner(precon->get_partitioner());
