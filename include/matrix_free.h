@@ -493,6 +493,9 @@ private:
     const std::function<void(const unsigned int, const unsigned int)>
       &operation_after_matrix_vector_product) const
   {
+    const bool do_weights_global =
+      weight_type == Restrictors::WeightingType::post; // TODO
+
     matrix_free.template cell_loop<VectorType, VectorType>(
       [&](
         const auto &matrix_free, auto &dst, const auto &src, const auto cells) {
@@ -534,9 +537,26 @@ private:
       },
       dst,
       src,
-      operation_before_matrix_vector_product,
       [&](const auto begin, const auto end) {
-        if (weight_type == Restrictors::WeightingType::post)
+        if (do_weights_global &&
+            (weight_type == Restrictors::WeightingType::pre ||
+             weight_type == Restrictors::WeightingType::symm))
+          {
+            const auto dst_ptr     = dst.begin();       // TODO
+            const auto weights_ptr = weights.begin();   //
+                                                        //
+            DEAL_II_OPENMP_SIMD_PRAGMA                  //
+              for (std::size_t i = begin; i < end; ++i) //
+              dst_ptr[i] *= weights_ptr[i];             //
+          }
+
+        if (operation_before_matrix_vector_product)
+          operation_before_matrix_vector_product(begin, end);
+      },
+      [&](const auto begin, const auto end) {
+        if (do_weights_global &&
+            (weight_type == Restrictors::WeightingType::post ||
+             weight_type == Restrictors::WeightingType::symm))
           {
             const auto dst_ptr     = dst.begin();
             const auto weights_ptr = weights.begin();
