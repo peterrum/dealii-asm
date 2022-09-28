@@ -521,7 +521,7 @@ private:
             else
               phi_src.read_dof_values(src);
 
-            if (weight_type != Restrictors::WeightingType::post)
+            if (do_weights_global == false)
               apply_weights_local(phi_weights, phi_src, true);
 
             fdm.apply_inverse(
@@ -532,7 +532,7 @@ private:
                                                    phi_src.dofs_per_cell),
               tmp);
 
-            if (weight_type != Restrictors::WeightingType::post)
+            if (do_weights_global == false)
               apply_weights_local(phi_weights, phi_dst, false);
 
             if (compressed_rw)
@@ -544,6 +544,9 @@ private:
       dst,
       *src_scratch,
       [&](const auto begin, const auto end) {
+        if (operation_before_matrix_vector_product)
+          operation_before_matrix_vector_product(begin, end);
+
         if (do_weights_global &&
             (weight_type == Restrictors::WeightingType::pre ||
              weight_type == Restrictors::WeightingType::symm))
@@ -556,9 +559,6 @@ private:
             for (std::size_t i = begin; i < end; ++i)
               src_scratch_ptr[i] = src_ptr[i] * weights_ptr[i];
           }
-
-        if (operation_before_matrix_vector_product)
-          operation_before_matrix_vector_product(begin, end);
       },
       [&](const auto begin, const auto end) {
         if (do_weights_global &&
