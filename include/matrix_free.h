@@ -498,9 +498,11 @@ private:
 
     VectorType *src_scratch = const_cast<VectorType *>(&src);
 
-    if (do_weights_global && (weight_type == Restrictors::WeightingType::pre ||
-                              weight_type == Restrictors::WeightingType::symm))
-      src_scratch = &this->src_;
+    if (do_weights_global && (vmult_counter != numbers::invalid_unsigned_int) &&
+        (weight_type == Restrictors::WeightingType::pre ||
+         weight_type == Restrictors::WeightingType::symm))
+      if ((vmult_counter++) == 0)
+        src_scratch = &this->src_;
 
     matrix_free.template cell_loop<VectorType, VectorType>(
       [&](
@@ -675,6 +677,8 @@ private:
     weights_compressed_q2;
 
   std::shared_ptr<ConstraintInfoReduced> compressed_rw;
+
+  mutable unsigned int vmult_counter = numbers::invalid_unsigned_int;
 };
 
 
