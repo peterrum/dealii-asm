@@ -496,6 +496,12 @@ private:
     const bool do_weights_global =
       weight_type == Restrictors::WeightingType::post; // TODO
 
+    VectorType *src_scratch = const_cast<VectorType *>(&src);
+
+    if (do_weights_global && (weight_type == Restrictors::WeightingType::pre ||
+                              weight_type == Restrictors::WeightingType::symm))
+      src_scratch = &this->src_;
+
     matrix_free.template cell_loop<VectorType, VectorType>(
       [&](
         const auto &matrix_free, auto &dst, const auto &src, const auto cells) {
@@ -536,18 +542,19 @@ private:
           }
       },
       dst,
-      src,
+      *src_scratch,
       [&](const auto begin, const auto end) {
         if (do_weights_global &&
             (weight_type == Restrictors::WeightingType::pre ||
              weight_type == Restrictors::WeightingType::symm))
           {
-            const auto dst_ptr     = dst.begin();       // TODO
-            const auto weights_ptr = weights.begin();   //
-                                                        //
-            DEAL_II_OPENMP_SIMD_PRAGMA                  //
-              for (std::size_t i = begin; i < end; ++i) //
-              dst_ptr[i] *= weights_ptr[i];             //
+            const auto src_scratch_ptr = src_scratch->begin();
+            const auto src_ptr         = src.begin();
+            const auto weights_ptr     = weights.begin();
+
+            DEAL_II_OPENMP_SIMD_PRAGMA
+            for (std::size_t i = begin; i < end; ++i)
+              src_scratch_ptr[i] = src_ptr[i] * weights_ptr[i];
           }
 
         if (operation_before_matrix_vector_product)
