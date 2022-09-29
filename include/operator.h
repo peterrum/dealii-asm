@@ -1199,7 +1199,10 @@ public:
       }
     else
       {
-        update_ghost_values(src, embedded_partitioner); // TODO: overlap?
+        VectorDataExchange exchanger(embedded_partitioner);
+
+        exchanger.update_ghost_values_start(src);  // TODO: overlap?
+        exchanger.update_ghost_values_finish(src); //
 
         FECellIntegrator phi(matrix_free);
 
@@ -1261,76 +1264,11 @@ public:
                 }
             }
 
-        compress(dst, embedded_partitioner); // TODO: overlap?
+        exchanger.compress_start(dst);  // TODO: overlap?
+        exchanger.compress_finish(dst); //
+
         src.zero_out_ghost_values();
       }
-  }
-
-  static void
-  update_ghost_values(const VectorType &vec,
-                      const std::shared_ptr<const Utilities::MPI::Partitioner>
-                        &embedded_partitioner)
-  {
-    const auto &vector_partitioner = vec.get_partitioner();
-
-    dealii::AlignedVector<Number> buffer;
-    buffer.resize_fast(embedded_partitioner->n_import_indices()); // reuse?
-
-    std::vector<MPI_Request> requests;
-
-    embedded_partitioner
-      ->template export_to_ghosted_array_start<Number, MemorySpace::Host>(
-        0,
-        dealii::ArrayView<const Number>(
-          vec.begin(), embedded_partitioner->locally_owned_size()),
-        dealii::ArrayView<Number>(buffer.begin(), buffer.size()),
-        dealii::ArrayView<Number>(const_cast<Number *>(vec.begin()) +
-                                    embedded_partitioner->locally_owned_size(),
-                                  vector_partitioner->n_ghost_indices()),
-        requests);
-
-    embedded_partitioner
-      ->template export_to_ghosted_array_finish<Number, MemorySpace::Host>(
-        dealii::ArrayView<Number>(const_cast<Number *>(vec.begin()) +
-                                    embedded_partitioner->locally_owned_size(),
-                                  vector_partitioner->n_ghost_indices()),
-        requests);
-
-    vec.set_ghost_state(true);
-  }
-
-  static void
-  compress(VectorType &vec,
-           const std::shared_ptr<const Utilities::MPI::Partitioner>
-             &embedded_partitioner)
-  {
-    const auto &vector_partitioner = vec.get_partitioner();
-
-    dealii::AlignedVector<Number> buffer;
-    buffer.resize_fast(embedded_partitioner->n_import_indices()); // reuse?
-
-    std::vector<MPI_Request> requests;
-
-    embedded_partitioner
-      ->template import_from_ghosted_array_start<Number, MemorySpace::Host>(
-        dealii::VectorOperation::add,
-        0,
-        dealii::ArrayView<Number>(const_cast<Number *>(vec.begin()) +
-                                    embedded_partitioner->locally_owned_size(),
-                                  vector_partitioner->n_ghost_indices()),
-        dealii::ArrayView<Number>(buffer.begin(), buffer.size()),
-        requests);
-
-    embedded_partitioner
-      ->template import_from_ghosted_array_finish<Number, MemorySpace::Host>(
-        dealii::VectorOperation::add,
-        dealii::ArrayView<const Number>(buffer.begin(), buffer.size()),
-        dealii::ArrayView<Number>(vec.begin(),
-                                  embedded_partitioner->locally_owned_size()),
-        dealii::ArrayView<Number>(const_cast<Number *>(vec.begin()) +
-                                    embedded_partitioner->locally_owned_size(),
-                                  vector_partitioner->n_ghost_indices()),
-        requests);
   }
 
   void
@@ -1451,6 +1389,93 @@ public:
   }
 
 private:
+  struct VectorDataExchange
+  {
+    VectorDataExchange(const std::shared_ptr<const Utilities::MPI::Partitioner>
+                         &embedded_partitioner)
+      : embedded_partitioner(embedded_partitioner)
+    {}
+
+    void
+    update_ghost_values_start(const VectorType &vec) const
+    {
+      const auto &vector_partitioner = vec.get_partitioner();
+
+      buffer.resize_fast(embedded_partitioner->n_import_indices());
+
+      embedded_partitioner
+        ->template export_to_ghosted_array_start<Number, MemorySpace::Host>(
+          0,
+          dealii::ArrayView<const Number>(
+            vec.begin(), embedded_partitioner->locally_owned_size()),
+          dealii::ArrayView<Number>(buffer.begin(), buffer.size()),
+          dealii::ArrayView<Number>(
+            const_cast<Number *>(vec.begin()) +
+              embedded_partitioner->locally_owned_size(),
+            vector_partitioner->n_ghost_indices()),
+          requests);
+    }
+
+    void
+    update_ghost_values_finish(const VectorType &vec) const
+    {
+      const auto &vector_partitioner = vec.get_partitioner();
+
+      embedded_partitioner
+        ->template export_to_ghosted_array_finish<Number, MemorySpace::Host>(
+          dealii::ArrayView<Number>(
+            const_cast<Number *>(vec.begin()) +
+              embedded_partitioner->locally_owned_size(),
+            vector_partitioner->n_ghost_indices()),
+          requests);
+
+      vec.set_ghost_state(true);
+    }
+
+    void
+    compress_start(VectorType &vec) const
+    {
+      const auto &vector_partitioner = vec.get_partitioner();
+
+      buffer.resize_fast(embedded_partitioner->n_import_indices());
+
+      embedded_partitioner
+        ->template import_from_ghosted_array_start<Number, MemorySpace::Host>(
+          dealii::VectorOperation::add,
+          0,
+          dealii::ArrayView<Number>(
+            const_cast<Number *>(vec.begin()) +
+              embedded_partitioner->locally_owned_size(),
+            vector_partitioner->n_ghost_indices()),
+          dealii::ArrayView<Number>(buffer.begin(), buffer.size()),
+          requests);
+    }
+
+    void
+    compress_finish(VectorType &vec) const
+    {
+      const auto &vector_partitioner = vec.get_partitioner();
+
+      embedded_partitioner
+        ->template import_from_ghosted_array_finish<Number, MemorySpace::Host>(
+          dealii::VectorOperation::add,
+          dealii::ArrayView<const Number>(buffer.begin(), buffer.size()),
+          dealii::ArrayView<Number>(vec.begin(),
+                                    embedded_partitioner->locally_owned_size()),
+          dealii::ArrayView<Number>(
+            const_cast<Number *>(vec.begin()) +
+              embedded_partitioner->locally_owned_size(),
+            vector_partitioner->n_ghost_indices()),
+          requests);
+    }
+
+  private:
+    const std::shared_ptr<const Utilities::MPI::Partitioner>
+                                          embedded_partitioner;
+    mutable dealii::AlignedVector<Number> buffer;
+    mutable std::vector<MPI_Request>      requests;
+  };
+
   void
   compute_system_matrix() const
   {
