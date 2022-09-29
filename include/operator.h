@@ -1219,9 +1219,6 @@ public:
       }
     else
       {
-        if (operation_before_matrix_vector_product) // TODO: merge in cell_loop
-          operation_before_matrix_vector_product(0, src.locally_owned_size());
-
         cell_loop(
           [&](const auto &, auto &dst, const auto &src, const auto cells) {
             FECellIntegrator phi(matrix_free);
@@ -1255,10 +1252,9 @@ public:
               }
           },
           dst,
-          src);
-
-        if (operation_after_matrix_vector_product) // TODO: merge in cell_loop
-          operation_after_matrix_vector_product(0, src.locally_owned_size());
+          src,
+          operation_before_matrix_vector_product,
+          operation_after_matrix_vector_product);
       }
   }
 
@@ -1442,39 +1438,31 @@ private:
                    const VectorType &,
                    const std::pair<unsigned int, unsigned int>)> fu,
             VectorType &                                         dst,
-            const VectorType &                                   src) const
+            const VectorType &                                   src,
+            const std::function<void(unsigned int, unsigned int)>
+              &operation_before_matrix_vector_product,
+            const std::function<void(unsigned int, unsigned int)>
+              &operation_after_matrix_vector_product) const
   {
     VectorDataExchange exchanger(embedded_partitioner);
 
+    if (operation_before_matrix_vector_product)
+      operation_before_matrix_vector_product(0,
+                                             src.locally_owned_size()); // TODO
+
     exchanger.update_ghost_values_start(src);  // TODO: overlap?
     exchanger.update_ghost_values_finish(src); //
-
-    FECellIntegrator phi(matrix_free);
 
     // data structures needed for zeroing dst
     const auto &task_info           = matrix_free.get_task_info();
     const auto &partition_row_index = task_info.partition_row_index;
     const auto &cell_partition_data = task_info.cell_partition_data;
-    const auto &dof_info            = matrix_free.get_dof_info();
-    const auto &vector_zero_range_list_index =
-      dof_info.vector_zero_range_list_index;
-    const auto &vector_zero_range_list = dof_info.vector_zero_range_list;
 
     for (unsigned int part = 0; part < partition_row_index.size() - 2; ++part)
       for (unsigned int i = partition_row_index[part];
            i < partition_row_index[part + 1];
            ++i)
         {
-          // zero out range in dst
-          for (unsigned int id = vector_zero_range_list_index[i];
-               id != vector_zero_range_list_index[i + 1];
-               ++id)
-            std::memset(dst.begin() + vector_zero_range_list[id].first,
-                        0,
-                        (vector_zero_range_list[id].second -
-                         vector_zero_range_list[id].first) *
-                          sizeof(Number));
-
           fu(matrix_free,
              dst,
              src,
@@ -1485,7 +1473,11 @@ private:
     exchanger.compress_start(dst);  // TODO: overlap?
     exchanger.compress_finish(dst); //
 
-    src.zero_out_ghost_values();
+    src.zero_out_ghost_values(); // TODO
+
+    if (operation_after_matrix_vector_product)
+      operation_after_matrix_vector_product(0,
+                                            src.locally_owned_size()); // TODO
   }
 
   void
