@@ -8,6 +8,7 @@
 
 #include "dof_tools.h"
 #include "grid_tools.h"
+#include "matrix_free_internal.h"
 #include "preconditioners.h"
 #include "restrictors.h"
 #include "tensor_product_matrix.h"
@@ -376,6 +377,29 @@ public:
                                 cell_loop_post_list,
                                 vector_partitioner->locally_owned_size());
     }
+
+    if (false)
+      {
+        VectorType src, dst;
+
+        VectorDataExchange<Number> exchanger(partitioner_for_fdm);
+
+        MFWorker<dim, Number, VectorizedArrayType, VectorType> worker(
+          matrix_free,
+          cell_loop_pre_list_index,
+          cell_loop_pre_list,
+          cell_loop_post_list_index,
+          cell_loop_post_list,
+          exchanger,
+          dst,
+          src,
+          [](const auto &, auto &, const auto &, const auto) {},
+          [](const auto, const auto) {},
+          [](const auto, const auto) {});
+
+        MFRunner runner;
+        runner.loop(worker);
+      }
 
     {
       AlignedVector<VectorizedArrayType> dst__(
