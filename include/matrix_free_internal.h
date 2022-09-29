@@ -129,6 +129,12 @@ public:
       &operation_before_loop,
     const std::function<void(unsigned int, unsigned int)> &operation_after_loop)
     : matrix_free(matrix_free)
+    , cell_loop_pre_list_index(
+        matrix_free.get_dof_info().cell_loop_pre_list_index)
+    , cell_loop_pre_list(matrix_free.get_dof_info().cell_loop_pre_list)
+    , cell_loop_post_list_index(
+        matrix_free.get_dof_info().cell_loop_post_list_index)
+    , cell_loop_post_list(matrix_free.get_dof_info().cell_loop_post_list)
     , exchanger(exchanger)
     , dst(dst)
     , src(src)
@@ -180,16 +186,12 @@ public:
   {
     if (operation_before_loop)
       {
-        const internal::MatrixFreeFunctions::DoFInfo &dof_info =
-          matrix_free.get_dof_info();
-
-        AssertIndexRange(range_index,
-                         dof_info.cell_loop_pre_list_index.size() - 1);
-        for (unsigned int id = dof_info.cell_loop_pre_list_index[range_index];
-             id != dof_info.cell_loop_pre_list_index[range_index + 1];
+        AssertIndexRange(range_index, cell_loop_pre_list_index.size() - 1);
+        for (unsigned int id = cell_loop_pre_list_index[range_index];
+             id != cell_loop_pre_list_index[range_index + 1];
              ++id)
-          operation_before_loop(dof_info.cell_loop_pre_list[id].first,
-                                dof_info.cell_loop_pre_list[id].second);
+          operation_before_loop(cell_loop_pre_list[id].first,
+                                cell_loop_pre_list[id].second);
       }
   }
 
@@ -207,16 +209,12 @@ public:
           apply_operation_to_constrained_dofs(
             matrix_free.get_constrained_dofs(), src, dst);
 
-        const internal::MatrixFreeFunctions::DoFInfo &dof_info =
-          matrix_free.get_dof_info();
-
-        AssertIndexRange(range_index,
-                         dof_info.cell_loop_post_list_index.size() - 1);
-        for (unsigned int id = dof_info.cell_loop_post_list_index[range_index];
-             id != dof_info.cell_loop_post_list_index[range_index + 1];
+        AssertIndexRange(range_index, cell_loop_post_list_index.size() - 1);
+        for (unsigned int id = cell_loop_post_list_index[range_index];
+             id != cell_loop_post_list_index[range_index + 1];
              ++id)
-          operation_after_loop(dof_info.cell_loop_post_list[id].first,
-                               dof_info.cell_loop_post_list[id].second);
+          operation_after_loop(cell_loop_post_list[id].first,
+                               cell_loop_post_list[id].second);
       }
   }
 
@@ -249,9 +247,15 @@ public:
 
 private:
   const MatrixFree<dim, Number, VectorizedArrayType> &matrix_free;
-  const VectorDataExchange<Number> &                  exchanger;
-  VectorType &                                        dst;
-  const VectorType &                                  src;
+
+  const std::vector<unsigned int> &cell_loop_pre_list_index;
+  const std::vector<std::pair<unsigned int, unsigned int>> &cell_loop_pre_list;
+  const std::vector<unsigned int> &cell_loop_post_list_index;
+  const std::vector<std::pair<unsigned int, unsigned int>> &cell_loop_post_list;
+
+  const VectorDataExchange<Number> &exchanger;
+  VectorType &                      dst;
+  const VectorType &                src;
   const std::function<void(const MatrixFree<dim, Number, VectorizedArrayType> &,
                            VectorType &,
                            const VectorType &,
