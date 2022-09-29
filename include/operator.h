@@ -1182,6 +1182,25 @@ public:
   void
   vmult(VectorType &dst, const VectorType &src) const
   {
+    vmult(dst,
+          src,
+          [&](const auto start_range, const auto end_range) {
+            if (end_range > start_range)
+              std::memset(dst.begin() + start_range,
+                          0,
+                          sizeof(Number) * (end_range - start_range));
+          },
+          {});
+  }
+
+  void
+  vmult(VectorType &      dst,
+        const VectorType &src,
+        const std::function<void(const unsigned int, const unsigned int)>
+          &operation_before_matrix_vector_product,
+        const std::function<void(const unsigned int, const unsigned int)>
+          &operation_after_matrix_vector_product) const
+  {
     if (vector_partitioner == nullptr)
       {
         matrix_free.template cell_loop<VectorType, VectorType>(
@@ -1195,10 +1214,14 @@ public:
           },
           dst,
           src,
-          true);
+          operation_before_matrix_vector_product,
+          operation_after_matrix_vector_product);
       }
     else
       {
+        if (operation_before_matrix_vector_product) // TODO: merge in cell_loop
+          operation_before_matrix_vector_product(0, src.locally_owned_size());
+
         cell_loop(
           [&](const auto &, auto &dst, const auto &src, const auto cells) {
             FECellIntegrator phi(matrix_free);
@@ -1233,38 +1256,9 @@ public:
           },
           dst,
           src);
-      }
-  }
 
-  void
-  vmult(VectorType &      dst,
-        const VectorType &src,
-        const std::function<void(const unsigned int, const unsigned int)>
-          &operation_before_matrix_vector_product,
-        const std::function<void(const unsigned int, const unsigned int)>
-          &operation_after_matrix_vector_product) const
-  {
-    if (vector_partitioner == nullptr)
-      {
-        matrix_free.template cell_loop<VectorType, VectorType>(
-          [&](const auto &, auto &dst, const auto &src, const auto cells) {
-            FECellIntegrator phi(matrix_free);
-            for (unsigned int cell = cells.first; cell < cells.second; ++cell)
-              {
-                phi.reinit(cell);
-                do_cell_integral_global(phi, dst, src);
-              }
-          },
-          dst,
-          src,
-          operation_before_matrix_vector_product,
-          operation_after_matrix_vector_product);
-      }
-    else
-      {
-        operation_before_matrix_vector_product(0, src.locally_owned_size());
-        vmult(dst, src);
-        operation_after_matrix_vector_product(0, src.locally_owned_size());
+        if (operation_after_matrix_vector_product) // TODO: merge in cell_loop
+          operation_after_matrix_vector_product(0, src.locally_owned_size());
       }
   }
 
