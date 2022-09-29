@@ -1436,49 +1436,218 @@ private:
               void(const MatrixFree<dim, Number, VectorizedArrayType> &,
                    VectorType &,
                    const VectorType &,
-                   const std::pair<unsigned int, unsigned int>)> fu,
-            VectorType &                                         dst,
-            const VectorType &                                   src,
+                   const std::pair<unsigned int, unsigned int>)> &cell_function,
+            VectorType &                                          dst,
+            const VectorType &                                    src,
             const std::function<void(unsigned int, unsigned int)>
-              &operation_before_matrix_vector_product,
+              &operation_before_loop,
             const std::function<void(unsigned int, unsigned int)>
-              &operation_after_matrix_vector_product) const
+              &operation_after_loop) const
   {
     VectorDataExchange exchanger(embedded_partitioner);
 
-    if (operation_before_matrix_vector_product)
-      operation_before_matrix_vector_product(0,
-                                             src.locally_owned_size()); // TODO
+    MFWorker worker(matrix_free,
+                    exchanger,
+                    dst,
+                    src,
+                    cell_function,
+                    operation_before_loop,
+                    operation_after_loop);
 
-    exchanger.update_ghost_values_start(src);  // TODO: overlap?
-    exchanger.update_ghost_values_finish(src); //
-
-    // data structures needed for zeroing dst
     const auto &task_info           = matrix_free.get_task_info();
     const auto &partition_row_index = task_info.partition_row_index;
-    const auto &cell_partition_data = task_info.cell_partition_data;
+
+    worker.cell_loop_pre_range(
+      partition_row_index[partition_row_index.size() - 2]);
+    worker.vector_update_ghosts_start();
 
     for (unsigned int part = 0; part < partition_row_index.size() - 2; ++part)
-      for (unsigned int i = partition_row_index[part];
-           i < partition_row_index[part + 1];
-           ++i)
-        {
-          fu(matrix_free,
-             dst,
-             src,
-             std::pair<unsigned int, unsigned int>{cell_partition_data[i],
-                                                   cell_partition_data[i + 1]});
-        }
+      {
+        if (part == 1)
+          worker.vector_update_ghosts_finish();
 
-    exchanger.compress_start(dst);  // TODO: overlap?
-    exchanger.compress_finish(dst); //
+        for (unsigned int i = partition_row_index[part];
+             i < partition_row_index[part + 1];
+             ++i)
+          {
+            worker.cell_loop_pre_range(i);
+            worker.zero_dst_vector_range(i);
+            worker.cell(i);
+            worker.cell_loop_post_range(i);
+          }
 
-    src.zero_out_ghost_values(); // TODO
+        if (part == 1)
+          worker.vector_compress_start();
+      }
 
-    if (operation_after_matrix_vector_product)
-      operation_after_matrix_vector_product(0,
-                                            src.locally_owned_size()); // TODO
+    worker.vector_compress_finish();
+    worker.cell_loop_post_range(
+      partition_row_index[partition_row_index.size() - 2]);
   }
+
+  struct MFWorker
+  {
+  public:
+    MFWorker(const MatrixFree<dim, Number, VectorizedArrayType> &matrix_free,
+             const VectorDataExchange &                          exchanger,
+             VectorType &                                        dst,
+             const VectorType &                                  src,
+             const std::function<void(
+               const MatrixFree<dim, Number, VectorizedArrayType> &,
+               VectorType &,
+               const VectorType &,
+               const std::pair<unsigned int, unsigned int>)> &   cell_function,
+             const std::function<void(unsigned int, unsigned int)>
+               &operation_before_loop,
+             const std::function<void(unsigned int, unsigned int)>
+               &operation_after_loop)
+      : matrix_free(matrix_free)
+      , exchanger(exchanger)
+      , dst(dst)
+      , src(src)
+      , cell_function(cell_function)
+      , operation_before_loop(operation_before_loop)
+      , operation_after_loop(operation_after_loop)
+      , zero_dst_vector_setting(false)
+    {}
+
+    virtual void
+    vector_update_ghosts_start()
+    {
+      exchanger.update_ghost_values_start(src);
+    }
+
+    virtual void
+    vector_update_ghosts_finish()
+    {
+      exchanger.update_ghost_values_finish(src);
+    }
+
+    virtual void
+    vector_compress_start()
+    {
+      exchanger.compress_start(dst);
+    }
+
+    virtual void
+    vector_compress_finish()
+    {
+      exchanger.compress_finish(dst);
+
+      src.zero_out_ghost_values();
+    }
+
+    virtual void
+    zero_dst_vector_range(const unsigned int range_index)
+    {
+      if (zero_dst_vector_setting)
+        {
+          AssertThrow(false, ExcNotImplemented());
+
+          const auto &dof_info = matrix_free.get_dof_info();
+          const auto &vector_zero_range_list_index =
+            dof_info.vector_zero_range_list_index;
+          const auto &vector_zero_range_list = dof_info.vector_zero_range_list;
+
+          for (unsigned int id = vector_zero_range_list_index[range_index];
+               id != vector_zero_range_list_index[range_index + 1];
+               ++id)
+            std::memset(dst.begin() + vector_zero_range_list[id].first,
+                        0,
+                        (vector_zero_range_list[id].second -
+                         vector_zero_range_list[id].first) *
+                          sizeof(Number));
+        }
+    }
+
+    virtual void
+    cell_loop_pre_range(const unsigned int range_index)
+    {
+      if (operation_before_loop)
+        {
+          const internal::MatrixFreeFunctions::DoFInfo &dof_info =
+            matrix_free.get_dof_info();
+
+          AssertIndexRange(range_index,
+                           dof_info.cell_loop_pre_list_index.size() - 1);
+          for (unsigned int id = dof_info.cell_loop_pre_list_index[range_index];
+               id != dof_info.cell_loop_pre_list_index[range_index + 1];
+               ++id)
+            operation_before_loop(dof_info.cell_loop_pre_list[id].first,
+                                  dof_info.cell_loop_pre_list[id].second);
+        }
+    }
+
+    virtual void
+    cell_loop_post_range(const unsigned int range_index)
+    {
+      if (operation_after_loop)
+        {
+          // Run unit matrix operation on constrained dofs if we are at the
+          // last range
+          const std::vector<unsigned int> &partition_row_index =
+            matrix_free.get_task_info().partition_row_index;
+          if (range_index ==
+              partition_row_index[partition_row_index.size() - 2] - 1)
+            apply_operation_to_constrained_dofs(
+              matrix_free.get_constrained_dofs(), src, dst);
+
+          const internal::MatrixFreeFunctions::DoFInfo &dof_info =
+            matrix_free.get_dof_info();
+
+          AssertIndexRange(range_index,
+                           dof_info.cell_loop_post_list_index.size() - 1);
+          for (unsigned int id =
+                 dof_info.cell_loop_post_list_index[range_index];
+               id != dof_info.cell_loop_post_list_index[range_index + 1];
+               ++id)
+            operation_after_loop(dof_info.cell_loop_post_list[id].first,
+                                 dof_info.cell_loop_post_list[id].second);
+        }
+    }
+
+    void
+    apply_operation_to_constrained_dofs(
+      const std::vector<unsigned int> &constrained_dofs,
+      const VectorType &               src,
+      VectorType &                     dst)
+    {
+      for (const unsigned int i : constrained_dofs)
+        dst.local_element(i) = src.local_element(i);
+    }
+
+    virtual void
+    cell(const unsigned int range_index)
+    {
+      if (cell_function)
+        {
+          const auto &task_info           = matrix_free.get_task_info();
+          const auto &cell_partition_data = task_info.cell_partition_data;
+
+          cell_function(matrix_free,
+                        dst,
+                        src,
+                        std::pair<unsigned int, unsigned int>{
+                          cell_partition_data[range_index],
+                          cell_partition_data[range_index + 1]});
+        }
+    }
+
+  private:
+    const MatrixFree<dim, Number, VectorizedArrayType> &matrix_free;
+    const VectorDataExchange &                          exchanger;
+    VectorType &                                        dst;
+    const VectorType &                                  src;
+    const std::function<
+      void(const MatrixFree<dim, Number, VectorizedArrayType> &,
+           VectorType &,
+           const VectorType &,
+           const std::pair<unsigned int, unsigned int>)> &cell_function;
+    const std::function<void(unsigned int, unsigned int)>
+      &operation_before_loop;
+    const std::function<void(unsigned int, unsigned int)> &operation_after_loop;
+    const bool zero_dst_vector_setting;
+  };
 
   void
   compute_system_matrix() const
