@@ -6,6 +6,8 @@
 #include <deal.II/multigrid/mg_transfer_global_coarsening.h>
 #include <deal.II/multigrid/multigrid.h>
 
+#include "exceptions.h"
+
 DEAL_II_NAMESPACE_OPEN
 
 /**

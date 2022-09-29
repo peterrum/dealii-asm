@@ -353,6 +353,8 @@ test(const boost::property_tree::ptree params, ConvergenceTable &table)
                                       rhs,
                                       op.get_constraints());
 
+  rhs.zero_out_ghost_values();
+
   std::shared_ptr<ReductionControl> reduction_control;
 
   // ASM on cell level

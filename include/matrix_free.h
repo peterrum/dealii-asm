@@ -374,6 +374,7 @@ public:
         // use general version; note: the pre-operation cleares the content
         // of dst so that we can skip zeroing
         operation_before_matrix_vector_product(0, src.locally_owned_size());
+
         vmult_internal(dst, src, /*dst is zero*/ true);
 
         if (operation_after_matrix_vector_product)
@@ -409,6 +410,7 @@ public:
         // use general version; note: the pre-operation cleares the content
         // of dst so that we can skip zeroing
         operation_before_matrix_vector_product(0, src.locally_owned_size());
+
         vmult_internal(dst, src, /*dst is zero*/ true);
 
         if (operation_after_matrix_vector_product)

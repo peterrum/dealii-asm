@@ -16,6 +16,7 @@
 #include <deal.II/numerics/matrix_creator.h>
 
 #include "dof_tools.h"
+#include "exceptions.h"
 #include "grid_tools.h"
 #include "vector_access_reduced.h"
 
@@ -1424,6 +1425,24 @@ private:
           requests);
     }
 
+    void
+    zero_out_ghost_values(const VectorType &vec) const
+    {
+      const auto &vector_partitioner = vec.get_partitioner();
+
+      ArrayView<Number> ghost_array(
+        const_cast<LinearAlgebra::distributed::Vector<Number> &>(vec).begin() +
+          vector_partitioner->locally_owned_size(),
+        vector_partitioner->n_ghost_indices());
+
+      for (const auto &my_ghosts :
+           embedded_partitioner->ghost_indices_within_larger_ghost_set())
+        for (unsigned int j = my_ghosts.first; j < my_ghosts.second; ++j)
+          ghost_array[j] = 0.;
+
+      vec.set_ghost_state(false);
+    }
+
   private:
     const std::shared_ptr<const Utilities::MPI::Partitioner>
                                           embedded_partitioner;
@@ -1533,8 +1552,7 @@ private:
     vector_compress_finish()
     {
       exchanger.compress_finish(dst);
-
-      src.zero_out_ghost_values();
+      exchanger.zero_out_ghost_values(src);
     }
 
     virtual void
