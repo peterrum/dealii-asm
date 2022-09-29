@@ -500,22 +500,23 @@ public:
         (partitioner_for_fdm.get() == src.get_partitioner().get()))
       {
         // use matrix-free version
-        vmult_internal(dst,
-                       src,
-                       get_scratch_src_vector(src),
-                       [&](const auto start_range, const auto end_range) {
-                         if (end_range > start_range)
-                           std::memset(dst.begin() + start_range,
-                                       0,
-                                       sizeof(Number) *
-                                         (end_range - start_range));
-                       },
-                       {});
+        vmult_internal_normal(dst,
+                              src,
+                              get_scratch_src_vector(src),
+                              [&](const auto start_range,
+                                  const auto end_range) {
+                                if (end_range > start_range)
+                                  std::memset(dst.begin() + start_range,
+                                              0,
+                                              sizeof(Number) *
+                                                (end_range - start_range));
+                              },
+                              {});
       }
     else
       {
         // use general version
-        vmult_internal(dst, src);
+        vmult_internal_overlap(dst, src);
       }
   }
 
@@ -536,11 +537,11 @@ public:
         (partitioner_for_fdm.get() == src.get_partitioner().get()))
       {
         // use matrix-free version
-        vmult_internal(dst,
-                       src,
-                       get_scratch_src_vector(src),
-                       operation_before_matrix_vector_product,
-                       operation_after_matrix_vector_product);
+        vmult_internal_normal(dst,
+                              src,
+                              get_scratch_src_vector(src),
+                              operation_before_matrix_vector_product,
+                              operation_after_matrix_vector_product);
       }
     else
       {
@@ -548,7 +549,7 @@ public:
         // of dst so that we can skip zeroing
         operation_before_matrix_vector_product(0, src.locally_owned_size());
 
-        vmult_internal(dst, src, /*dst is zero*/ true);
+        vmult_internal_overlap(dst, src, /*dst is zero*/ true);
 
         if (operation_after_matrix_vector_product)
           operation_after_matrix_vector_product(0, src.locally_owned_size());
@@ -572,11 +573,11 @@ public:
         (partitioner_for_fdm.get() == src.get_partitioner().get()))
       {
         // use matrix-free version
-        vmult_internal(dst,
-                       src,
-                       get_scratch_src_vector(src),
-                       operation_before_matrix_vector_product,
-                       operation_after_matrix_vector_product);
+        vmult_internal_normal(dst,
+                              src,
+                              get_scratch_src_vector(src),
+                              operation_before_matrix_vector_product,
+                              operation_after_matrix_vector_product);
       }
     else
       {
@@ -584,7 +585,7 @@ public:
         // of dst so that we can skip zeroing
         operation_before_matrix_vector_product(0, src.locally_owned_size());
 
-        vmult_internal(dst, src, /*dst is zero*/ true);
+        vmult_internal_overlap(dst, src, /*dst is zero*/ true);
 
         if (operation_after_matrix_vector_product)
           operation_after_matrix_vector_product(0, src.locally_owned_size());
@@ -612,9 +613,9 @@ public:
 
 private:
   void
-  vmult_internal(VectorType &      dst,
-                 const VectorType &src,
-                 const bool        dst_is_zero = false) const
+  vmult_internal_overlap(VectorType &      dst,
+                         const VectorType &src,
+                         const bool        dst_is_zero = false) const
   {
     const bool do_weights_global = true; // TODO
 
@@ -719,7 +720,7 @@ private:
   }
 
   void
-  vmult_internal(
+  vmult_internal_normal(
     VectorType &      dst,
     const VectorType &src,
     VectorType &      src_scratch,
