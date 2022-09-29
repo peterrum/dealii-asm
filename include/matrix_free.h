@@ -159,67 +159,92 @@ public:
 
     // ... collect DoF indices
     cell_ptr = {0};
-    for (unsigned int cell = 0, cell_counter = 0;
-         cell < matrix_free.n_cell_batches();
-         ++cell)
-      {
-        std::array<Table<2, VectorizedArrayType>, dim> Ms;
-        std::array<Table<2, VectorizedArrayType>, dim> Ks;
 
-        for (unsigned int v = 0;
-             v < matrix_free.n_active_entries_per_cell_batch(cell);
-             ++v, ++cell_counter)
+    const auto &task_info = matrix_free.get_task_info();
+
+    const unsigned int n_dofs = partitioner_for_fdm->locally_owned_size() +
+                                partitioner_for_fdm->n_ghost_indices();
+
+    const unsigned int chunk_size_zero_vector = 64;
+
+    std::vector<unsigned int> touched_first_by(
+      (n_dofs + chunk_size_zero_vector - 1) / chunk_size_zero_vector,
+      numbers::invalid_unsigned_int);
+
+    std::vector<unsigned int> touched_last_by(
+      (n_dofs + chunk_size_zero_vector - 1) / chunk_size_zero_vector,
+      numbers::invalid_unsigned_int);
+
+    for (unsigned int part = 0, cell_counter = 0;
+         part < task_info.partition_row_index.size() - 2;
+         ++part)
+      for (unsigned int chunk = task_info.partition_row_index[part];
+           chunk < task_info.partition_row_index[part + 1];
+           ++chunk)
+        for (unsigned int cell = task_info.cell_partition_data[chunk];
+             cell < task_info.cell_partition_data[chunk + 1];
+             ++cell)
           {
-            const auto cell_iterator = matrix_free.get_cell_iterator(cell, v);
+            std::array<Table<2, VectorizedArrayType>, dim> Ms;
+            std::array<Table<2, VectorizedArrayType>, dim> Ks;
 
-            const auto cells =
-              dealii::GridTools::extract_all_surrounding_cells_cartesian<dim>(
-                cell_iterator, n_overlap <= 1 ? 0 : sub_mesh_approximation);
-
-            auto local_dofs =
-              dealii::DoFTools::get_dof_indices_cell_with_overlap(dof_handler,
-                                                                  cells,
-                                                                  n_overlap,
-                                                                  true);
-
-            for (auto &i : local_dofs)
-              resolve_constraint(i);
-
-            constraint_info.read_dof_indices(cell_counter,
-                                             local_dofs,
-                                             partitioner_for_fdm);
-
-            const auto [Ms_scalar, Ks_scalar] =
-              create_laplace_tensor_product_matrix<dim, Number>(
-                cell_iterator,
-                fe_1D,
-                quadrature_1D,
-                harmonic_patch_extend[cell_iterator->active_cell_index()],
-                n_overlap);
-
-            for (unsigned int d = 0; d < dim; ++d)
+            for (unsigned int v = 0;
+                 v < matrix_free.n_active_entries_per_cell_batch(cell);
+                 ++v, ++cell_counter)
               {
-                if (Ms[d].size(0) == 0 || Ms[d].size(1) == 0)
+                const auto cell_iterator =
+                  matrix_free.get_cell_iterator(cell, v);
+
+                const auto cells =
+                  dealii::GridTools::extract_all_surrounding_cells_cartesian<
+                    dim>(cell_iterator,
+                         n_overlap <= 1 ? 0 : sub_mesh_approximation);
+
+                auto local_dofs =
+                  dealii::DoFTools::get_dof_indices_cell_with_overlap(
+                    dof_handler, cells, n_overlap, true);
+
+                for (auto &i : local_dofs)
+                  resolve_constraint(i);
+
+                constraint_info.read_dof_indices(cell_counter,
+                                                 local_dofs,
+                                                 partitioner_for_fdm);
+
+                const auto [Ms_scalar, Ks_scalar] =
+                  create_laplace_tensor_product_matrix<dim, Number>(
+                    cell_iterator,
+                    fe_1D,
+                    quadrature_1D,
+                    harmonic_patch_extend[cell_iterator->active_cell_index()],
+                    n_overlap);
+
+                for (unsigned int d = 0; d < dim; ++d)
                   {
-                    Ms[d].reinit(Ms_scalar[d].size(0), Ms_scalar[d].size(1));
-                    Ks[d].reinit(Ks_scalar[d].size(0), Ks_scalar[d].size(1));
+                    if (Ms[d].size(0) == 0 || Ms[d].size(1) == 0)
+                      {
+                        Ms[d].reinit(Ms_scalar[d].size(0),
+                                     Ms_scalar[d].size(1));
+                        Ks[d].reinit(Ks_scalar[d].size(0),
+                                     Ks_scalar[d].size(1));
+                      }
+
+                    for (unsigned int i = 0; i < Ms_scalar[d].size(0); ++i)
+                      for (unsigned int j = 0; j < Ms_scalar[d].size(0); ++j)
+                        Ms[d][i][j][v] = Ms_scalar[d][i][j];
+
+                    for (unsigned int i = 0; i < Ks_scalar[d].size(0); ++i)
+                      for (unsigned int j = 0; j < Ks_scalar[d].size(0); ++j)
+                        Ks[d][i][j][v] = Ks_scalar[d][i][j];
                   }
-
-                for (unsigned int i = 0; i < Ms_scalar[d].size(0); ++i)
-                  for (unsigned int j = 0; j < Ms_scalar[d].size(0); ++j)
-                    Ms[d][i][j][v] = Ms_scalar[d][i][j];
-
-                for (unsigned int i = 0; i < Ks_scalar[d].size(0); ++i)
-                  for (unsigned int j = 0; j < Ks_scalar[d].size(0); ++j)
-                    Ks[d][i][j][v] = Ks_scalar[d][i][j];
               }
+
+            cell_ptr.push_back(
+              cell_ptr.back() +
+              matrix_free.n_active_entries_per_cell_batch(cell));
+
+            fdm.insert(cell, Ms, Ks);
           }
-
-        cell_ptr.push_back(cell_ptr.back() +
-                           matrix_free.n_active_entries_per_cell_batch(cell));
-
-        fdm.insert(cell, Ms, Ks);
-      }
 
     fdm.finalize();
 
