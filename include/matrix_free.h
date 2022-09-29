@@ -207,6 +207,16 @@ public:
                 for (auto &i : local_dofs)
                   resolve_constraint(i);
 
+                for (const auto &i : local_dofs)
+                  if (i != numbers::invalid_unsigned_int)
+                    {
+                      const unsigned int myindex = i / chunk_size_zero_vector;
+                      if (touched_first_by[myindex] ==
+                          numbers::invalid_unsigned_int)
+                        touched_first_by[myindex] = chunk;
+                      touched_last_by[myindex] = chunk;
+                    }
+
                 constraint_info.read_dof_indices(cell_counter,
                                                  local_dofs,
                                                  partitioner_for_fdm);
@@ -252,6 +262,120 @@ public:
 
     src_.reinit(partitioner_for_fdm);
     dst_.reinit(partitioner_for_fdm);
+
+    {
+      const auto vector_partitioner = partitioner_for_fdm;
+
+      // ensure that all indices are touched at least during the last round
+      for (auto &index : touched_first_by)
+        if (index == numbers::invalid_unsigned_int)
+          index =
+            task_info
+              .partition_row_index[task_info.partition_row_index.size() - 2] -
+            1;
+
+      // lambda to convert from a map, with keys associated to the buckets by
+      // which we sliced the index space, length chunk_size_zero_vector, and
+      // values equal to the slice index which are touched by the respective
+      // partition, to a "vectors-of-vectors" like data structure. Rather than
+      // using the vectors, we set up a sparsity-pattern like structure where
+      // one index specifies the start index (range_list_index), and the other
+      // the actual ranges (range_list).
+      auto convert_map_to_range_list =
+        [=](const unsigned int n_partitions,
+            const std::map<unsigned int, std::vector<unsigned int>> &ranges_in,
+            std::vector<unsigned int> &range_list_index,
+            std::vector<std::pair<unsigned int, unsigned int>> &range_list,
+            const unsigned int                                  max_size) {
+          range_list_index.resize(n_partitions + 1);
+          range_list_index[0] = 0;
+          range_list.clear();
+          for (unsigned int partition = 0; partition < n_partitions;
+               ++partition)
+            {
+              auto it = ranges_in.find(partition);
+              if (it != ranges_in.end())
+                {
+                  for (unsigned int i = 0; i < it->second.size(); ++i)
+                    {
+                      const unsigned int first_i = i;
+                      while (i + 1 < it->second.size() &&
+                             it->second[i + 1] == it->second[i] + 1)
+                        ++i;
+                      range_list.emplace_back(
+                        std::min(it->second[first_i] * chunk_size_zero_vector,
+                                 max_size),
+                        std::min((it->second[i] + 1) * chunk_size_zero_vector,
+                                 max_size));
+                    }
+                  range_list_index[partition + 1] = range_list.size();
+                }
+              else
+                range_list_index[partition + 1] = range_list_index[partition];
+            }
+        };
+
+      // first we determine the ranges to zero the vector
+      std::map<unsigned int, std::vector<unsigned int>> chunk_must_zero_vector;
+      for (unsigned int i = 0; i < touched_first_by.size(); ++i)
+        chunk_must_zero_vector[touched_first_by[i]].push_back(i);
+      const unsigned int n_partitions =
+        task_info.partition_row_index[task_info.partition_row_index.size() - 2];
+      convert_map_to_range_list(n_partitions,
+                                chunk_must_zero_vector,
+                                vector_zero_range_list_index,
+                                vector_zero_range_list,
+                                vector_partitioner->locally_owned_size());
+
+      // the other two operations only work on the local range (without
+      // ghosts), so we skip the latter parts of the vector now
+      touched_first_by.resize((vector_partitioner->locally_owned_size() +
+                               chunk_size_zero_vector - 1) /
+                              chunk_size_zero_vector);
+
+      // set the import indices in the vector partitioner to one index higher
+      // to indicate that we want to process it first. This additional index
+      // is reflected in the argument 'n_partitions+1' in the
+      // convert_map_to_range_list function below.
+      for (auto it : vector_partitioner->import_indices())
+        for (unsigned int i = it.first; i < it.second; ++i)
+          touched_first_by[i / chunk_size_zero_vector] = n_partitions;
+      std::map<unsigned int, std::vector<unsigned int>> chunk_must_do_pre;
+      for (unsigned int i = 0; i < touched_first_by.size(); ++i)
+        chunk_must_do_pre[touched_first_by[i]].push_back(i);
+      convert_map_to_range_list(n_partitions + 1,
+                                chunk_must_do_pre,
+                                cell_loop_pre_list_index,
+                                cell_loop_pre_list,
+                                vector_partitioner->locally_owned_size());
+
+      touched_last_by.resize((vector_partitioner->locally_owned_size() +
+                              chunk_size_zero_vector - 1) /
+                             chunk_size_zero_vector);
+
+      // set the indices which were not touched by the cell loop (i.e.,
+      // constrained indices) to the last valid partition index. Since
+      // partition_row_index contains one extra slot for ghosted faces (which
+      // are not part of the cell/face loops), we use the second to last entry
+      // in the partition list.
+      for (auto &index : touched_last_by)
+        if (index == numbers::invalid_unsigned_int)
+          index =
+            task_info
+              .partition_row_index[task_info.partition_row_index.size() - 2] -
+            1;
+      for (auto it : vector_partitioner->import_indices())
+        for (unsigned int i = it.first; i < it.second; ++i)
+          touched_last_by[i / chunk_size_zero_vector] = n_partitions;
+      std::map<unsigned int, std::vector<unsigned int>> chunk_must_do_post;
+      for (unsigned int i = 0; i < touched_last_by.size(); ++i)
+        chunk_must_do_post[touched_last_by[i]].push_back(i);
+      convert_map_to_range_list(n_partitions + 1,
+                                chunk_must_do_post,
+                                cell_loop_post_list_index,
+                                cell_loop_post_list,
+                                vector_partitioner->locally_owned_size());
+    }
 
     {
       AlignedVector<VectorizedArrayType> dst__(
@@ -754,6 +878,13 @@ private:
     weights_compressed_q2;
 
   std::shared_ptr<ConstraintInfoReduced> compressed_rw;
+
+  std::vector<unsigned int> vector_zero_range_list_index;
+  std::vector<std::pair<unsigned int, unsigned int>> vector_zero_range_list;
+  std::vector<unsigned int>                          cell_loop_pre_list_index;
+  std::vector<std::pair<unsigned int, unsigned int>> cell_loop_pre_list;
+  std::vector<unsigned int>                          cell_loop_post_list_index;
+  std::vector<std::pair<unsigned int, unsigned int>> cell_loop_post_list;
 };
 
 
