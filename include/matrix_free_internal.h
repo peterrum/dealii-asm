@@ -117,9 +117,15 @@ struct MFWorker
 public:
   MFWorker(
     const MatrixFree<dim, Number, VectorizedArrayType> &matrix_free,
-    const VectorDataExchange<Number> &                  exchanger,
-    VectorType &                                        dst,
-    const VectorType &                                  src,
+    const std::vector<unsigned int> &cell_loop_pre_list_index,
+    const std::vector<std::pair<unsigned int, unsigned int>>
+      &                              cell_loop_pre_list,
+    const std::vector<unsigned int> &cell_loop_post_list_index,
+    const std::vector<std::pair<unsigned int, unsigned int>>
+      &                               cell_loop_post_list,
+    const VectorDataExchange<Number> &exchanger,
+    VectorType &                      dst,
+    const VectorType &                src,
     const std::function<
       void(const MatrixFree<dim, Number, VectorizedArrayType> &,
            VectorType &,
@@ -129,12 +135,10 @@ public:
       &operation_before_loop,
     const std::function<void(unsigned int, unsigned int)> &operation_after_loop)
     : matrix_free(matrix_free)
-    , cell_loop_pre_list_index(
-        matrix_free.get_dof_info().cell_loop_pre_list_index)
-    , cell_loop_pre_list(matrix_free.get_dof_info().cell_loop_pre_list)
-    , cell_loop_post_list_index(
-        matrix_free.get_dof_info().cell_loop_post_list_index)
-    , cell_loop_post_list(matrix_free.get_dof_info().cell_loop_post_list)
+    , cell_loop_pre_list_index(cell_loop_pre_list_index)
+    , cell_loop_pre_list(cell_loop_pre_list)
+    , cell_loop_post_list_index(cell_loop_post_list_index)
+    , cell_loop_post_list(cell_loop_post_list)
     , exchanger(exchanger)
     , dst(dst)
     , src(src)

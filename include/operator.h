@@ -1363,6 +1363,10 @@ private:
 
     MFWorker<dim, Number, VectorizedArrayType, VectorType> worker(
       matrix_free,
+      matrix_free.get_dof_info().cell_loop_pre_list_index,
+      matrix_free.get_dof_info().cell_loop_pre_list,
+      matrix_free.get_dof_info().cell_loop_post_list_index,
+      matrix_free.get_dof_info().cell_loop_post_list,
       exchanger,
       dst,
       src,
