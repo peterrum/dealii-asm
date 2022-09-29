@@ -1199,75 +1199,40 @@ public:
       }
     else
       {
-        VectorDataExchange exchanger(embedded_partitioner);
+        cell_loop(
+          [&](const auto &, auto &dst, const auto &src, const auto cells) {
+            FECellIntegrator phi(matrix_free);
+            for (unsigned int cell = cells.first; cell < cells.second; ++cell)
+              {
+                phi.reinit(cell);
 
-        exchanger.update_ghost_values_start(src);  // TODO: overlap?
-        exchanger.update_ghost_values_finish(src); //
-
-        FECellIntegrator phi(matrix_free);
-
-        // data structures needed for zeroing dst
-        const auto &task_info           = matrix_free.get_task_info();
-        const auto &partition_row_index = task_info.partition_row_index;
-        const auto &cell_partition_data = task_info.cell_partition_data;
-        const auto &dof_info            = matrix_free.get_dof_info();
-        const auto &vector_zero_range_list_index =
-          dof_info.vector_zero_range_list_index;
-        const auto &vector_zero_range_list = dof_info.vector_zero_range_list;
-
-        for (unsigned int part = 0; part < partition_row_index.size() - 2;
-             ++part)
-          for (unsigned int i = partition_row_index[part];
-               i < partition_row_index[part + 1];
-               ++i)
-            {
-              // zero out range in dst
-              for (unsigned int id = vector_zero_range_list_index[i];
-                   id != vector_zero_range_list_index[i + 1];
-                   ++id)
-                std::memset(dst.begin() + vector_zero_range_list[id].first,
-                            0,
-                            (vector_zero_range_list[id].second -
-                             vector_zero_range_list[id].first) *
-                              sizeof(Number));
-
-              // loop over cells
-              for (unsigned int cell = cell_partition_data[i];
-                   cell < cell_partition_data[i + 1];
-                   ++cell)
-                {
-                  phi.reinit(cell);
-
-                  internal::VectorReader<Number, VectorizedArrayType> reader;
-                  constraint_info.read_write_operation(reader,
-                                                       src,
-                                                       phi.begin_dof_values(),
+                internal::VectorReader<Number, VectorizedArrayType> reader;
+                constraint_info.read_write_operation(reader,
+                                                     src,
+                                                     phi.begin_dof_values(),
+                                                     cell_ptr[cell],
+                                                     cell_ptr[cell + 1] -
                                                        cell_ptr[cell],
-                                                       cell_ptr[cell + 1] -
-                                                         cell_ptr[cell],
-                                                       phi.dofs_per_cell,
-                                                       true);
+                                                     phi.dofs_per_cell,
+                                                     true);
 
-                  do_cell_integral_local(phi);
+                do_cell_integral_local(phi);
 
-                  internal::VectorDistributorLocalToGlobal<Number,
-                                                           VectorizedArrayType>
-                    writer;
-                  constraint_info.read_write_operation(writer,
-                                                       dst,
-                                                       phi.begin_dof_values(),
+                internal::VectorDistributorLocalToGlobal<Number,
+                                                         VectorizedArrayType>
+                  writer;
+                constraint_info.read_write_operation(writer,
+                                                     dst,
+                                                     phi.begin_dof_values(),
+                                                     cell_ptr[cell],
+                                                     cell_ptr[cell + 1] -
                                                        cell_ptr[cell],
-                                                       cell_ptr[cell + 1] -
-                                                         cell_ptr[cell],
-                                                       phi.dofs_per_cell,
-                                                       true);
-                }
-            }
-
-        exchanger.compress_start(dst);  // TODO: overlap?
-        exchanger.compress_finish(dst); //
-
-        src.zero_out_ghost_values();
+                                                     phi.dofs_per_cell,
+                                                     true);
+              }
+          },
+          dst,
+          src);
       }
   }
 
@@ -1475,6 +1440,59 @@ private:
     mutable dealii::AlignedVector<Number> buffer;
     mutable std::vector<MPI_Request>      requests;
   };
+
+  void
+  cell_loop(const std::function<
+              void(const MatrixFree<dim, Number, VectorizedArrayType> &,
+                   VectorType &,
+                   const VectorType &,
+                   const std::pair<unsigned int, unsigned int>)> fu,
+            VectorType &                                         dst,
+            const VectorType &                                   src) const
+  {
+    VectorDataExchange exchanger(embedded_partitioner);
+
+    exchanger.update_ghost_values_start(src);  // TODO: overlap?
+    exchanger.update_ghost_values_finish(src); //
+
+    FECellIntegrator phi(matrix_free);
+
+    // data structures needed for zeroing dst
+    const auto &task_info           = matrix_free.get_task_info();
+    const auto &partition_row_index = task_info.partition_row_index;
+    const auto &cell_partition_data = task_info.cell_partition_data;
+    const auto &dof_info            = matrix_free.get_dof_info();
+    const auto &vector_zero_range_list_index =
+      dof_info.vector_zero_range_list_index;
+    const auto &vector_zero_range_list = dof_info.vector_zero_range_list;
+
+    for (unsigned int part = 0; part < partition_row_index.size() - 2; ++part)
+      for (unsigned int i = partition_row_index[part];
+           i < partition_row_index[part + 1];
+           ++i)
+        {
+          // zero out range in dst
+          for (unsigned int id = vector_zero_range_list_index[i];
+               id != vector_zero_range_list_index[i + 1];
+               ++id)
+            std::memset(dst.begin() + vector_zero_range_list[id].first,
+                        0,
+                        (vector_zero_range_list[id].second -
+                         vector_zero_range_list[id].first) *
+                          sizeof(Number));
+
+          fu(matrix_free,
+             dst,
+             src,
+             std::pair<unsigned int, unsigned int>{cell_partition_data[i],
+                                                   cell_partition_data[i + 1]});
+        }
+
+    exchanger.compress_start(dst);  // TODO: overlap?
+    exchanger.compress_finish(dst); //
+
+    src.zero_out_ghost_values();
+  }
 
   void
   compute_system_matrix() const
