@@ -1370,35 +1370,8 @@ private:
       operation_before_loop,
       operation_after_loop);
 
-    const auto &task_info           = matrix_free.get_task_info();
-    const auto &partition_row_index = task_info.partition_row_index;
-
-    worker.cell_loop_pre_range(
-      partition_row_index[partition_row_index.size() - 2]);
-    worker.vector_update_ghosts_start();
-
-    for (unsigned int part = 0; part < partition_row_index.size() - 2; ++part)
-      {
-        if (part == 1)
-          worker.vector_update_ghosts_finish();
-
-        for (unsigned int i = partition_row_index[part];
-             i < partition_row_index[part + 1];
-             ++i)
-          {
-            worker.cell_loop_pre_range(i);
-            worker.zero_dst_vector_range(i);
-            worker.cell(i);
-            worker.cell_loop_post_range(i);
-          }
-
-        if (part == 1)
-          worker.vector_compress_start();
-      }
-
-    worker.vector_compress_finish();
-    worker.cell_loop_post_range(
-      partition_row_index[partition_row_index.size() - 2]);
+    MFRunner runner;
+    runner.loop(worker);
   }
 
   void
