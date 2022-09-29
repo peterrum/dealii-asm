@@ -500,7 +500,7 @@ private:
                                              true);
 
         // 2) apply weights (optional)
-        if (weight_type != Restrictors::WeightingType::post)
+        if (weights_local.size() > 0)
           apply_weights_local(cell, weights_local, src_local, true);
 
         // 3) cell operation: fast diagonalization method
@@ -510,8 +510,8 @@ private:
                           tmp);
 
         // 4) apply weights (optional)
-        if (weight_type != Restrictors::WeightingType::post)
-          apply_weights_local(cell, weights_local, dst_local, true);
+        if (weights_local.size() > 0)
+          apply_weights_local(cell, weights_local, dst_local, false);
 
         // 5) scatter
         internal::VectorDistributorLocalToGlobal<Number, VectorizedArrayType>
