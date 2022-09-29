@@ -497,6 +497,14 @@ public:
   void
   vmult(VectorType &dst, const VectorType &src) const
   {
+    const auto operation_before_matrix_vector_product =
+      [&](const auto start_range, const auto end_range) {
+        if (end_range > start_range)
+          std::memset(dst.begin() + start_range,
+                      0,
+                      sizeof(Number) * (end_range - start_range));
+      };
+
     if ((partitioner_for_fdm.get() ==
          matrix_free.get_vector_partitioner().get()) &&
         (partitioner_for_fdm.get() == src.get_partitioner().get()))
@@ -505,20 +513,16 @@ public:
         vmult_internal_normal(dst,
                               src,
                               get_scratch_src_vector(src),
-                              [&](const auto start_range,
-                                  const auto end_range) {
-                                if (end_range > start_range)
-                                  std::memset(dst.begin() + start_range,
-                                              0,
-                                              sizeof(Number) *
-                                                (end_range - start_range));
-                              },
+                              operation_before_matrix_vector_product,
                               {});
       }
     else
       {
         // use general version
-        vmult_internal_overlap(dst, src);
+        vmult_internal_overlap(dst,
+                               src,
+                               operation_before_matrix_vector_product,
+                               {});
       }
   }
 
@@ -547,14 +551,10 @@ public:
       }
     else
       {
-        // use general version; note: the pre-operation cleares the content
-        // of dst so that we can skip zeroing
-        operation_before_matrix_vector_product(0, src.locally_owned_size());
-
-        vmult_internal_overlap(dst, src, /*dst is zero*/ true);
-
-        if (operation_after_matrix_vector_product)
-          operation_after_matrix_vector_product(0, src.locally_owned_size());
+        vmult_internal_overlap(dst,
+                               src,
+                               operation_before_matrix_vector_product,
+                               operation_after_matrix_vector_product);
       }
   }
 
@@ -583,14 +583,10 @@ public:
       }
     else
       {
-        // use general version; note: the pre-operation cleares the content
-        // of dst so that we can skip zeroing
-        operation_before_matrix_vector_product(0, src.locally_owned_size());
-
-        vmult_internal_overlap(dst, src, /*dst is zero*/ true);
-
-        if (operation_after_matrix_vector_product)
-          operation_after_matrix_vector_product(0, src.locally_owned_size());
+        vmult_internal_overlap(dst,
+                               src,
+                               operation_before_matrix_vector_product,
+                               operation_after_matrix_vector_product);
       }
   }
 
@@ -615,11 +611,17 @@ public:
 
 private:
   void
-  vmult_internal_overlap(VectorType &      dst,
-                         const VectorType &src,
-                         const bool        dst_is_zero = false) const
+  vmult_internal_overlap(
+    VectorType &      dst,
+    const VectorType &src,
+    const std::function<void(const unsigned int, const unsigned int)>
+      &operation_before_matrix_vector_product,
+    const std::function<void(const unsigned int, const unsigned int)>
+      &operation_after_matrix_vector_product) const
   {
     const bool do_weights_global = true; // TODO
+
+    operation_before_matrix_vector_product(0, src.locally_owned_size());
 
     const bool do_inplace_dst =
       partitioner_for_fdm.get() == src.get_partitioner().get();
@@ -647,7 +649,7 @@ private:
     // update ghost values
     src_ptr.update_ghost_values();
 
-    if ((do_inplace_dst == false) || (dst_is_zero == false))
+    if (do_inplace_dst)
       dst_ptr = 0.0;
 
     // data structures needed for the cell loop
@@ -719,6 +721,8 @@ private:
       }
     else if (do_inplace_dst == false)
       dst.copy_locally_owned_data_from(dst_ptr);
+
+    operation_after_matrix_vector_product(0, src.locally_owned_size());
   }
 
   void
