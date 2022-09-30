@@ -623,23 +623,24 @@ private:
     const std::function<void(const unsigned int, const unsigned int)>
       &operation_after_matrix_vector_product) const
   {
-    // data structures needed for the cell loop
     AlignedVector<VectorizedArrayType> tmp;
-
-    AlignedVector<VectorizedArrayType> src_local(
-      Utilities::pow(fe_degree + 2 * n_overlap - 1, dim));
-    AlignedVector<VectorizedArrayType> dst_local(
-      Utilities::pow(fe_degree + 2 * n_overlap - 1, dim));
+    AlignedVector<VectorizedArrayType> src_local;
+    AlignedVector<VectorizedArrayType> dst_local;
     AlignedVector<VectorizedArrayType> weights_local;
-
-    if (do_weights_global == false)
-      weights_local.resize(Utilities::pow(fe_degree + 2 * n_overlap - 1, dim));
 
     const auto cell_operation =
       [&](const MatrixFree<dim, Number, VectorizedArrayType> &,
           VectorType &                                dst_ptr,
           const VectorType &                          src_ptr,
           const std::pair<unsigned int, unsigned int> cell_range) {
+        src_local.resize_fast(
+          Utilities::pow(fe_degree + 2 * n_overlap - 1, dim));
+        dst_local.resize_fast(
+          Utilities::pow(fe_degree + 2 * n_overlap - 1, dim));
+        if (do_weights_global == false)
+          weights_local.resize_fast(
+            Utilities::pow(fe_degree + 2 * n_overlap - 1, dim));
+
         for (unsigned int cell = cell_range.first; cell < cell_range.second;
              ++cell)
           {
