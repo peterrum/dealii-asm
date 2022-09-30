@@ -623,8 +623,6 @@ private:
     const std::function<void(const unsigned int, const unsigned int)>
       &operation_after_matrix_vector_product) const
   {
-    const bool do_weights_global = true; // TODO
-
     // data structures needed for the cell loop
     AlignedVector<VectorizedArrayType> tmp;
 
@@ -634,8 +632,7 @@ private:
       Utilities::pow(fe_degree + 2 * n_overlap - 1, dim));
     AlignedVector<VectorizedArrayType> weights_local;
 
-    if ((do_weights_global == false) &&
-        (weight_type == Restrictors::WeightingType::none))
+    if (do_weights_global == false)
       weights_local.resize(Utilities::pow(fe_degree + 2 * n_overlap - 1, dim));
 
     const auto cell_operation =
@@ -658,7 +655,7 @@ private:
                                                  true);
 
             // 2) apply weights (optional)
-            if (weights_local.size() > 0)
+            if (do_weights_global == false)
               apply_weights_local(cell, weights_local, src_local, true);
 
             // 3) cell operation: fast diagonalization method
@@ -669,7 +666,7 @@ private:
               tmp);
 
             // 4) apply weights (optional)
-            if (weights_local.size() > 0)
+            if (do_weights_global == false)
               apply_weights_local(cell, weights_local, dst_local, false);
 
             // 5) scatter
@@ -687,16 +684,62 @@ private:
           }
       };
 
+    const auto operation_before_matrix_vector_product_with_weighting =
+      [&](const auto begin, const auto end) {
+        if (operation_before_matrix_vector_product)
+          operation_before_matrix_vector_product(begin, end);
+
+        if (do_weights_global &&
+            (weight_type == Restrictors::WeightingType::pre ||
+             weight_type == Restrictors::WeightingType::symm))
+          {
+            const auto src_scratch_ptr = src_scratch.begin();
+            const auto src_ptr         = src.begin();
+            const auto weights_ptr     = weights.begin();
+
+            DEAL_II_OPENMP_SIMD_PRAGMA
+            for (std::size_t i = begin; i < end; ++i)
+              src_scratch_ptr[i] = src_ptr[i] * weights_ptr[i];
+          }
+      };
+
+    const auto operation_after_matrix_vector_product_with_weighting =
+      [&](const auto begin, const auto end) {
+        if (do_weights_global &&
+            (weight_type == Restrictors::WeightingType::post ||
+             weight_type == Restrictors::WeightingType::symm))
+          {
+            const auto dst_ptr     = dst.begin();
+            const auto weights_ptr = weights.begin();
+
+            DEAL_II_OPENMP_SIMD_PRAGMA
+            for (std::size_t i = begin; i < end; ++i)
+              dst_ptr[i] *= weights_ptr[i];
+          }
+
+        if (operation_after_matrix_vector_product)
+          operation_after_matrix_vector_product(begin, end);
+      };
+
     if (partitioner_for_fdm.get() == src.get_partitioner().get())
       {
-        (void)src_scratch;
+        VectorDataExchange<Number> exchanger(partitioner_for_fdm);
 
-        (void)matrix_free;
-        (void)dst;
-        (void)src;
-        (void)cell_operation;
-        (void)operation_before_matrix_vector_product;
-        (void)operation_after_matrix_vector_product;
+        MFWorker<dim, Number, VectorizedArrayType, VectorType> worker(
+          matrix_free,
+          cell_loop_pre_list_index,
+          cell_loop_pre_list,
+          cell_loop_post_list_index,
+          cell_loop_post_list,
+          exchanger,
+          dst,
+          src_scratch,
+          cell_operation,
+          operation_before_matrix_vector_product_with_weighting,
+          operation_after_matrix_vector_product_with_weighting);
+
+        MFRunner runner;
+        runner.loop(worker);
       }
     else
       {

@@ -190,7 +190,8 @@ public:
   {
     if (operation_before_loop)
       {
-        AssertIndexRange(range_index, cell_loop_pre_list_index.size() - 1);
+        AssertThrow(range_index < cell_loop_pre_list_index.size() - 1,
+                    ExcInternalError());
         for (unsigned int id = cell_loop_pre_list_index[range_index];
              id != cell_loop_pre_list_index[range_index + 1];
              ++id)
@@ -264,10 +265,10 @@ private:
                            VectorType &,
                            const VectorType &,
                            const std::pair<unsigned int, unsigned int>)>
-    &                                                    cell_function;
-  const std::function<void(unsigned int, unsigned int)> &operation_before_loop;
-  const std::function<void(unsigned int, unsigned int)> &operation_after_loop;
-  const bool zero_dst_vector_setting;
+                                                        cell_function;
+  const std::function<void(unsigned int, unsigned int)> operation_before_loop;
+  const std::function<void(unsigned int, unsigned int)> operation_after_loop;
+  const bool                                            zero_dst_vector_setting;
 };
 
 struct MFRunner
@@ -277,6 +278,8 @@ struct MFRunner
   loop(WorkerType &worker) const
   {
     const auto &partition_row_index = worker.get_partition_row_index();
+
+    AssertThrow(partition_row_index.size() >= 2, ExcInternalError());
 
     worker.cell_loop_pre_range(
       partition_row_index[partition_row_index.size() - 2]);
