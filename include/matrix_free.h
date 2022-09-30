@@ -211,7 +211,9 @@ public:
                 for (const auto &i : local_dofs)
                   if (i != numbers::invalid_unsigned_int)
                     {
-                      const unsigned int myindex = i / chunk_size_zero_vector;
+                      const unsigned int myindex =
+                        partitioner_for_fdm->global_to_local(i) /
+                        chunk_size_zero_vector;
                       if (touched_first_by[myindex] ==
                           numbers::invalid_unsigned_int)
                         touched_first_by[myindex] = chunk;
