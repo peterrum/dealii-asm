@@ -60,7 +60,7 @@ public:
     // ... allocate memory
     constraint_info.reinit(matrix_free.n_physical_cells());
 
-    partitioner_for_fdm = matrix_free.get_vector_partitioner();
+    partitioner_fdm = matrix_free.get_vector_partitioner();
 
     const auto resolve_constraint = [&](auto &i) {
       const auto *entries_ptr = constraints.get_constraint_entries(i);
@@ -143,7 +143,7 @@ public:
         is_ghost_indices.add_indices(ghost_indices.begin(),
                                      ghost_indices.end());
 
-        partitioner_for_fdm = std::make_shared<Utilities::MPI::Partitioner>(
+        partitioner_fdm = std::make_shared<Utilities::MPI::Partitioner>(
           locally_owned_dofs, is_ghost_indices, dof_handler.get_communicator());
       }
 
@@ -163,8 +163,8 @@ public:
 
     const auto &task_info = matrix_free.get_task_info();
 
-    const unsigned int n_dofs = partitioner_for_fdm->locally_owned_size() +
-                                partitioner_for_fdm->n_ghost_indices();
+    const unsigned int n_dofs = partitioner_fdm->locally_owned_size() +
+                                partitioner_fdm->n_ghost_indices();
 
     const unsigned int chunk_size_zero_vector =
       internal::MatrixFreeFunctions::DoFInfo::chunk_size_zero_vector;
@@ -213,7 +213,7 @@ public:
                   if (i != numbers::invalid_unsigned_int)
                     {
                       const unsigned int myindex =
-                        partitioner_for_fdm->global_to_local(i) /
+                        partitioner_fdm->global_to_local(i) /
                         chunk_size_zero_vector;
                       if (touched_first_by[myindex] ==
                           numbers::invalid_unsigned_int)
@@ -223,7 +223,7 @@ public:
 
                 constraint_info.read_dof_indices(cell_counter,
                                                  local_dofs,
-                                                 partitioner_for_fdm);
+                                                 partitioner_fdm);
 
                 const auto [Ms_scalar, Ks_scalar] =
                   create_laplace_tensor_product_matrix<dim, Number>(
@@ -264,11 +264,11 @@ public:
 
     constraint_info.finalize();
 
-    src_.reinit(partitioner_for_fdm);
-    dst_.reinit(partitioner_for_fdm);
+    src_.reinit(partitioner_fdm);
+    dst_.reinit(partitioner_fdm);
 
     {
-      const auto vector_partitioner = partitioner_for_fdm;
+      const auto vector_partitioner = partitioner_fdm;
 
       // ensure that all indices are touched at least during the last round
       for (auto &index : touched_first_by)
@@ -406,7 +406,7 @@ public:
 
       dst_.compress(VectorOperation::add);
 
-      weights.reinit(partitioner_for_fdm);
+      weights.reinit(partitioner_fdm);
 
       weights.copy_locally_owned_data_from(dst_);
 
@@ -528,7 +528,7 @@ public:
   std::shared_ptr<const Utilities::MPI::Partitioner>
   get_partitioner() const
   {
-    return partitioner_for_fdm;
+    return partitioner_fdm;
   }
 
   unsigned int
@@ -676,7 +676,7 @@ private:
     };
 
     // version 2) of pre operation: inconsistent partitioners -> copy src
-    const auto pre_operation_with_weighting_and_copying = [&](const auto begin,
+    const auto pre_operation_with_copying_and_weighting = [&](const auto begin,
                                                               const auto end) {
       if (pre_operation)
         pre_operation(begin, end);
@@ -751,9 +751,8 @@ private:
         post_operation(begin, end);
     };
 
-    if ((partitioner_for_fdm.get() ==
-         matrix_free.get_vector_partitioner().get()) &&
-        (partitioner_for_fdm.get() == src.get_partitioner().get()))
+    if ((partitioner_fdm.get() == matrix_free.get_vector_partitioner().get()) &&
+        (partitioner_fdm.get() == src.get_partitioner().get()))
       {
         // version 1) with overlap=1 -> use dealii::MatrixFree
         matrix_free.template cell_loop<VectorType, VectorType>(
@@ -763,14 +762,12 @@ private:
           pre_operation_with_weighting,
           post_operation_with_weighting);
       }
-    else if (partitioner_for_fdm.get() == src.get_partitioner().get())
+    else if (partitioner_fdm.get() == src.get_partitioner().get())
       {
         // version 2) with overlap>1 and consistent partitioner -> use
         // own matrix-free infrastructure
-        VectorDataExchange<Number> exchanger_dst(partitioner_for_fdm,
-                                                 buffer_dst);
-        VectorDataExchange<Number> exchanger_src(partitioner_for_fdm,
-                                                 buffer_src);
+        VectorDataExchange<Number> exchanger_dst(partitioner_fdm, buffer_dst);
+        VectorDataExchange<Number> exchanger_src(partitioner_fdm, buffer_src);
 
         MFWorker<dim, Number, VectorizedArrayType, VectorType> worker(
           matrix_free,
@@ -793,10 +790,8 @@ private:
       {
         // version 3) with overlap>1 and inconsistent partitioner -> use
         // own matrix-free infrastructure and copy vectors on the fly
-        VectorDataExchange<Number> exchanger_dst(partitioner_for_fdm,
-                                                 buffer_dst);
-        VectorDataExchange<Number> exchanger_src(partitioner_for_fdm,
-                                                 buffer_src);
+        VectorDataExchange<Number> exchanger_dst(partitioner_fdm, buffer_dst);
+        VectorDataExchange<Number> exchanger_src(partitioner_fdm, buffer_src);
 
         MFWorker<dim, Number, VectorizedArrayType, VectorType> worker(
           matrix_free,
@@ -809,7 +804,7 @@ private:
           this->dst_,
           this->src_,
           cell_operation_overlap,
-          pre_operation_with_weighting_and_copying,
+          pre_operation_with_copying_and_weighting,
           post_operation_with_weighting_and_copying);
 
         MFRunner runner;
@@ -898,7 +893,7 @@ private:
   const Restrictors::WeightingType                    weight_type;
   const bool                                          do_weights_global;
 
-  std::shared_ptr<const Utilities::MPI::Partitioner> partitioner_for_fdm;
+  std::shared_ptr<const Utilities::MPI::Partitioner> partitioner_fdm;
 
   internal::MatrixFreeFunctions::ConstraintInfo<dim, VectorizedArrayType>
                             constraint_info;
