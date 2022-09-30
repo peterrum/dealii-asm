@@ -767,8 +767,10 @@ private:
       {
         // version 2) with overlap>1 and consistent partitioner -> use
         // own matrix-free infrastructure
-        VectorDataExchange<Number> exchanger_dst(partitioner_for_fdm);
-        VectorDataExchange<Number> exchanger_src(partitioner_for_fdm);
+        VectorDataExchange<Number> exchanger_dst(partitioner_for_fdm,
+                                                 buffer_dst);
+        VectorDataExchange<Number> exchanger_src(partitioner_for_fdm,
+                                                 buffer_src);
 
         MFWorker<dim, Number, VectorizedArrayType, VectorType> worker(
           matrix_free,
@@ -791,8 +793,10 @@ private:
       {
         // version 3) with overlap>1 and inconsistent partitioner -> use
         // own matrix-free infrastructure and copy vectors on the fly
-        VectorDataExchange<Number> exchanger_dst(partitioner_for_fdm);
-        VectorDataExchange<Number> exchanger_src(partitioner_for_fdm);
+        VectorDataExchange<Number> exchanger_dst(partitioner_for_fdm,
+                                                 buffer_dst);
+        VectorDataExchange<Number> exchanger_src(partitioner_for_fdm,
+                                                 buffer_src);
 
         MFWorker<dim, Number, VectorizedArrayType, VectorType> worker(
           matrix_free,
@@ -918,6 +922,9 @@ private:
   std::vector<std::pair<unsigned int, unsigned int>> cell_loop_pre_list;
   std::vector<unsigned int>                          cell_loop_post_list_index;
   std::vector<std::pair<unsigned int, unsigned int>> cell_loop_post_list;
+
+  mutable dealii::AlignedVector<Number> buffer_dst;
+  mutable dealii::AlignedVector<Number> buffer_src;
 };
 
 

@@ -4,8 +4,10 @@ template <typename Number>
 struct VectorDataExchange
 {
   VectorDataExchange(const std::shared_ptr<const Utilities::MPI::Partitioner>
-                       &embedded_partitioner)
+                       &                    embedded_partitioner,
+                     AlignedVector<Number> &buffer)
     : embedded_partitioner(embedded_partitioner)
+    , buffer(buffer)
   {}
 
   template <typename VectorType>
@@ -102,7 +104,7 @@ struct VectorDataExchange
 
 private:
   const std::shared_ptr<const Utilities::MPI::Partitioner> embedded_partitioner;
-  mutable dealii::AlignedVector<Number>                    buffer;
+  dealii::AlignedVector<Number> &                          buffer;
   mutable std::vector<MPI_Request>                         requests;
 };
 

@@ -1359,8 +1359,8 @@ private:
             const std::function<void(unsigned int, unsigned int)>
               &operation_after_loop) const
   {
-    VectorDataExchange<Number> exchanger_dst(embedded_partitioner);
-    VectorDataExchange<Number> exchanger_src(embedded_partitioner);
+    VectorDataExchange<Number> exchanger_dst(embedded_partitioner, buffer_dst);
+    VectorDataExchange<Number> exchanger_src(embedded_partitioner, buffer_src);
 
     MFWorker<dim, Number, VectorizedArrayType, VectorType> worker(
       matrix_free,
@@ -1444,4 +1444,7 @@ private:
     merged_coefficients;
 
   AlignedVector<VectorizedArrayType> quadrature_points;
+
+  mutable dealii::AlignedVector<Number> buffer_dst;
+  mutable dealii::AlignedVector<Number> buffer_src;
 };
