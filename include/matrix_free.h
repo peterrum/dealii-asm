@@ -166,7 +166,8 @@ public:
     const unsigned int n_dofs = partitioner_for_fdm->locally_owned_size() +
                                 partitioner_for_fdm->n_ghost_indices();
 
-    const unsigned int chunk_size_zero_vector = 64;
+    const unsigned int chunk_size_zero_vector =
+      internal::MatrixFreeFunctions::DoFInfo::chunk_size_zero_vector;
 
     std::vector<unsigned int> touched_first_by(
       (n_dofs + chunk_size_zero_vector - 1) / chunk_size_zero_vector,
