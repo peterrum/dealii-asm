@@ -621,37 +621,6 @@ private:
   {
     const bool do_weights_global = true; // TODO
 
-    operation_before_matrix_vector_product(0, src.locally_owned_size());
-
-    const bool do_inplace_dst =
-      partitioner_for_fdm.get() == src.get_partitioner().get();
-    const bool do_inplace_src =
-      do_inplace_dst &&
-      ((do_weights_global == false) ||
-       ((weight_type == Restrictors::WeightingType::pre ||
-         weight_type == Restrictors::WeightingType::symm) == false));
-
-    auto &      dst_ptr = do_inplace_dst ? dst : this->dst_;
-    const auto &src_ptr = do_inplace_src ? src : this->src_;
-
-    // apply weights and copy vector (both optional)
-    if (do_weights_global && (weight_type == Restrictors::WeightingType::pre ||
-                              weight_type == Restrictors::WeightingType::symm))
-      {
-        DEAL_II_OPENMP_SIMD_PRAGMA
-        for (std::size_t i = 0; i < src.locally_owned_size(); ++i)
-          this->src_.local_element(i) =
-            weights.local_element(i) * src.local_element(i);
-      }
-    else if (do_inplace_src == false)
-      this->src_.copy_locally_owned_data_from(src);
-
-    // update ghost values
-    src_ptr.update_ghost_values();
-
-    if (do_inplace_dst)
-      dst_ptr = 0.0;
-
     // data structures needed for the cell loop
     AlignedVector<VectorizedArrayType> tmp;
 
@@ -665,64 +634,116 @@ private:
         (weight_type == Restrictors::WeightingType::none))
       weights_local.resize(Utilities::pow(fe_degree + 2 * n_overlap - 1, dim));
 
-    // loop over cells
-    for (unsigned int cell = 0; cell < matrix_free.n_cell_batches(); ++cell)
+    const auto cell_operation =
+      [&](const MatrixFree<dim, Number, VectorizedArrayType> &,
+          VectorType &                                dst_ptr,
+          const VectorType &                          src_ptr,
+          const std::pair<unsigned int, unsigned int> cell_range) {
+        for (unsigned int cell = cell_range.first; cell < cell_range.second;
+             ++cell)
+          {
+            // 1) gather src (optional)
+            internal::VectorReader<Number, VectorizedArrayType> reader;
+            constraint_info.read_write_operation(reader,
+                                                 src_ptr,
+                                                 src_local.data(),
+                                                 cell_ptr[cell],
+                                                 cell_ptr[cell + 1] -
+                                                   cell_ptr[cell],
+                                                 src_local.size(),
+                                                 true);
+
+            // 2) apply weights (optional)
+            if (weights_local.size() > 0)
+              apply_weights_local(cell, weights_local, src_local, true);
+
+            // 3) cell operation: fast diagonalization method
+            fdm.apply_inverse(
+              cell,
+              make_array_view(dst_local.begin(), dst_local.end()),
+              make_array_view(src_local.begin(), src_local.end()),
+              tmp);
+
+            // 4) apply weights (optional)
+            if (weights_local.size() > 0)
+              apply_weights_local(cell, weights_local, dst_local, false);
+
+            // 5) scatter
+            internal::VectorDistributorLocalToGlobal<Number,
+                                                     VectorizedArrayType>
+              writer;
+            constraint_info.read_write_operation(writer,
+                                                 dst_ptr,
+                                                 dst_local.data(),
+                                                 cell_ptr[cell],
+                                                 cell_ptr[cell + 1] -
+                                                   cell_ptr[cell],
+                                                 dst_local.size(),
+                                                 true);
+          }
+      };
+
+    if (partitioner_for_fdm.get() == src.get_partitioner().get())
       {
-        // 1) gather src (optional)
-        internal::VectorReader<Number, VectorizedArrayType> reader;
-        constraint_info.read_write_operation(reader,
-                                             src_ptr,
-                                             src_local.data(),
-                                             cell_ptr[cell],
-                                             cell_ptr[cell + 1] -
-                                               cell_ptr[cell],
-                                             src_local.size(),
-                                             true);
-
-        // 2) apply weights (optional)
-        if (weights_local.size() > 0)
-          apply_weights_local(cell, weights_local, src_local, true);
-
-        // 3) cell operation: fast diagonalization method
-        fdm.apply_inverse(cell,
-                          make_array_view(dst_local.begin(), dst_local.end()),
-                          make_array_view(src_local.begin(), src_local.end()),
-                          tmp);
-
-        // 4) apply weights (optional)
-        if (weights_local.size() > 0)
-          apply_weights_local(cell, weights_local, dst_local, false);
-
-        // 5) scatter
-        internal::VectorDistributorLocalToGlobal<Number, VectorizedArrayType>
-          writer;
-        constraint_info.read_write_operation(writer,
-                                             dst_ptr,
-                                             dst_local.data(),
-                                             cell_ptr[cell],
-                                             cell_ptr[cell + 1] -
-                                               cell_ptr[cell],
-                                             dst_local.size(),
-                                             true);
+        (void)matrix_free;
+        (void)dst;
+        (void)src;
+        (void)cell_operation;
+        (void)operation_before_matrix_vector_product;
+        (void)operation_after_matrix_vector_product;
       }
-
-    // compress
-    src_ptr.zero_out_ghost_values();
-    dst_ptr.compress(VectorOperation::add);
-
-    // apply weights and copy vector back (both optional)
-    if (do_weights_global && (weight_type == Restrictors::WeightingType::post ||
-                              weight_type == Restrictors::WeightingType::symm))
+    else
       {
-        DEAL_II_OPENMP_SIMD_PRAGMA
-        for (std::size_t i = 0; i < dst.locally_owned_size(); ++i)
-          dst.local_element(i) =
-            weights.local_element(i) * dst_ptr.local_element(i);
-      }
-    else if (do_inplace_dst == false)
-      dst.copy_locally_owned_data_from(dst_ptr);
+        if (operation_before_matrix_vector_product)
+          operation_before_matrix_vector_product(0, src.locally_owned_size());
 
-    operation_after_matrix_vector_product(0, src.locally_owned_size());
+        // apply weights (optional) and copy vector
+        if (do_weights_global &&
+            (weight_type == Restrictors::WeightingType::pre ||
+             weight_type == Restrictors::WeightingType::symm))
+          {
+            DEAL_II_OPENMP_SIMD_PRAGMA
+            for (std::size_t i = 0; i < src.locally_owned_size(); ++i)
+              this->src_.local_element(i) =
+                weights.local_element(i) * src.local_element(i);
+          }
+        else
+          this->src_.copy_locally_owned_data_from(src);
+
+        // update ghost values
+        src_.update_ghost_values();
+        dst_ = 0.0;
+
+        // loop over cells
+        cell_operation(matrix_free,
+                       dst_,
+                       src_,
+                       {0, matrix_free.n_cell_batches()});
+
+        // compress
+        src_.zero_out_ghost_values();
+        dst_.compress(VectorOperation::add);
+
+        // apply weights (optional) and copy vector back
+        if (do_weights_global &&
+            (weight_type == Restrictors::WeightingType::post ||
+             weight_type == Restrictors::WeightingType::symm))
+          {
+            DEAL_II_OPENMP_SIMD_PRAGMA
+            for (std::size_t i = 0; i < dst.locally_owned_size(); ++i)
+              dst.local_element(i) =
+                weights.local_element(i) * dst_.local_element(i);
+          }
+        else
+          {
+            DEAL_II_OPENMP_SIMD_PRAGMA
+            for (std::size_t i = 0; i < dst.locally_owned_size(); ++i)
+              dst.local_element(i) += dst_.local_element(i);
+          }
+
+        if (operation_after_matrix_vector_product)
+          operation_after_matrix_vector_product(0, src.locally_owned_size());
+      }
   }
 
   void
