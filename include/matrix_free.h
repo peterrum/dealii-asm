@@ -518,15 +518,12 @@ public:
   vmult(VectorType &      dst,
         const VectorType &src,
         const std::function<void(const unsigned int, const unsigned int)>
-          &operation_before_matrix_vector_product,
+          &pre_operation,
         const std::function<void(const unsigned int, const unsigned int)>
-          &operation_after_matrix_vector_product = {}) const
+          &post_operation = {}) const
   {
-    vmult_internal(dst,
-                   src,
-                   get_scratch_src_vector(src),
-                   operation_before_matrix_vector_product,
-                   operation_after_matrix_vector_product);
+    vmult_internal(
+      dst, src, get_scratch_src_vector(src), pre_operation, post_operation);
   }
 
   /**
@@ -537,15 +534,12 @@ public:
   vmult(VectorType &dst,
         VectorType &src,
         const std::function<void(const unsigned int, const unsigned int)>
-          &operation_before_matrix_vector_product,
+          &pre_operation,
         const std::function<void(const unsigned int, const unsigned int)>
-          &operation_after_matrix_vector_product = {}) const
+          &post_operation = {}) const
   {
-    vmult_internal(dst,
-                   src,
-                   get_scratch_src_vector(src),
-                   operation_before_matrix_vector_product,
-                   operation_after_matrix_vector_product);
+    vmult_internal(
+      dst, src, get_scratch_src_vector(src), pre_operation, post_operation);
   }
 
   std::size_t
@@ -574,9 +568,9 @@ private:
     const VectorType &src,
     VectorType &      src_scratch,
     const std::function<void(const unsigned int, const unsigned int)>
-      &operation_before_matrix_vector_product,
+      &pre_operation,
     const std::function<void(const unsigned int, const unsigned int)>
-      &operation_after_matrix_vector_product) const
+      &post_operation) const
   {
     AlignedVector<VectorizedArrayType> tmp;
     AlignedVector<VectorizedArrayType> src_local;
@@ -685,102 +679,100 @@ private:
       };
 
     // version 1) of pre operation: consistent partitioners
-    const auto operation_before_matrix_vector_product_with_weighting =
-      [&](const auto begin, const auto end) {
-        if (operation_before_matrix_vector_product)
-          operation_before_matrix_vector_product(begin, end);
+    const auto pre_operation_with_weighting = [&](const auto begin,
+                                                  const auto end) {
+      if (pre_operation)
+        pre_operation(begin, end);
 
-        if (do_weights_global &&
-            (weight_type == Restrictors::WeightingType::pre ||
-             weight_type == Restrictors::WeightingType::symm))
-          {
-            const auto src_scratch_ptr = src_scratch.begin();
-            const auto src_ptr         = src.begin();
-            const auto weights_ptr     = weights.begin();
-
-            DEAL_II_OPENMP_SIMD_PRAGMA
-            for (std::size_t i = begin; i < end; ++i)
-              src_scratch_ptr[i] = src_ptr[i] * weights_ptr[i];
-          }
-      };
-
-    // version 2) of pre operation: inconsistent partitioners -> copy src
-    const auto
-      operation_before_matrix_vector_product_with_weighting_and_copying =
-        [&](const auto begin, const auto end) {
-          if (operation_before_matrix_vector_product)
-            operation_before_matrix_vector_product(begin, end);
-
-          const auto src_scratch_ptr = this->src_.begin();
+      if (do_weights_global &&
+          (weight_type == Restrictors::WeightingType::pre ||
+           weight_type == Restrictors::WeightingType::symm))
+        {
+          const auto src_scratch_ptr = src_scratch.begin();
           const auto src_ptr         = src.begin();
-          const auto dst_scratch_ptr = this->dst_.begin();
           const auto weights_ptr     = weights.begin();
-
-          if (do_weights_global &&
-              (weight_type == Restrictors::WeightingType::pre ||
-               weight_type == Restrictors::WeightingType::symm))
-            {
-              DEAL_II_OPENMP_SIMD_PRAGMA
-              for (std::size_t i = begin; i < end; ++i)
-                src_scratch_ptr[i] = src_ptr[i] * weights_ptr[i];
-            }
-          else
-            {
-              DEAL_II_OPENMP_SIMD_PRAGMA
-              for (std::size_t i = begin; i < end; ++i)
-                src_scratch_ptr[i] = src_ptr[i];
-            }
 
           DEAL_II_OPENMP_SIMD_PRAGMA
           for (std::size_t i = begin; i < end; ++i)
-            dst_scratch_ptr[i] = 0.0; // note: zeroing
-        };
+            src_scratch_ptr[i] = src_ptr[i] * weights_ptr[i];
+        }
+    };
+
+    // version 2) of pre operation: inconsistent partitioners -> copy src
+    const auto pre_operation_with_weighting_and_copying = [&](const auto begin,
+                                                              const auto end) {
+      if (pre_operation)
+        pre_operation(begin, end);
+
+      const auto src_scratch_ptr = this->src_.begin();
+      const auto src_ptr         = src.begin();
+      const auto dst_scratch_ptr = this->dst_.begin();
+      const auto weights_ptr     = weights.begin();
+
+      if (do_weights_global &&
+          (weight_type == Restrictors::WeightingType::pre ||
+           weight_type == Restrictors::WeightingType::symm))
+        {
+          DEAL_II_OPENMP_SIMD_PRAGMA
+          for (std::size_t i = begin; i < end; ++i)
+            src_scratch_ptr[i] = src_ptr[i] * weights_ptr[i];
+        }
+      else
+        {
+          DEAL_II_OPENMP_SIMD_PRAGMA
+          for (std::size_t i = begin; i < end; ++i)
+            src_scratch_ptr[i] = src_ptr[i];
+        }
+
+      DEAL_II_OPENMP_SIMD_PRAGMA
+      for (std::size_t i = begin; i < end; ++i)
+        dst_scratch_ptr[i] = 0.0; // note: zeroing
+    };
 
     // version 1) of post operation: consistent partitioners
-    const auto operation_after_matrix_vector_product_with_weighting =
-      [&](const auto begin, const auto end) {
-        if (do_weights_global &&
-            (weight_type == Restrictors::WeightingType::post ||
-             weight_type == Restrictors::WeightingType::symm))
-          {
-            const auto dst_ptr     = dst.begin();
-            const auto weights_ptr = weights.begin();
+    const auto post_operation_with_weighting = [&](const auto begin,
+                                                   const auto end) {
+      if (do_weights_global &&
+          (weight_type == Restrictors::WeightingType::post ||
+           weight_type == Restrictors::WeightingType::symm))
+        {
+          const auto dst_ptr     = dst.begin();
+          const auto weights_ptr = weights.begin();
 
-            DEAL_II_OPENMP_SIMD_PRAGMA
-            for (std::size_t i = begin; i < end; ++i)
-              dst_ptr[i] *= weights_ptr[i];
-          }
+          DEAL_II_OPENMP_SIMD_PRAGMA
+          for (std::size_t i = begin; i < end; ++i)
+            dst_ptr[i] *= weights_ptr[i];
+        }
 
-        if (operation_after_matrix_vector_product)
-          operation_after_matrix_vector_product(begin, end);
-      };
+      if (post_operation)
+        post_operation(begin, end);
+    };
 
     // version 2) of post operation: inconsistent partitioners -> copy dst
-    const auto
-      operation_after_matrix_vector_product_with_weighting_and_copying =
-        [&](const auto begin, const auto end) {
-          const auto dst_scratch_ptr = this->dst_.begin();
-          const auto dst_ptr         = dst.begin();
-          const auto weights_ptr     = weights.begin();
+    const auto post_operation_with_weighting_and_copying = [&](const auto begin,
+                                                               const auto end) {
+      const auto dst_scratch_ptr = this->dst_.begin();
+      const auto dst_ptr         = dst.begin();
+      const auto weights_ptr     = weights.begin();
 
-          if (do_weights_global &&
-              (weight_type == Restrictors::WeightingType::post ||
-               weight_type == Restrictors::WeightingType::symm))
-            {
-              DEAL_II_OPENMP_SIMD_PRAGMA
-              for (std::size_t i = begin; i < end; ++i)
-                dst_ptr[i] += dst_scratch_ptr[i] * weights_ptr[i]; // note: add
-            }
-          else
-            {
-              DEAL_II_OPENMP_SIMD_PRAGMA
-              for (std::size_t i = begin; i < end; ++i)
-                dst_ptr[i] += dst_scratch_ptr[i]; // note: add
-            }
+      if (do_weights_global &&
+          (weight_type == Restrictors::WeightingType::post ||
+           weight_type == Restrictors::WeightingType::symm))
+        {
+          DEAL_II_OPENMP_SIMD_PRAGMA
+          for (std::size_t i = begin; i < end; ++i)
+            dst_ptr[i] += dst_scratch_ptr[i] * weights_ptr[i]; // note: add
+        }
+      else
+        {
+          DEAL_II_OPENMP_SIMD_PRAGMA
+          for (std::size_t i = begin; i < end; ++i)
+            dst_ptr[i] += dst_scratch_ptr[i]; // note: add
+        }
 
-          if (operation_after_matrix_vector_product)
-            operation_after_matrix_vector_product(begin, end);
-        };
+      if (post_operation)
+        post_operation(begin, end);
+    };
 
     if ((partitioner_for_fdm.get() ==
          matrix_free.get_vector_partitioner().get()) &&
@@ -791,8 +783,8 @@ private:
           cell_operation_normal,
           dst,
           src_scratch,
-          operation_before_matrix_vector_product_with_weighting,
-          operation_after_matrix_vector_product_with_weighting);
+          pre_operation_with_weighting,
+          post_operation_with_weighting);
       }
     else if (partitioner_for_fdm.get() == src.get_partitioner().get())
       {
@@ -810,8 +802,8 @@ private:
           dst,
           src_scratch,
           cell_operation_overlap,
-          operation_before_matrix_vector_product_with_weighting,
-          operation_after_matrix_vector_product_with_weighting);
+          pre_operation_with_weighting,
+          post_operation_with_weighting);
 
         MFRunner runner;
         runner.loop(worker);
@@ -832,8 +824,8 @@ private:
           this->dst_,
           this->src_,
           cell_operation_overlap,
-          operation_before_matrix_vector_product_with_weighting_and_copying,
-          operation_after_matrix_vector_product_with_weighting_and_copying);
+          pre_operation_with_weighting_and_copying,
+          post_operation_with_weighting_and_copying);
 
         MFRunner runner;
         runner.loop(worker);
@@ -1043,9 +1035,9 @@ public:
   vmult(VectorType &      dst,
         const VectorType &src,
         const std::function<void(const unsigned int, const unsigned int)>
-          &operation_before_matrix_vector_product,
+          &pre_operation,
         const std::function<void(const unsigned int, const unsigned int)>
-          &operation_after_matrix_vector_product) const
+          &post_operation) const
   {
     matrix_free.template cell_loop<VectorType, VectorType>(
       [&](const auto &, auto &dst, const auto &src, const auto cells) {
@@ -1059,8 +1051,8 @@ public:
       },
       dst,
       src,
-      operation_before_matrix_vector_product,
-      operation_after_matrix_vector_product);
+      pre_operation,
+      post_operation);
   }
 
 
