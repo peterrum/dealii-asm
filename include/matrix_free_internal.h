@@ -190,8 +190,7 @@ public:
   {
     if (operation_before_loop)
       {
-        AssertThrow(range_index < cell_loop_pre_list_index.size() - 1,
-                    ExcInternalError());
+        AssertIndexRange(range_index, cell_loop_pre_list_index.size() - 1);
         for (unsigned int id = cell_loop_pre_list_index[range_index];
              id != cell_loop_pre_list_index[range_index + 1];
              ++id)
@@ -277,17 +276,20 @@ struct MFRunner
   void
   loop(WorkerType &worker) const
   {
-    const auto &partition_row_index = worker.get_partition_row_index();
+    const bool overlap_communication_and_computation = false;
 
-    AssertThrow(partition_row_index.size() >= 2, ExcInternalError());
+    const auto &partition_row_index = worker.get_partition_row_index();
 
     worker.cell_loop_pre_range(
       partition_row_index[partition_row_index.size() - 2]);
     worker.vector_update_ghosts_start();
 
+    if (overlap_communication_and_computation == false)
+      worker.vector_update_ghosts_finish();
+
     for (unsigned int part = 0; part < partition_row_index.size() - 2; ++part)
       {
-        if (part == 1)
+        if (overlap_communication_and_computation && (part == 1))
           worker.vector_update_ghosts_finish();
 
         for (unsigned int i = partition_row_index[part];
@@ -300,10 +302,12 @@ struct MFRunner
             worker.cell_loop_post_range(i);
           }
 
-        if (part == 1)
+        if (overlap_communication_and_computation && (part == 1))
           worker.vector_compress_start();
       }
 
+    if (overlap_communication_and_computation == false)
+      worker.vector_compress_start();
     worker.vector_compress_finish();
     worker.cell_loop_post_range(
       partition_row_index[partition_row_index.size() - 2]);
