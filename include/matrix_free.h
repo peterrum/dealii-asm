@@ -497,34 +497,16 @@ public:
   void
   vmult(VectorType &dst, const VectorType &src) const
   {
-    const auto operation_before_matrix_vector_product =
-      [&](const auto start_range, const auto end_range) {
-        if (end_range > start_range)
-          std::memset(dst.begin() + start_range,
-                      0,
-                      sizeof(Number) * (end_range - start_range));
-      };
-
-    if ((partitioner_for_fdm.get() ==
-         matrix_free.get_vector_partitioner().get()) &&
-        (partitioner_for_fdm.get() == src.get_partitioner().get()))
-      {
-        // use matrix-free version
-        vmult_internal_normal(dst,
-                              src,
-                              get_scratch_src_vector(src),
-                              operation_before_matrix_vector_product,
-                              {});
-      }
-    else
-      {
-        // use general version
-        vmult_internal_overlap(dst,
-                               src,
-                               get_scratch_src_vector(src),
-                               operation_before_matrix_vector_product,
-                               {});
-      }
+    vmult_internal(dst,
+                   src,
+                   get_scratch_src_vector(src),
+                   [&](const auto start_range, const auto end_range) {
+                     if (end_range > start_range)
+                       std::memset(dst.begin() + start_range,
+                                   0,
+                                   sizeof(Number) * (end_range - start_range));
+                   },
+                   {});
   }
 
   /**
@@ -539,25 +521,11 @@ public:
         const std::function<void(const unsigned int, const unsigned int)>
           &operation_after_matrix_vector_product = {}) const
   {
-    if ((partitioner_for_fdm.get() ==
-         matrix_free.get_vector_partitioner().get()) &&
-        (partitioner_for_fdm.get() == src.get_partitioner().get()))
-      {
-        // use matrix-free version
-        vmult_internal_normal(dst,
-                              src,
-                              get_scratch_src_vector(src),
-                              operation_before_matrix_vector_product,
-                              operation_after_matrix_vector_product);
-      }
-    else
-      {
-        vmult_internal_overlap(dst,
-                               src,
-                               get_scratch_src_vector(src),
-                               operation_before_matrix_vector_product,
-                               operation_after_matrix_vector_product);
-      }
+    vmult_internal(dst,
+                   src,
+                   get_scratch_src_vector(src),
+                   operation_before_matrix_vector_product,
+                   operation_after_matrix_vector_product);
   }
 
   /**
@@ -572,25 +540,11 @@ public:
         const std::function<void(const unsigned int, const unsigned int)>
           &operation_after_matrix_vector_product = {}) const
   {
-    if ((partitioner_for_fdm.get() ==
-         matrix_free.get_vector_partitioner().get()) &&
-        (partitioner_for_fdm.get() == src.get_partitioner().get()))
-      {
-        // use matrix-free version
-        vmult_internal_normal(dst,
-                              src,
-                              get_scratch_src_vector(src),
-                              operation_before_matrix_vector_product,
-                              operation_after_matrix_vector_product);
-      }
-    else
-      {
-        vmult_internal_overlap(dst,
-                               src,
-                               get_scratch_src_vector(src),
-                               operation_before_matrix_vector_product,
-                               operation_after_matrix_vector_product);
-      }
+    vmult_internal(dst,
+                   src,
+                   get_scratch_src_vector(src),
+                   operation_before_matrix_vector_product,
+                   operation_after_matrix_vector_product);
   }
 
   std::size_t
@@ -614,7 +568,7 @@ public:
 
 private:
   void
-  vmult_internal_overlap(
+  vmult_internal(
     VectorType &      dst,
     const VectorType &src,
     VectorType &      src_scratch,
@@ -627,6 +581,47 @@ private:
     AlignedVector<VectorizedArrayType> src_local;
     AlignedVector<VectorizedArrayType> dst_local;
     AlignedVector<VectorizedArrayType> weights_local;
+
+    const auto cell_operation_normal = [&](const auto &matrix_free,
+                                           auto &      dst,
+                                           const auto &src,
+                                           const auto  cells) {
+      FECellIntegrator phi_src(matrix_free);
+      FECellIntegrator phi_dst(matrix_free);
+      FECellIntegrator phi_weights(matrix_free);
+
+      AlignedVector<VectorizedArrayType> tmp;
+
+      for (unsigned int cell = cells.first; cell < cells.second; ++cell)
+        {
+          phi_src.reinit(cell);
+          phi_dst.reinit(cell);
+
+          if (compressed_rw)
+            compressed_rw->read_dof_values(src, phi_src);
+          else
+            phi_src.read_dof_values(src);
+
+          if (do_weights_global == false)
+            apply_weights_local(phi_weights, phi_src, true);
+
+          fdm.apply_inverse(
+            cell,
+            ArrayView<VectorizedArrayType>(phi_dst.begin_dof_values(),
+                                           phi_dst.dofs_per_cell),
+            ArrayView<const VectorizedArrayType>(phi_src.begin_dof_values(),
+                                                 phi_src.dofs_per_cell),
+            tmp);
+
+          if (do_weights_global == false)
+            apply_weights_local(phi_weights, phi_dst, false);
+
+          if (compressed_rw)
+            compressed_rw->distribute_local_to_global(dst, phi_dst);
+          else
+            phi_dst.distribute_local_to_global(dst);
+        }
+    };
 
     const auto cell_operation_overalap =
       [&](const MatrixFree<dim, Number, VectorizedArrayType> &,
@@ -722,7 +717,18 @@ private:
           operation_after_matrix_vector_product(begin, end);
       };
 
-    if (partitioner_for_fdm.get() == src.get_partitioner().get())
+    if ((partitioner_for_fdm.get() ==
+         matrix_free.get_vector_partitioner().get()) &&
+        (partitioner_for_fdm.get() == src.get_partitioner().get()))
+      {
+        matrix_free.template cell_loop<VectorType, VectorType>(
+          cell_operation_normal,
+          dst,
+          src_scratch,
+          operation_before_matrix_vector_product_with_weighting,
+          operation_after_matrix_vector_product_with_weighting);
+      }
+    else if (partitioner_for_fdm.get() == src.get_partitioner().get())
       {
         VectorDataExchange<Number> exchanger(partitioner_for_fdm);
 
@@ -794,103 +800,6 @@ private:
         if (operation_after_matrix_vector_product)
           operation_after_matrix_vector_product(0, src.locally_owned_size());
       }
-  }
-
-  void
-  vmult_internal_normal(
-    VectorType &      dst,
-    const VectorType &src,
-    VectorType &      src_scratch,
-    const std::function<void(const unsigned int, const unsigned int)>
-      &operation_before_matrix_vector_product,
-    const std::function<void(const unsigned int, const unsigned int)>
-      &operation_after_matrix_vector_product) const
-  {
-    const auto cell_operation_normal = [&](const auto &matrix_free,
-                                           auto &      dst,
-                                           const auto &src,
-                                           const auto  cells) {
-      FECellIntegrator phi_src(matrix_free);
-      FECellIntegrator phi_dst(matrix_free);
-      FECellIntegrator phi_weights(matrix_free);
-
-      AlignedVector<VectorizedArrayType> tmp;
-
-      for (unsigned int cell = cells.first; cell < cells.second; ++cell)
-        {
-          phi_src.reinit(cell);
-          phi_dst.reinit(cell);
-
-          if (compressed_rw)
-            compressed_rw->read_dof_values(src, phi_src);
-          else
-            phi_src.read_dof_values(src);
-
-          if (do_weights_global == false)
-            apply_weights_local(phi_weights, phi_src, true);
-
-          fdm.apply_inverse(
-            cell,
-            ArrayView<VectorizedArrayType>(phi_dst.begin_dof_values(),
-                                           phi_dst.dofs_per_cell),
-            ArrayView<const VectorizedArrayType>(phi_src.begin_dof_values(),
-                                                 phi_src.dofs_per_cell),
-            tmp);
-
-          if (do_weights_global == false)
-            apply_weights_local(phi_weights, phi_dst, false);
-
-          if (compressed_rw)
-            compressed_rw->distribute_local_to_global(dst, phi_dst);
-          else
-            phi_dst.distribute_local_to_global(dst);
-        }
-    };
-
-    const auto operation_before_matrix_vector_product_with_weighting =
-      [&](const auto begin, const auto end) {
-        if (operation_before_matrix_vector_product)
-          operation_before_matrix_vector_product(begin, end);
-
-        if (do_weights_global &&
-            (weight_type == Restrictors::WeightingType::pre ||
-             weight_type == Restrictors::WeightingType::symm))
-          {
-            const auto src_scratch_ptr = src_scratch.begin();
-            const auto src_ptr         = src.begin();
-            const auto weights_ptr     = weights.begin();
-
-            DEAL_II_OPENMP_SIMD_PRAGMA
-            for (std::size_t i = begin; i < end; ++i)
-              src_scratch_ptr[i] = src_ptr[i] * weights_ptr[i];
-          }
-      };
-
-    const auto operation_after_matrix_vector_product_with_weighting =
-      [&](const auto begin, const auto end) {
-        if (do_weights_global &&
-            (weight_type == Restrictors::WeightingType::post ||
-             weight_type == Restrictors::WeightingType::symm))
-          {
-            const auto dst_ptr     = dst.begin();
-            const auto weights_ptr = weights.begin();
-
-            DEAL_II_OPENMP_SIMD_PRAGMA
-            for (std::size_t i = begin; i < end; ++i)
-              dst_ptr[i] *= weights_ptr[i];
-          }
-
-        if (operation_after_matrix_vector_product)
-          operation_after_matrix_vector_product(begin, end);
-      };
-
-
-    matrix_free.template cell_loop<VectorType, VectorType>(
-      cell_operation_normal,
-      dst,
-      src_scratch,
-      operation_before_matrix_vector_product_with_weighting,
-      operation_after_matrix_vector_product_with_weighting);
   }
 
   void
