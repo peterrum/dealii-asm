@@ -583,6 +583,7 @@ private:
     AlignedVector<VectorizedArrayType> dst_local;
     AlignedVector<VectorizedArrayType> weights_local;
 
+    // version 1) of cell operation: overlap=1 -> use dealii::FEEvaluation
     const auto cell_operation_normal = [&](const auto &matrix_free,
                                            auto &      dst,
                                            const auto &src,
@@ -624,6 +625,8 @@ private:
         }
     };
 
+    // version 2) of cell operation: overlap>1 -> use ConstraintInfo and
+    // work on own buffers
     const auto cell_operation_overlap =
       [&](const MatrixFree<dim, Number, VectorizedArrayType> &,
           VectorType &                                dst_ptr,
@@ -681,6 +684,7 @@ private:
           }
       };
 
+    // version 1) of pre operation: consistent partitioners
     const auto operation_before_matrix_vector_product_with_weighting =
       [&](const auto begin, const auto end) {
         if (operation_before_matrix_vector_product)
@@ -700,6 +704,39 @@ private:
           }
       };
 
+    // version 2) of pre operation: inconsistent partitioners -> copy src
+    const auto
+      operation_before_matrix_vector_product_with_weighting_and_copying =
+        [&](const auto begin, const auto end) {
+          if (operation_before_matrix_vector_product)
+            operation_before_matrix_vector_product(begin, end);
+
+          const auto src_scratch_ptr = this->src_.begin();
+          const auto src_ptr         = src.begin();
+          const auto dst_scratch_ptr = this->dst_.begin();
+          const auto weights_ptr     = weights.begin();
+
+          if (do_weights_global &&
+              (weight_type == Restrictors::WeightingType::pre ||
+               weight_type == Restrictors::WeightingType::symm))
+            {
+              DEAL_II_OPENMP_SIMD_PRAGMA
+              for (std::size_t i = begin; i < end; ++i)
+                src_scratch_ptr[i] = src_ptr[i] * weights_ptr[i];
+            }
+          else
+            {
+              DEAL_II_OPENMP_SIMD_PRAGMA
+              for (std::size_t i = begin; i < end; ++i)
+                src_scratch_ptr[i] = src_ptr[i];
+            }
+
+          DEAL_II_OPENMP_SIMD_PRAGMA
+          for (std::size_t i = begin; i < end; ++i)
+            dst_scratch_ptr[i] = 0.0; // note: zeroing
+        };
+
+    // version 1) of post operation: consistent partitioners
     const auto operation_after_matrix_vector_product_with_weighting =
       [&](const auto begin, const auto end) {
         if (do_weights_global &&
@@ -718,10 +755,38 @@ private:
           operation_after_matrix_vector_product(begin, end);
       };
 
+    // version 2) of post operation: inconsistent partitioners -> copy dst
+    const auto
+      operation_after_matrix_vector_product_with_weighting_and_copying =
+        [&](const auto begin, const auto end) {
+          const auto dst_scratch_ptr = this->dst_.begin();
+          const auto dst_ptr         = dst.begin();
+          const auto weights_ptr     = weights.begin();
+
+          if (do_weights_global &&
+              (weight_type == Restrictors::WeightingType::post ||
+               weight_type == Restrictors::WeightingType::symm))
+            {
+              DEAL_II_OPENMP_SIMD_PRAGMA
+              for (std::size_t i = begin; i < end; ++i)
+                dst_ptr[i] += dst_scratch_ptr[i] * weights_ptr[i]; // note: add
+            }
+          else
+            {
+              DEAL_II_OPENMP_SIMD_PRAGMA
+              for (std::size_t i = begin; i < end; ++i)
+                dst_ptr[i] += dst_scratch_ptr[i]; // note: add
+            }
+
+          if (operation_after_matrix_vector_product)
+            operation_after_matrix_vector_product(begin, end);
+        };
+
     if ((partitioner_for_fdm.get() ==
          matrix_free.get_vector_partitioner().get()) &&
         (partitioner_for_fdm.get() == src.get_partitioner().get()))
       {
+        // version 1) with overlap=1 -> use dealii::MatrixFree
         matrix_free.template cell_loop<VectorType, VectorType>(
           cell_operation_normal,
           dst,
@@ -731,6 +796,8 @@ private:
       }
     else if (partitioner_for_fdm.get() == src.get_partitioner().get())
       {
+        // version 2) with overlap>1 and consistent partitioner -> use
+        // own matrix-free infrastructure
         VectorDataExchange<Number> exchanger(partitioner_for_fdm);
 
         MFWorker<dim, Number, VectorizedArrayType, VectorType> worker(
@@ -751,59 +818,25 @@ private:
       }
     else
       {
-        if (operation_before_matrix_vector_product)
-          operation_before_matrix_vector_product(0, src.locally_owned_size());
+        // version 3) with overlap>1 and inconsistent partitioner -> use
+        // own matrix-free infrastructure and copy vectors on the fly
+        VectorDataExchange<Number> exchanger(partitioner_for_fdm);
 
-        // apply weights (optional) and copy vector
-        if (do_weights_global &&
-            (weight_type == Restrictors::WeightingType::pre ||
-             weight_type == Restrictors::WeightingType::symm))
-          {
-            DEAL_II_OPENMP_SIMD_PRAGMA
-            for (std::size_t i = 0; i < src.locally_owned_size(); ++i)
-              this->src_.local_element(i) =
-                weights.local_element(i) * src.local_element(i);
-          }
-        else
-          {
-            DEAL_II_OPENMP_SIMD_PRAGMA
-            for (std::size_t i = 0; i < src.locally_owned_size(); ++i)
-              this->src_.local_element(i) = src.local_element(i);
-          }
+        MFWorker<dim, Number, VectorizedArrayType, VectorType> worker(
+          matrix_free,
+          cell_loop_pre_list_index,
+          cell_loop_pre_list,
+          cell_loop_post_list_index,
+          cell_loop_post_list,
+          exchanger,
+          this->dst_,
+          this->src_,
+          cell_operation_overlap,
+          operation_before_matrix_vector_product_with_weighting_and_copying,
+          operation_after_matrix_vector_product_with_weighting_and_copying);
 
-        // update ghost values
-        src_.update_ghost_values();
-        dst_ = 0.0;
-
-        // loop over cells
-        cell_operation_overlap(matrix_free,
-                               dst_,
-                               src_,
-                               {0, matrix_free.n_cell_batches()});
-
-        // compress
-        src_.zero_out_ghost_values();
-        dst_.compress(VectorOperation::add);
-
-        // apply weights (optional) and copy vector back
-        if (do_weights_global &&
-            (weight_type == Restrictors::WeightingType::post ||
-             weight_type == Restrictors::WeightingType::symm))
-          {
-            DEAL_II_OPENMP_SIMD_PRAGMA
-            for (std::size_t i = 0; i < dst.locally_owned_size(); ++i)
-              dst.local_element(i) =
-                weights.local_element(i) * dst_.local_element(i);
-          }
-        else
-          {
-            DEAL_II_OPENMP_SIMD_PRAGMA
-            for (std::size_t i = 0; i < dst.locally_owned_size(); ++i)
-              dst.local_element(i) += dst_.local_element(i);
-          }
-
-        if (operation_after_matrix_vector_product)
-          operation_after_matrix_vector_product(0, src.locally_owned_size());
+        MFRunner runner;
+        runner.loop(worker);
       }
   }
 
