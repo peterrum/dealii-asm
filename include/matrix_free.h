@@ -521,6 +521,7 @@ public:
         // use general version
         vmult_internal_overlap(dst,
                                src,
+                               get_scratch_src_vector(src),
                                operation_before_matrix_vector_product,
                                {});
       }
@@ -553,6 +554,7 @@ public:
       {
         vmult_internal_overlap(dst,
                                src,
+                               get_scratch_src_vector(src),
                                operation_before_matrix_vector_product,
                                operation_after_matrix_vector_product);
       }
@@ -585,6 +587,7 @@ public:
       {
         vmult_internal_overlap(dst,
                                src,
+                               get_scratch_src_vector(src),
                                operation_before_matrix_vector_product,
                                operation_after_matrix_vector_product);
       }
@@ -614,6 +617,7 @@ private:
   vmult_internal_overlap(
     VectorType &      dst,
     const VectorType &src,
+    VectorType &      src_scratch,
     const std::function<void(const unsigned int, const unsigned int)>
       &operation_before_matrix_vector_product,
     const std::function<void(const unsigned int, const unsigned int)>
@@ -685,6 +689,8 @@ private:
 
     if (partitioner_for_fdm.get() == src.get_partitioner().get())
       {
+        (void)src_scratch;
+
         (void)matrix_free;
         (void)dst;
         (void)src;
