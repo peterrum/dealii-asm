@@ -623,7 +623,7 @@ private:
         }
     };
 
-    const auto cell_operation_overalap =
+    const auto cell_operation_overlap =
       [&](const MatrixFree<dim, Number, VectorizedArrayType> &,
           VectorType &                                dst_ptr,
           const VectorType &                          src_ptr,
@@ -741,7 +741,7 @@ private:
           exchanger,
           dst,
           src_scratch,
-          cell_operation_overalap,
+          cell_operation_overlap,
           operation_before_matrix_vector_product_with_weighting,
           operation_after_matrix_vector_product_with_weighting);
 
@@ -771,10 +771,10 @@ private:
         dst_ = 0.0;
 
         // loop over cells
-        cell_operation_overalap(matrix_free,
-                                dst_,
-                                src_,
-                                {0, matrix_free.n_cell_batches()});
+        cell_operation_overlap(matrix_free,
+                               dst_,
+                               src_,
+                               {0, matrix_free.n_cell_batches()});
 
         // compress
         src_.zero_out_ghost_values();
