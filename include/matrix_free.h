@@ -765,7 +765,11 @@ private:
                 weights.local_element(i) * src.local_element(i);
           }
         else
-          this->src_.copy_locally_owned_data_from(src);
+          {
+            DEAL_II_OPENMP_SIMD_PRAGMA
+            for (std::size_t i = 0; i < src.locally_owned_size(); ++i)
+              this->src_.local_element(i) = src.local_element(i);
+          }
 
         // update ghost values
         src_.update_ghost_values();
