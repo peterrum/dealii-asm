@@ -628,7 +628,7 @@ private:
     AlignedVector<VectorizedArrayType> dst_local;
     AlignedVector<VectorizedArrayType> weights_local;
 
-    const auto cell_operation =
+    const auto cell_operation_overalap =
       [&](const MatrixFree<dim, Number, VectorizedArrayType> &,
           VectorType &                                dst_ptr,
           const VectorType &                          src_ptr,
@@ -735,7 +735,7 @@ private:
           exchanger,
           dst,
           src_scratch,
-          cell_operation,
+          cell_operation_overalap,
           operation_before_matrix_vector_product_with_weighting,
           operation_after_matrix_vector_product_with_weighting);
 
@@ -765,10 +765,10 @@ private:
         dst_ = 0.0;
 
         // loop over cells
-        cell_operation(matrix_free,
-                       dst_,
-                       src_,
-                       {0, matrix_free.n_cell_batches()});
+        cell_operation_overalap(matrix_free,
+                                dst_,
+                                src_,
+                                {0, matrix_free.n_cell_batches()});
 
         // compress
         src_.zero_out_ghost_values();
@@ -806,10 +806,10 @@ private:
     const std::function<void(const unsigned int, const unsigned int)>
       &operation_after_matrix_vector_product) const
   {
-    const auto cell_operation = [&](const auto &matrix_free,
-                                    auto &      dst,
-                                    const auto &src,
-                                    const auto  cells) {
+    const auto cell_operation_normal = [&](const auto &matrix_free,
+                                           auto &      dst,
+                                           const auto &src,
+                                           const auto  cells) {
       FECellIntegrator phi_src(matrix_free);
       FECellIntegrator phi_dst(matrix_free);
       FECellIntegrator phi_weights(matrix_free);
@@ -886,7 +886,7 @@ private:
 
 
     matrix_free.template cell_loop<VectorType, VectorType>(
-      cell_operation,
+      cell_operation_normal,
       dst,
       src_scratch,
       operation_before_matrix_vector_product_with_weighting,
