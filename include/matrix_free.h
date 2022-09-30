@@ -756,47 +756,48 @@ private:
     const std::function<void(const unsigned int, const unsigned int)>
       &operation_after_matrix_vector_product) const
   {
-    matrix_free.template cell_loop<VectorType, VectorType>(
-      [&](
-        const auto &matrix_free, auto &dst, const auto &src, const auto cells) {
-        FECellIntegrator phi_src(matrix_free);
-        FECellIntegrator phi_dst(matrix_free);
-        FECellIntegrator phi_weights(matrix_free);
+    const auto cell_operation = [&](const auto &matrix_free,
+                                    auto &      dst,
+                                    const auto &src,
+                                    const auto  cells) {
+      FECellIntegrator phi_src(matrix_free);
+      FECellIntegrator phi_dst(matrix_free);
+      FECellIntegrator phi_weights(matrix_free);
 
-        AlignedVector<VectorizedArrayType> tmp;
+      AlignedVector<VectorizedArrayType> tmp;
 
-        for (unsigned int cell = cells.first; cell < cells.second; ++cell)
-          {
-            phi_src.reinit(cell);
-            phi_dst.reinit(cell);
+      for (unsigned int cell = cells.first; cell < cells.second; ++cell)
+        {
+          phi_src.reinit(cell);
+          phi_dst.reinit(cell);
 
-            if (compressed_rw)
-              compressed_rw->read_dof_values(src, phi_src);
-            else
-              phi_src.read_dof_values(src);
+          if (compressed_rw)
+            compressed_rw->read_dof_values(src, phi_src);
+          else
+            phi_src.read_dof_values(src);
 
-            if (do_weights_global == false)
-              apply_weights_local(phi_weights, phi_src, true);
+          if (do_weights_global == false)
+            apply_weights_local(phi_weights, phi_src, true);
 
-            fdm.apply_inverse(
-              cell,
-              ArrayView<VectorizedArrayType>(phi_dst.begin_dof_values(),
-                                             phi_dst.dofs_per_cell),
-              ArrayView<const VectorizedArrayType>(phi_src.begin_dof_values(),
-                                                   phi_src.dofs_per_cell),
-              tmp);
+          fdm.apply_inverse(
+            cell,
+            ArrayView<VectorizedArrayType>(phi_dst.begin_dof_values(),
+                                           phi_dst.dofs_per_cell),
+            ArrayView<const VectorizedArrayType>(phi_src.begin_dof_values(),
+                                                 phi_src.dofs_per_cell),
+            tmp);
 
-            if (do_weights_global == false)
-              apply_weights_local(phi_weights, phi_dst, false);
+          if (do_weights_global == false)
+            apply_weights_local(phi_weights, phi_dst, false);
 
-            if (compressed_rw)
-              compressed_rw->distribute_local_to_global(dst, phi_dst);
-            else
-              phi_dst.distribute_local_to_global(dst);
-          }
-      },
-      dst,
-      src_scratch,
+          if (compressed_rw)
+            compressed_rw->distribute_local_to_global(dst, phi_dst);
+          else
+            phi_dst.distribute_local_to_global(dst);
+        }
+    };
+
+    const auto operation_before_matrix_vector_product_with_weighting =
       [&](const auto begin, const auto end) {
         if (operation_before_matrix_vector_product)
           operation_before_matrix_vector_product(begin, end);
@@ -813,7 +814,9 @@ private:
             for (std::size_t i = begin; i < end; ++i)
               src_scratch_ptr[i] = src_ptr[i] * weights_ptr[i];
           }
-      },
+      };
+
+    const auto operation_after_matrix_vector_product_with_weighting =
       [&](const auto begin, const auto end) {
         if (do_weights_global &&
             (weight_type == Restrictors::WeightingType::post ||
@@ -829,7 +832,15 @@ private:
 
         if (operation_after_matrix_vector_product)
           operation_after_matrix_vector_product(begin, end);
-      });
+      };
+
+
+    matrix_free.template cell_loop<VectorType, VectorType>(
+      cell_operation,
+      dst,
+      src_scratch,
+      operation_before_matrix_vector_product_with_weighting,
+      operation_after_matrix_vector_product_with_weighting);
   }
 
   void
