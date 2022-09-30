@@ -381,29 +381,6 @@ public:
                                 vector_partitioner->locally_owned_size());
     }
 
-    if (false)
-      {
-        VectorType src, dst;
-
-        VectorDataExchange<Number> exchanger(partitioner_for_fdm);
-
-        MFWorker<dim, Number, VectorizedArrayType, VectorType> worker(
-          matrix_free,
-          cell_loop_pre_list_index,
-          cell_loop_pre_list,
-          cell_loop_post_list_index,
-          cell_loop_post_list,
-          exchanger,
-          dst,
-          src,
-          [](const auto &, auto &, const auto &, const auto) {},
-          [](const auto, const auto) {},
-          [](const auto, const auto) {});
-
-        MFRunner runner;
-        runner.loop(worker);
-      }
-
     {
       AlignedVector<VectorizedArrayType> dst__(
         Utilities::pow(fe_degree + 2 * n_overlap - 1, dim));
@@ -790,7 +767,8 @@ private:
       {
         // version 2) with overlap>1 and consistent partitioner -> use
         // own matrix-free infrastructure
-        VectorDataExchange<Number> exchanger(partitioner_for_fdm);
+        VectorDataExchange<Number> exchanger_dst(partitioner_for_fdm);
+        VectorDataExchange<Number> exchanger_src(partitioner_for_fdm);
 
         MFWorker<dim, Number, VectorizedArrayType, VectorType> worker(
           matrix_free,
@@ -798,7 +776,8 @@ private:
           cell_loop_pre_list,
           cell_loop_post_list_index,
           cell_loop_post_list,
-          exchanger,
+          exchanger_dst,
+          exchanger_src,
           dst,
           src_scratch,
           cell_operation_overlap,
@@ -812,7 +791,8 @@ private:
       {
         // version 3) with overlap>1 and inconsistent partitioner -> use
         // own matrix-free infrastructure and copy vectors on the fly
-        VectorDataExchange<Number> exchanger(partitioner_for_fdm);
+        VectorDataExchange<Number> exchanger_dst(partitioner_for_fdm);
+        VectorDataExchange<Number> exchanger_src(partitioner_for_fdm);
 
         MFWorker<dim, Number, VectorizedArrayType, VectorType> worker(
           matrix_free,
@@ -820,7 +800,8 @@ private:
           cell_loop_pre_list,
           cell_loop_post_list_index,
           cell_loop_post_list,
-          exchanger,
+          exchanger_dst,
+          exchanger_src,
           this->dst_,
           this->src_,
           cell_operation_overlap,

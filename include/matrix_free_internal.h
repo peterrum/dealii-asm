@@ -123,7 +123,8 @@ public:
     const std::vector<unsigned int> &cell_loop_post_list_index,
     const std::vector<std::pair<unsigned int, unsigned int>>
       &                               cell_loop_post_list,
-    const VectorDataExchange<Number> &exchanger,
+    const VectorDataExchange<Number> &exchanger_dst,
+    const VectorDataExchange<Number> &exchanger_src,
     VectorType &                      dst,
     const VectorType &                src,
     const std::function<
@@ -139,7 +140,8 @@ public:
     , cell_loop_pre_list(cell_loop_pre_list)
     , cell_loop_post_list_index(cell_loop_post_list_index)
     , cell_loop_post_list(cell_loop_post_list)
-    , exchanger(exchanger)
+    , exchanger_dst(exchanger_dst)
+    , exchanger_src(exchanger_src)
     , dst(dst)
     , src(src)
     , cell_function(cell_function)
@@ -157,26 +159,26 @@ public:
   virtual void
   vector_update_ghosts_start()
   {
-    exchanger.update_ghost_values_start(src);
+    exchanger_src.update_ghost_values_start(src);
   }
 
   virtual void
   vector_update_ghosts_finish()
   {
-    exchanger.update_ghost_values_finish(src);
+    exchanger_src.update_ghost_values_finish(src);
   }
 
   virtual void
   vector_compress_start()
   {
-    exchanger.compress_start(dst);
+    exchanger_dst.compress_start(dst);
   }
 
   virtual void
   vector_compress_finish()
   {
-    exchanger.compress_finish(dst);
-    exchanger.zero_out_ghost_values(src);
+    exchanger_dst.compress_finish(dst);
+    exchanger_src.zero_out_ghost_values(src);
   }
 
   virtual void
@@ -257,7 +259,8 @@ private:
   const std::vector<unsigned int> &cell_loop_post_list_index;
   const std::vector<std::pair<unsigned int, unsigned int>> &cell_loop_post_list;
 
-  const VectorDataExchange<Number> &exchanger;
+  const VectorDataExchange<Number> &exchanger_dst;
+  const VectorDataExchange<Number> &exchanger_src;
   VectorType &                      dst;
   const VectorType &                src;
   const std::function<void(const MatrixFree<dim, Number, VectorizedArrayType> &,

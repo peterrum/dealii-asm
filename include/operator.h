@@ -1359,7 +1359,8 @@ private:
             const std::function<void(unsigned int, unsigned int)>
               &operation_after_loop) const
   {
-    VectorDataExchange<Number> exchanger(embedded_partitioner);
+    VectorDataExchange<Number> exchanger_dst(embedded_partitioner);
+    VectorDataExchange<Number> exchanger_src(embedded_partitioner);
 
     MFWorker<dim, Number, VectorizedArrayType, VectorType> worker(
       matrix_free,
@@ -1367,7 +1368,8 @@ private:
       matrix_free.get_dof_info().cell_loop_pre_list,
       matrix_free.get_dof_info().cell_loop_post_list_index,
       matrix_free.get_dof_info().cell_loop_post_list,
-      exchanger,
+      exchanger_dst,
+      exchanger_src,
       dst,
       src,
       cell_function,
