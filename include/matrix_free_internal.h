@@ -194,12 +194,19 @@ public:
   {
     if (operation_before_loop)
       {
-        AssertIndexRange(range_index, cell_loop_pre_list_index.size() - 1);
-        for (unsigned int id = cell_loop_pre_list_index[range_index];
-             id != cell_loop_pre_list_index[range_index + 1];
-             ++id)
-          operation_before_loop(cell_loop_pre_list[id].first,
-                                cell_loop_pre_list[id].second);
+        if (range_index == numbers::invalid_unsigned_int)
+          {
+            operation_before_loop(0, src.locally_owned_size());
+          }
+        else
+          {
+            AssertIndexRange(range_index, cell_loop_pre_list_index.size() - 1);
+            for (unsigned int id = cell_loop_pre_list_index[range_index];
+                 id != cell_loop_pre_list_index[range_index + 1];
+                 ++id)
+              operation_before_loop(cell_loop_pre_list[id].first,
+                                    cell_loop_pre_list[id].second);
+          }
       }
   }
 
@@ -217,12 +224,19 @@ public:
           apply_operation_to_constrained_dofs(
             matrix_free.get_constrained_dofs(), src, dst);
 
-        AssertIndexRange(range_index, cell_loop_post_list_index.size() - 1);
-        for (unsigned int id = cell_loop_post_list_index[range_index];
-             id != cell_loop_post_list_index[range_index + 1];
-             ++id)
-          operation_after_loop(cell_loop_post_list[id].first,
-                               cell_loop_post_list[id].second);
+        if (range_index == numbers::invalid_unsigned_int)
+          {
+            operation_after_loop(0, src.locally_owned_size());
+          }
+        else
+          {
+            AssertIndexRange(range_index, cell_loop_post_list_index.size() - 1);
+            for (unsigned int id = cell_loop_post_list_index[range_index];
+                 id != cell_loop_post_list_index[range_index + 1];
+                 ++id)
+              operation_after_loop(cell_loop_post_list[id].first,
+                                   cell_loop_post_list[id].second);
+          }
       }
   }
 
@@ -282,11 +296,16 @@ struct MFRunner
   loop(WorkerType &worker) const
   {
     const bool overlap_communication_and_computation = false;
+    const bool use_pre_post                          = true;
 
     const auto &partition_row_index = worker.get_partition_row_index();
 
-    worker.cell_loop_pre_range(
-      partition_row_index[partition_row_index.size() - 2]);
+    if (use_pre_post)
+      worker.cell_loop_pre_range(
+        partition_row_index[partition_row_index.size() - 2]);
+    else
+      worker.cell_loop_pre_range(numbers::invalid_unsigned_int);
+
     worker.vector_update_ghosts_start();
 
     if (overlap_communication_and_computation == false)
@@ -301,10 +320,15 @@ struct MFRunner
              i < partition_row_index[part + 1];
              ++i)
           {
-            worker.cell_loop_pre_range(i);
+            if (use_pre_post)
+              worker.cell_loop_pre_range(i);
+
             worker.zero_dst_vector_range(i);
+
             worker.cell(i);
-            worker.cell_loop_post_range(i);
+
+            if (use_pre_post)
+              worker.cell_loop_post_range(i);
           }
 
         if (overlap_communication_and_computation && (part == 1))
@@ -314,7 +338,11 @@ struct MFRunner
     if (overlap_communication_and_computation == false)
       worker.vector_compress_start();
     worker.vector_compress_finish();
-    worker.cell_loop_post_range(
-      partition_row_index[partition_row_index.size() - 2]);
+
+    if (use_pre_post)
+      worker.cell_loop_post_range(
+        partition_row_index[partition_row_index.size() - 2]);
+    else
+      worker.cell_loop_post_range(numbers::invalid_unsigned_int);
   }
 };
