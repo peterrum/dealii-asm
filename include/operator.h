@@ -2,6 +2,7 @@
 
 #include <deal.II/base/conditional_ostream.h>
 
+#include <deal.II/dofs/dof_renumbering.h>
 #include <deal.II/dofs/dof_tools.h>
 
 #include <deal.II/lac/trilinos_precondition.h>
@@ -276,10 +277,30 @@ public:
   {
     dof_handler_internal.distribute_dofs(fe);
 
-    DoFTools::make_zero_boundary_constraints(dof_handler_internal,
-                                             1,
-                                             constraints_internal);
-    constraints_internal.close();
+    const auto setup_constraints = [&]() {
+      constraints_internal.clear();
+      DoFTools::make_zero_boundary_constraints(dof_handler_internal,
+                                               1,
+                                               constraints_internal);
+      constraints_internal.close();
+    };
+
+    setup_constraints();
+
+    if (ad.compress_indices) // TODO: should decouple renumbering and
+                             // compression?
+      {
+        // note: we need to renumber for double/float here the same way
+        // since else the transfer between active and finest level will
+        // not work (different numbering due to different number of lanes)
+        typename MatrixFree<dim, float, VectorizedArray<float>>::AdditionalData
+          additional_data;
+
+        DoFRenumbering::matrix_free_data_locality(dof_handler_internal,
+                                                  constraints_internal,
+                                                  additional_data);
+        setup_constraints();
+      }
 
     matrix_free_internal.reinit(mapping,
                                 dof_handler_internal,
@@ -295,9 +316,10 @@ public:
     pcout << "  - compress indices: "
           << (ad.compress_indices ? "true" : "false") << std::endl;
     pcout << "  - mapping type:     " << ad.mapping_type << std::endl;
-    pcout << std::endl;
 
     setup_mapping_and_indices(ad.compress_indices, ad.mapping_type);
+
+    pcout << std::endl;
   }
 
   LaplaceOperatorMatrixFree(
@@ -329,9 +351,14 @@ public:
   {
     if (compress_indices)
       {
-        auto compressed_rw = std::make_shared<ConstraintInfoReduced>();
-        compressed_rw->initialize(matrix_free);
-        this->compressed_rw = compressed_rw;
+        auto       compressed_rw = std::make_shared<ConstraintInfoReduced>();
+        const bool flag          = compressed_rw->initialize(matrix_free);
+
+        if (flag)
+          this->compressed_rw = compressed_rw;
+
+        pcout << "  - compress indices: " << (flag ? "success" : "failure")
+              << std::endl;
       }
 
 
