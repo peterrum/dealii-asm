@@ -475,16 +475,15 @@ public:
   void
   vmult(VectorType &dst, const VectorType &src) const
   {
-    vmult_internal(dst,
-                   src,
-                   get_scratch_src_vector(src),
-                   [&](const auto start_range, const auto end_range) {
-                     if (end_range > start_range)
-                       std::memset(dst.begin() + start_range,
-                                   0,
-                                   sizeof(Number) * (end_range - start_range));
-                   },
-                   {});
+    const auto pre_operation = [&](const auto start_range,
+                                   const auto end_range) {
+      if (end_range > start_range)
+        std::memset(dst.begin() + start_range,
+                    0,
+                    sizeof(Number) * (end_range - start_range));
+    };
+
+    vmult_internal(dst, src, get_scratch_src_vector(src), pre_operation, {});
   }
 
   /**
