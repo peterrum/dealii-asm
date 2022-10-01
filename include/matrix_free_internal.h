@@ -323,7 +323,7 @@ struct MFRunner
             if (use_pre_post)
               worker.cell_loop_pre_range(i);
 
-            worker.zero_dst_vector_range(i);
+            worker.zero_dst_vector_range(i); // note: not used
 
             worker.cell(i);
 
