@@ -334,9 +334,10 @@ public:
     pcout << "  - compress indices: "
           << (ad.compress_indices ? "true" : "false") << std::endl;
     pcout << "  - mapping type:     " << ad.mapping_type << std::endl;
-    pcout << std::endl;
 
     setup_mapping_and_indices(ad.compress_indices, ad.mapping_type);
+
+    pcout << std::endl;
   }
 
   virtual bool
