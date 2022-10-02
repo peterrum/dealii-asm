@@ -1,7 +1,17 @@
 #pragma once
 
+#include "matrix_free.h"
 #include "multigrid.h"
 #include "preconditioners.h"
+
+template <typename OperatorType>
+std::shared_ptr<
+  const ASPoissonPreconditioner<OperatorType::dimension,
+                                typename OperatorType::value_type,
+                                typename OperatorType::vectorized_array_type,
+                                -1>>
+create_fdm_preconditioner(const OperatorType &              op,
+                          const boost::property_tree::ptree params);
 
 template <typename OperatorType>
 std::shared_ptr<const PreconditionerBase<typename OperatorType::vector_type>>

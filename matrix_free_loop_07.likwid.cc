@@ -143,7 +143,7 @@ test(const Parameters params_in)
                props[3] == "g" ? "global" :
                                  (props[3] == "l" ? "local" : "compressed"));
 
-  const auto precondition = create_system_preconditioner(op, params);
+  const auto precondition = create_fdm_preconditioner(op, params);
 
   VectorType src, dst;
 
