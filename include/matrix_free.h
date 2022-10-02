@@ -487,6 +487,23 @@ public:
   }
 
   /**
+   * General matrix-vector product.
+   */
+  void
+  vmult(VectorType &dst, /*const*/ VectorType &src) const
+  {
+    const auto pre_operation = [&](const auto start_range,
+                                   const auto end_range) {
+      if (end_range > start_range)
+        std::memset(dst.begin() + start_range,
+                    0,
+                    sizeof(Number) * (end_range - start_range));
+    };
+
+    vmult_internal(dst, src, get_scratch_src_vector(src), pre_operation, {});
+  }
+
+  /**
    * Matrix-vector product with pre- and post-operations to be used
    * by PreconditionRelaxation and PreconditionChebyshev.
    */
@@ -507,8 +524,8 @@ public:
    * by PreconditionRelaxation and PreconditionChebyshev.
    */
   virtual void
-  vmult(VectorType &dst,
-        VectorType &src,
+  vmult(VectorType &          dst,
+        /*const*/ VectorType &src,
         const std::function<void(const unsigned int, const unsigned int)>
           &pre_operation,
         const std::function<void(const unsigned int, const unsigned int)>
