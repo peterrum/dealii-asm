@@ -291,16 +291,23 @@ private:
 
 struct MFRunner
 {
+  MFRunner(const bool overlap_pre_post                      = true,
+           const bool overlap_communication_and_computation = false)
+    : overlap_pre_post(overlap_pre_post)
+    , overlap_communication_and_computation(
+        overlap_communication_and_computation)
+  {
+    AssertThrow(overlap_communication_and_computation == false,
+                ExcNotImplemented());
+  }
+
   template <typename WorkerType>
   void
   loop(WorkerType &worker) const
   {
-    const bool overlap_communication_and_computation = false;
-    const bool use_pre_post                          = true;
-
     const auto &partition_row_index = worker.get_partition_row_index();
 
-    if (use_pre_post)
+    if (overlap_pre_post)
       worker.cell_loop_pre_range(
         partition_row_index[partition_row_index.size() - 2]);
     else
@@ -320,14 +327,14 @@ struct MFRunner
              i < partition_row_index[part + 1];
              ++i)
           {
-            if (use_pre_post)
+            if (overlap_pre_post)
               worker.cell_loop_pre_range(i);
 
             worker.zero_dst_vector_range(i); // note: not used
 
             worker.cell(i);
 
-            if (use_pre_post)
+            if (overlap_pre_post)
               worker.cell_loop_post_range(i);
           }
 
@@ -339,10 +346,14 @@ struct MFRunner
       worker.vector_compress_start();
     worker.vector_compress_finish();
 
-    if (use_pre_post)
+    if (overlap_pre_post)
       worker.cell_loop_post_range(
         partition_row_index[partition_row_index.size() - 2]);
     else
       worker.cell_loop_post_range(numbers::invalid_unsigned_int);
   }
+
+private:
+  const bool overlap_pre_post;
+  const bool overlap_communication_and_computation;
 };

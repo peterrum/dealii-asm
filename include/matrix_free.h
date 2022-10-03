@@ -38,12 +38,14 @@ public:
     const Restrictors::WeightingType                    weight_type =
       Restrictors::WeightingType::post,
     const bool        compress_indices    = true,
-    const std::string weight_local_global = "global")
+    const std::string weight_local_global = "global",
+    const bool        overlap_pre_post    = true)
     : matrix_free(matrix_free)
     , fe_degree(matrix_free.get_dof_handler().get_fe().tensor_degree())
     , n_overlap(n_overlap)
     , weight_type(weight_type)
     , do_weights_global(weight_local_global == "global")
+    , overlap_pre_post(overlap_pre_post)
   {
     AssertThrow((n_rows_1d == -1) || (static_cast<unsigned int>(n_rows_1d) ==
                                       fe_1D.degree + 2 * n_overlap - 1),
@@ -771,12 +773,36 @@ private:
         (partitioner_fdm.get() == src.get_partitioner().get()))
       {
         // version 1) with overlap=1 -> use dealii::MatrixFree
-        matrix_free.template cell_loop<VectorType, VectorType>(
-          cell_operation_normal,
-          dst,
-          src_scratch,
-          pre_operation_with_weighting,
-          post_operation_with_weighting);
+        if (overlap_pre_post)
+          {
+            matrix_free.template cell_loop<VectorType, VectorType>(
+              cell_operation_normal,
+              dst,
+              src_scratch,
+              pre_operation_with_weighting,
+              post_operation_with_weighting);
+          }
+        else
+          {
+            const unsigned int chunk_size_zero_vector =
+              internal::MatrixFreeFunctions::DoFInfo::chunk_size_zero_vector;
+
+            for (unsigned int i = 0; i < src.locally_owned_size();
+                 i += chunk_size_zero_vector)
+              pre_operation_with_weighting(i,
+                                           std::min(i + chunk_size_zero_vector,
+                                                    src.locally_owned_size()));
+
+            matrix_free.template cell_loop<VectorType, VectorType>(
+              cell_operation_normal, dst, src_scratch);
+
+
+            for (unsigned int i = 0; i < src.locally_owned_size();
+                 i += chunk_size_zero_vector)
+              post_operation_with_weighting(i,
+                                            std::min(i + chunk_size_zero_vector,
+                                                     src.locally_owned_size()));
+          }
       }
     else if (partitioner_fdm.get() == src.get_partitioner().get())
       {
@@ -799,7 +825,7 @@ private:
           pre_operation_with_weighting,
           post_operation_with_weighting);
 
-        MFRunner runner;
+        MFRunner runner(overlap_pre_post);
         runner.loop(worker);
       }
     else
@@ -823,7 +849,7 @@ private:
           pre_operation_with_copying_and_weighting,
           post_operation_with_weighting_and_copying);
 
-        MFRunner runner;
+        MFRunner runner(overlap_pre_post);
         runner.loop(worker);
       }
   }
@@ -908,6 +934,7 @@ private:
   const unsigned int                                  n_overlap;
   const Restrictors::WeightingType                    weight_type;
   const bool                                          do_weights_global;
+  const bool                                          overlap_pre_post;
 
   std::shared_ptr<const Utilities::MPI::Partitioner> partitioner_fdm;
 
