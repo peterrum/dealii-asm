@@ -59,11 +59,6 @@ public:
                              Utilities::MPI::this_mpi_process(
                                dof_handler.get_communicator()) == 0);
 
-    if (element_centric == false)
-      {
-        AssertThrow(weight_local_global != "compressed", ExcNotImplemented());
-      }
-
     // set up ConstraintInfo
     // ... allocate memory
     constraint_info.reinit(matrix_free.n_physical_cells());
@@ -511,11 +506,17 @@ public:
       }
     else
       {
+        const bool actually_use_compression =
+          (weight_local_global == "compressed" && fe_1D.degree >= 2);
         const bool actually_use_dg = (weight_local_global == "dg");
 
-        if (actually_use_dg)
+        if (actually_use_compression || actually_use_dg)
           {
-            weights_dg.reinit(matrix_free.n_cell_batches(), patch_size);
+            if (actually_use_compression)
+              weights_compressed_q2.resize(matrix_free.n_cell_batches());
+
+            if (actually_use_dg)
+              weights_dg.reinit(matrix_free.n_cell_batches(), patch_size);
 
             AlignedVector<VectorizedArrayType> weights_local;
             weights_local.resize_fast(patch_size);
@@ -533,8 +534,25 @@ public:
                                                      weights_local.size(),
                                                      true);
 
-                for (unsigned int i = 0; i < patch_size; ++i)
-                  weights_dg[cell][i] = weights_local[i];
+                if (actually_use_compression)
+                  {
+                    const bool success = dealii::internal::
+                      compute_weights_fe_q_dofs_by_entity_shifted<
+                        dim,
+                        -1,
+                        VectorizedArrayType>(
+                        weights_local.begin(),
+                        1,
+                        patch_size_1d,
+                        weights_compressed_q2[cell].begin());
+                    AssertThrow(success, ExcInternalError());
+                  }
+
+                if (actually_use_dg)
+                  {
+                    for (unsigned int i = 0; i < patch_size; ++i)
+                      weights_dg[cell][i] = weights_local[i];
+                  }
               }
           }
       }
@@ -1003,7 +1021,22 @@ private:
                       AlignedVector<VectorizedArrayType> &data,
                       const bool                          first_call) const
   {
-    if (weights_dg.size(0) > 0)
+    if (weights_compressed_q2.size() > 0)
+      {
+        if (((first_call == true) &&
+             (weight_type == Restrictors::WeightingType::symm ||
+              weight_type == Restrictors::WeightingType::pre)) ||
+            ((first_call == false) &&
+             (weight_type == Restrictors::WeightingType::symm ||
+              weight_type == Restrictors::WeightingType::post)))
+          internal::
+            weight_fe_q_dofs_by_entity_shifted<dim, -1, VectorizedArrayType>(
+              &weights_compressed_q2[cell][0],
+              1 /* TODO*/,
+              patch_size_1d,
+              data.begin());
+      }
+    else if (weights_dg.size(0) > 0)
       {
         if (((first_call == true) &&
              (weight_type == Restrictors::WeightingType::symm ||
