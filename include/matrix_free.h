@@ -1,17 +1,20 @@
 #pragma once
 
+#include <deal.II/lac/tensor_product_matrix.h>
+
 #include <deal.II/matrix_free/constraint_info.h>
 #include <deal.II/matrix_free/fe_evaluation.h>
 #include <deal.II/matrix_free/matrix_free.h>
 #include <deal.II/matrix_free/tools.h>
 #include <deal.II/matrix_free/vector_access_internal.h>
 
+#include <deal.II/numerics/tensor_product_matrix_creator.h>
+
 #include "dof_tools.h"
 #include "grid_tools.h"
 #include "matrix_free_internal.h"
 #include "preconditioners.h"
 #include "restrictors.h"
-#include "tensor_product_matrix.h"
 #include "vector_access_reduced.h"
 
 template <int dim,
@@ -227,9 +230,11 @@ public:
                                                  local_dofs,
                                                  partitioner_fdm);
 
-                const auto [Ms_scalar, Ks_scalar] =
+                const auto [Ms_scalar, Ks_scalar] = TensorProductMatrixCreator::
                   create_laplace_tensor_product_matrix<dim, Number>(
                     cell_iterator,
+                    {1},
+                    {2},
                     fe_1D,
                     quadrature_1D,
                     harmonic_patch_extend[cell_iterator->active_cell_index()],
