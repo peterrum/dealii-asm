@@ -21,14 +21,17 @@ namespace Restrictors
 
     struct AdditionalData
     {
-      AdditionalData(const unsigned int n_overlap      = 1,
-                     WeightingType      weighting_type = WeightingType::none)
+      AdditionalData(const unsigned int  n_overlap      = 1,
+                     const WeightingType weighting_type = WeightingType::none,
+                     const std::string   type           = "element")
         : n_overlap(n_overlap)
         , weighting_type(weighting_type)
+        , type(type)
       {}
 
       unsigned int  n_overlap;
       WeightingType weighting_type;
+      std::string   type;
     };
 
     ElementCenteredRestrictor() = default;
@@ -54,7 +57,7 @@ namespace Restrictors
                        dof_handler.get_fe().tensor_degree() + 2);
 
       // 1) compute indices
-      if (true)
+      if (additional_data.type == "element")
         {
           this->indices.resize(
             dof_handler.get_triangulation().n_active_cells());
@@ -71,7 +74,7 @@ namespace Restrictors
                     dof_handler, cells, additional_data.n_overlap);
               }
         }
-      else
+      else if (additional_data.type == "vertex")
         {
           this->indices.clear();
 
@@ -124,7 +127,11 @@ namespace Restrictors
               const auto &vertex_to_entities = vertices_to_entities[i];
 
               if (vertex_to_entities[dim - 1].size() == 0)
-                continue;
+                continue; // vertex is not associated to a patch
+
+              if (vertex_to_entities[dim - 1].size() !=
+                  dealii::Utilities::pow(2, dim))
+                continue; // patch is not complete
 
               std::set<unsigned int> ranks;
 
@@ -230,6 +237,10 @@ namespace Restrictors
               if (indices_all.size() > 0)
                 this->indices.push_back(indices_all);
             }
+        }
+      else
+        {
+          AssertThrow(false, dealii::ExcNotImplemented());
         }
 
       // 2) create a partitioner compatible with the indices
