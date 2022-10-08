@@ -265,5 +265,63 @@ namespace dealii
       return cells;
     }
 
+    template <int dim>
+    std::array<typename Triangulation<dim>::cell_iterator,
+               Utilities::pow(2, dim)>
+    extract_vertex_patch_cells(
+      const typename Triangulation<dim>::cell_iterator &cell)
+    {
+      const auto &tria = cell->get_triangulation();
+
+      std::array<typename Triangulation<dim>::cell_iterator,
+                 Utilities::pow(2, dim)>
+        cells;
+      cells.fill(tria.end());
+
+      for (unsigned int k = 0, c = 0; k < (dim == 3 ? 2 : 1); ++k)
+        for (unsigned int j = 0; j < (dim >= 2 ? 2 : 1); ++j)
+          for (unsigned int i = 0; i < 2; ++i, ++c)
+            {
+              auto temp = cell;
+
+              if (i == 1)
+                {
+                  unsigned int f = 1;
+
+                  if ((temp->at_boundary(f) == false) ||
+                      temp->has_periodic_neighbor(f))
+                    temp = temp->neighbor_or_periodic_neighbor(f);
+                  else
+                    continue;
+                }
+
+              if (j == 1)
+                {
+                  unsigned int f = 3;
+
+                  if ((temp->at_boundary(f) == false) ||
+                      temp->has_periodic_neighbor(f))
+                    temp = temp->neighbor_or_periodic_neighbor(f);
+                  else
+                    continue;
+                }
+
+              if (k == 1)
+                {
+                  unsigned int f = 5;
+
+                  if ((temp->at_boundary(f) == false) ||
+                      temp->has_periodic_neighbor(f))
+                    temp = temp->neighbor_or_periodic_neighbor(f);
+                  else
+                    continue;
+                }
+
+              cells[c] = temp;
+            }
+
+      return cells;
+    }
+
   } // namespace GridTools
 } // namespace dealii
