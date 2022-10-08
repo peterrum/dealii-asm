@@ -16,19 +16,20 @@
 #include <deal.II/lac/dynamic_sparsity_pattern.h>
 #include <deal.II/lac/solver_cg.h>
 #include <deal.II/lac/sparse_matrix_tools.h>
+#include <deal.II/lac/tensor_product_matrix.h>
 #include <deal.II/lac/trilinos_precondition.h>
 #include <deal.II/lac/trilinos_sparse_matrix.h>
 #include <deal.II/lac/trilinos_sparsity_pattern.h>
 
 #include <deal.II/numerics/data_out.h>
 #include <deal.II/numerics/matrix_creator.h>
+#include <deal.II/numerics/tensor_product_matrix_creator.h>
 #include <deal.II/numerics/vector_tools.h>
 
 #include <fstream>
 
 #include "include/grid_tools.h"
 #include "include/restrictors.h"
-#include "include/tensor_product_matrix.h"
 
 #define QUADRATURE_TYP QGauss
 
@@ -144,8 +145,9 @@ test(const unsigned int fe_degree, const unsigned int n_overlap)
       std::cout << std::endl;
 #endif
 
-      const auto [M, K] = create_laplace_tensor_product_matrix<dim, double>(
-        cell, fe_1D, quadrature_1D, patch_extend, n_overlap);
+      const auto [M, K] = TensorProductMatrixCreator::
+        create_laplace_tensor_product_matrix<dim, double>(
+          cell, {1}, {2}, fe_1D, quadrature_1D, patch_extend, n_overlap);
 
       const TensorProductMatrixSymmetricSum<dim, double> fdm(M, K);
 

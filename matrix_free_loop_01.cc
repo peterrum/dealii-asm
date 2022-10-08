@@ -30,7 +30,6 @@
 
 #include "include/dof_tools.h"
 #include "include/grid_tools.h"
-#include "include/tensor_product_matrix.h"
 
 using namespace dealii;
 
