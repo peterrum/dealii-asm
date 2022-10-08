@@ -2,6 +2,7 @@
 
 #include <deal.II/base/conditional_ostream.h>
 
+#include <deal.II/dofs/dof_renumbering.h>
 #include <deal.II/dofs/dof_tools.h>
 
 #include <deal.II/lac/trilinos_precondition.h>
@@ -16,7 +17,9 @@
 #include <deal.II/numerics/matrix_creator.h>
 
 #include "dof_tools.h"
+#include "exceptions.h"
 #include "grid_tools.h"
+#include "matrix_free_internal.h"
 #include "vector_access_reduced.h"
 
 /**
@@ -274,10 +277,30 @@ public:
   {
     dof_handler_internal.distribute_dofs(fe);
 
-    DoFTools::make_zero_boundary_constraints(dof_handler_internal,
-                                             1,
-                                             constraints_internal);
-    constraints_internal.close();
+    const auto setup_constraints = [&]() {
+      constraints_internal.clear();
+      DoFTools::make_zero_boundary_constraints(dof_handler_internal,
+                                               1,
+                                               constraints_internal);
+      constraints_internal.close();
+    };
+
+    setup_constraints();
+
+    if (ad.compress_indices) // TODO: should decouple renumbering and
+                             // compression?
+      {
+        // note: we need to renumber for double/float here the same way
+        // since else the transfer between active and finest level will
+        // not work (different numbering due to different number of lanes)
+        typename MatrixFree<dim, float, VectorizedArray<float>>::AdditionalData
+          additional_data;
+
+        DoFRenumbering::matrix_free_data_locality(dof_handler_internal,
+                                                  constraints_internal,
+                                                  additional_data);
+        setup_constraints();
+      }
 
     matrix_free_internal.reinit(mapping,
                                 dof_handler_internal,
@@ -293,9 +316,10 @@ public:
     pcout << "  - compress indices: "
           << (ad.compress_indices ? "true" : "false") << std::endl;
     pcout << "  - mapping type:     " << ad.mapping_type << std::endl;
-    pcout << std::endl;
 
     setup_mapping_and_indices(ad.compress_indices, ad.mapping_type);
+
+    pcout << std::endl;
   }
 
   LaplaceOperatorMatrixFree(
@@ -310,9 +334,10 @@ public:
     pcout << "  - compress indices: "
           << (ad.compress_indices ? "true" : "false") << std::endl;
     pcout << "  - mapping type:     " << ad.mapping_type << std::endl;
-    pcout << std::endl;
 
     setup_mapping_and_indices(ad.compress_indices, ad.mapping_type);
+
+    pcout << std::endl;
   }
 
   virtual bool
@@ -327,9 +352,14 @@ public:
   {
     if (compress_indices)
       {
-        auto compressed_rw = std::make_shared<ConstraintInfoReduced>();
-        compressed_rw->initialize(matrix_free);
-        this->compressed_rw = compressed_rw;
+        auto       compressed_rw = std::make_shared<ConstraintInfoReduced>();
+        const bool flag          = compressed_rw->initialize(matrix_free);
+
+        if (flag)
+          this->compressed_rw = compressed_rw;
+
+        pcout << "  - compress indices: " << (flag ? "success" : "failure")
+              << std::endl;
       }
 
 
@@ -1182,155 +1212,15 @@ public:
   void
   vmult(VectorType &dst, const VectorType &src) const
   {
-    if (vector_partitioner == nullptr)
-      {
-        matrix_free.template cell_loop<VectorType, VectorType>(
-          [&](const auto &, auto &dst, const auto &src, const auto cells) {
-            FECellIntegrator phi(matrix_free);
-            for (unsigned int cell = cells.first; cell < cells.second; ++cell)
-              {
-                phi.reinit(cell);
-                do_cell_integral_global(phi, dst, src);
-              }
-          },
-          dst,
+    vmult(dst,
           src,
-          true);
-      }
-    else
-      {
-        update_ghost_values(src, embedded_partitioner); // TODO: overlap?
-
-        FECellIntegrator phi(matrix_free);
-
-        // data structures needed for zeroing dst
-        const auto &task_info           = matrix_free.get_task_info();
-        const auto &partition_row_index = task_info.partition_row_index;
-        const auto &cell_partition_data = task_info.cell_partition_data;
-        const auto &dof_info            = matrix_free.get_dof_info();
-        const auto &vector_zero_range_list_index =
-          dof_info.vector_zero_range_list_index;
-        const auto &vector_zero_range_list = dof_info.vector_zero_range_list;
-
-        for (unsigned int part = 0; part < partition_row_index.size() - 2;
-             ++part)
-          for (unsigned int i = partition_row_index[part];
-               i < partition_row_index[part + 1];
-               ++i)
-            {
-              // zero out range in dst
-              for (unsigned int id = vector_zero_range_list_index[i];
-                   id != vector_zero_range_list_index[i + 1];
-                   ++id)
-                std::memset(dst.begin() + vector_zero_range_list[id].first,
-                            0,
-                            (vector_zero_range_list[id].second -
-                             vector_zero_range_list[id].first) *
-                              sizeof(Number));
-
-              // loop over cells
-              for (unsigned int cell = cell_partition_data[i];
-                   cell < cell_partition_data[i + 1];
-                   ++cell)
-                {
-                  phi.reinit(cell);
-
-                  internal::VectorReader<Number, VectorizedArrayType> reader;
-                  constraint_info.read_write_operation(reader,
-                                                       src,
-                                                       phi.begin_dof_values(),
-                                                       cell_ptr[cell],
-                                                       cell_ptr[cell + 1] -
-                                                         cell_ptr[cell],
-                                                       phi.dofs_per_cell,
-                                                       true);
-
-                  do_cell_integral_local(phi);
-
-                  internal::VectorDistributorLocalToGlobal<Number,
-                                                           VectorizedArrayType>
-                    writer;
-                  constraint_info.read_write_operation(writer,
-                                                       dst,
-                                                       phi.begin_dof_values(),
-                                                       cell_ptr[cell],
-                                                       cell_ptr[cell + 1] -
-                                                         cell_ptr[cell],
-                                                       phi.dofs_per_cell,
-                                                       true);
-                }
-            }
-
-        compress(dst, embedded_partitioner); // TODO: overlap?
-        src.zero_out_ghost_values();
-      }
-  }
-
-  static void
-  update_ghost_values(const VectorType &vec,
-                      const std::shared_ptr<const Utilities::MPI::Partitioner>
-                        &embedded_partitioner)
-  {
-    const auto &vector_partitioner = vec.get_partitioner();
-
-    dealii::AlignedVector<Number> buffer;
-    buffer.resize_fast(embedded_partitioner->n_import_indices()); // reuse?
-
-    std::vector<MPI_Request> requests;
-
-    embedded_partitioner
-      ->template export_to_ghosted_array_start<Number, MemorySpace::Host>(
-        0,
-        dealii::ArrayView<const Number>(
-          vec.begin(), embedded_partitioner->locally_owned_size()),
-        dealii::ArrayView<Number>(buffer.begin(), buffer.size()),
-        dealii::ArrayView<Number>(const_cast<Number *>(vec.begin()) +
-                                    embedded_partitioner->locally_owned_size(),
-                                  vector_partitioner->n_ghost_indices()),
-        requests);
-
-    embedded_partitioner
-      ->template export_to_ghosted_array_finish<Number, MemorySpace::Host>(
-        dealii::ArrayView<Number>(const_cast<Number *>(vec.begin()) +
-                                    embedded_partitioner->locally_owned_size(),
-                                  vector_partitioner->n_ghost_indices()),
-        requests);
-
-    vec.set_ghost_state(true);
-  }
-
-  static void
-  compress(VectorType &vec,
-           const std::shared_ptr<const Utilities::MPI::Partitioner>
-             &embedded_partitioner)
-  {
-    const auto &vector_partitioner = vec.get_partitioner();
-
-    dealii::AlignedVector<Number> buffer;
-    buffer.resize_fast(embedded_partitioner->n_import_indices()); // reuse?
-
-    std::vector<MPI_Request> requests;
-
-    embedded_partitioner
-      ->template import_from_ghosted_array_start<Number, MemorySpace::Host>(
-        dealii::VectorOperation::add,
-        0,
-        dealii::ArrayView<Number>(const_cast<Number *>(vec.begin()) +
-                                    embedded_partitioner->locally_owned_size(),
-                                  vector_partitioner->n_ghost_indices()),
-        dealii::ArrayView<Number>(buffer.begin(), buffer.size()),
-        requests);
-
-    embedded_partitioner
-      ->template import_from_ghosted_array_finish<Number, MemorySpace::Host>(
-        dealii::VectorOperation::add,
-        dealii::ArrayView<const Number>(buffer.begin(), buffer.size()),
-        dealii::ArrayView<Number>(vec.begin(),
-                                  embedded_partitioner->locally_owned_size()),
-        dealii::ArrayView<Number>(const_cast<Number *>(vec.begin()) +
-                                    embedded_partitioner->locally_owned_size(),
-                                  vector_partitioner->n_ghost_indices()),
-        requests);
+          [&](const auto start_range, const auto end_range) {
+            if (end_range > start_range)
+              std::memset(dst.begin() + start_range,
+                          0,
+                          sizeof(Number) * (end_range - start_range));
+          },
+          {});
   }
 
   void
@@ -1359,9 +1249,42 @@ public:
       }
     else
       {
-        operation_before_matrix_vector_product(0, src.locally_owned_size());
-        vmult(dst, src);
-        operation_after_matrix_vector_product(0, src.locally_owned_size());
+        cell_loop(
+          [&](const auto &, auto &dst, const auto &src, const auto cells) {
+            FECellIntegrator phi(matrix_free);
+            for (unsigned int cell = cells.first; cell < cells.second; ++cell)
+              {
+                phi.reinit(cell);
+
+                internal::VectorReader<Number, VectorizedArrayType> reader;
+                constraint_info.read_write_operation(reader,
+                                                     src,
+                                                     phi.begin_dof_values(),
+                                                     cell_ptr[cell],
+                                                     cell_ptr[cell + 1] -
+                                                       cell_ptr[cell],
+                                                     phi.dofs_per_cell,
+                                                     true);
+
+                do_cell_integral_local(phi);
+
+                internal::VectorDistributorLocalToGlobal<Number,
+                                                         VectorizedArrayType>
+                  writer;
+                constraint_info.read_write_operation(writer,
+                                                     dst,
+                                                     phi.begin_dof_values(),
+                                                     cell_ptr[cell],
+                                                     cell_ptr[cell + 1] -
+                                                       cell_ptr[cell],
+                                                     phi.dofs_per_cell,
+                                                     true);
+              }
+          },
+          dst,
+          src,
+          operation_before_matrix_vector_product,
+          operation_after_matrix_vector_product);
       }
   }
 
@@ -1452,6 +1375,40 @@ public:
 
 private:
   void
+  cell_loop(const std::function<
+              void(const MatrixFree<dim, Number, VectorizedArrayType> &,
+                   VectorType &,
+                   const VectorType &,
+                   const std::pair<unsigned int, unsigned int>)> &cell_function,
+            VectorType &                                          dst,
+            const VectorType &                                    src,
+            const std::function<void(unsigned int, unsigned int)>
+              &operation_before_loop,
+            const std::function<void(unsigned int, unsigned int)>
+              &operation_after_loop) const
+  {
+    VectorDataExchange<Number> exchanger_dst(embedded_partitioner, buffer_dst);
+    VectorDataExchange<Number> exchanger_src(embedded_partitioner, buffer_src);
+
+    MFWorker<dim, Number, VectorizedArrayType, VectorType> worker(
+      matrix_free,
+      matrix_free.get_dof_info().cell_loop_pre_list_index,
+      matrix_free.get_dof_info().cell_loop_pre_list,
+      matrix_free.get_dof_info().cell_loop_post_list_index,
+      matrix_free.get_dof_info().cell_loop_post_list,
+      exchanger_dst,
+      exchanger_src,
+      dst,
+      src,
+      cell_function,
+      operation_before_loop,
+      operation_after_loop);
+
+    MFRunner runner;
+    runner.loop(worker);
+  }
+
+  void
   compute_system_matrix() const
   {
     Assert((sparse_matrix.m() == 0 && sparse_matrix.n() == 0),
@@ -1515,4 +1472,7 @@ private:
     merged_coefficients;
 
   AlignedVector<VectorizedArrayType> quadrature_points;
+
+  mutable dealii::AlignedVector<Number> buffer_dst;
+  mutable dealii::AlignedVector<Number> buffer_src;
 };

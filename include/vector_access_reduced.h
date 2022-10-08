@@ -27,7 +27,7 @@ public:
                    "Expected contiguous numbering!");
 
   template <int dim, typename Number, typename VectorizedArrayType>
-  void
+  bool
   initialize(const MatrixFree<dim, Number, VectorizedArrayType> &data_)
   {
     const auto  data         = &data_;
@@ -155,8 +155,11 @@ public:
             all_indices_uniform.clear();
 
             orientations.clear();
+
+            return false;
           }
       }
+    return true;
   }
 
   unsigned int

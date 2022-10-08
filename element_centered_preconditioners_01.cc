@@ -138,7 +138,7 @@ solve(const MatrixType &                              A,
                         ExcMessage("Solver <" + type + "> is not known!"))
           }
       }
-    catch (...)
+    catch (const SolverControl::NoConvergence &)
       {
         return false;
       }
@@ -352,6 +352,8 @@ test(const boost::property_tree::ptree params, ConvergenceTable &table)
                                       RightHandSide<dim>(),
                                       rhs,
                                       op.get_constraints());
+
+  rhs.zero_out_ghost_values();
 
   std::shared_ptr<ReductionControl> reduction_control;
 

@@ -138,7 +138,12 @@ test(const Parameters params_in)
   params.put("weighting type", props[1]);
   params.put("n overlap", props[2]);
 
-  const auto precondition = create_system_preconditioner(op, params);
+  if (props.size() > 3)
+    params.put("weight sequence",
+               props[3] == "g" ? "global" :
+                                 (props[3] == "l" ? "local" : "compressed"));
+
+  const auto precondition = create_fdm_preconditioner(op, params);
 
   VectorType src, dst;
 

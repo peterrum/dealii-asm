@@ -8,6 +8,7 @@
 
 #include "dof_tools.h"
 #include "grid_tools.h"
+#include "matrix_free_internal.h"
 #include "preconditioners.h"
 #include "restrictors.h"
 #include "tensor_product_matrix.h"
@@ -36,11 +37,15 @@ public:
     const Quadrature<1> &                               quadrature_1D,
     const Restrictors::WeightingType                    weight_type =
       Restrictors::WeightingType::post,
-    const bool compress_indices = true)
+    const bool        compress_indices    = true,
+    const std::string weight_local_global = "global",
+    const bool        overlap_pre_post    = true)
     : matrix_free(matrix_free)
     , fe_degree(matrix_free.get_dof_handler().get_fe().tensor_degree())
     , n_overlap(n_overlap)
     , weight_type(weight_type)
+    , do_weights_global(weight_local_global == "global")
+    , overlap_pre_post(overlap_pre_post)
   {
     AssertThrow((n_rows_1d == -1) || (static_cast<unsigned int>(n_rows_1d) ==
                                       fe_1D.degree + 2 * n_overlap - 1),
@@ -57,7 +62,7 @@ public:
     // ... allocate memory
     constraint_info.reinit(matrix_free.n_physical_cells());
 
-    partitioner_for_fdm = matrix_free.get_vector_partitioner();
+    partitioner_fdm = matrix_free.get_vector_partitioner();
 
     const auto resolve_constraint = [&](auto &i) {
       const auto *entries_ptr = constraints.get_constraint_entries(i);
@@ -140,7 +145,7 @@ public:
         is_ghost_indices.add_indices(ghost_indices.begin(),
                                      ghost_indices.end());
 
-        partitioner_for_fdm = std::make_shared<Utilities::MPI::Partitioner>(
+        partitioner_fdm = std::make_shared<Utilities::MPI::Partitioner>(
           locally_owned_dofs, is_ghost_indices, dof_handler.get_communicator());
       }
 
@@ -157,74 +162,226 @@ public:
 
     // ... collect DoF indices
     cell_ptr = {0};
-    for (unsigned int cell = 0, cell_counter = 0;
-         cell < matrix_free.n_cell_batches();
-         ++cell)
-      {
-        std::array<Table<2, VectorizedArrayType>, dim> Ms;
-        std::array<Table<2, VectorizedArrayType>, dim> Ks;
 
-        for (unsigned int v = 0;
-             v < matrix_free.n_active_entries_per_cell_batch(cell);
-             ++v, ++cell_counter)
+    const auto &task_info = matrix_free.get_task_info();
+
+    const unsigned int n_dofs = partitioner_fdm->locally_owned_size() +
+                                partitioner_fdm->n_ghost_indices();
+
+    const unsigned int chunk_size_zero_vector =
+      internal::MatrixFreeFunctions::DoFInfo::chunk_size_zero_vector;
+
+    std::vector<unsigned int> touched_first_by(
+      (n_dofs + chunk_size_zero_vector - 1) / chunk_size_zero_vector,
+      numbers::invalid_unsigned_int);
+
+    std::vector<unsigned int> touched_last_by(
+      (n_dofs + chunk_size_zero_vector - 1) / chunk_size_zero_vector,
+      numbers::invalid_unsigned_int);
+
+    for (unsigned int part = 0, cell_counter = 0;
+         part < task_info.partition_row_index.size() - 2;
+         ++part)
+      for (unsigned int chunk = task_info.partition_row_index[part];
+           chunk < task_info.partition_row_index[part + 1];
+           ++chunk)
+        for (unsigned int cell = task_info.cell_partition_data[chunk];
+             cell < task_info.cell_partition_data[chunk + 1];
+             ++cell)
           {
-            const auto cell_iterator = matrix_free.get_cell_iterator(cell, v);
+            std::array<Table<2, VectorizedArrayType>, dim> Ms;
+            std::array<Table<2, VectorizedArrayType>, dim> Ks;
 
-            const auto cells =
-              dealii::GridTools::extract_all_surrounding_cells_cartesian<dim>(
-                cell_iterator, n_overlap <= 1 ? 0 : sub_mesh_approximation);
-
-            auto local_dofs =
-              dealii::DoFTools::get_dof_indices_cell_with_overlap(dof_handler,
-                                                                  cells,
-                                                                  n_overlap,
-                                                                  true);
-
-            for (auto &i : local_dofs)
-              resolve_constraint(i);
-
-            constraint_info.read_dof_indices(cell_counter,
-                                             local_dofs,
-                                             partitioner_for_fdm);
-
-            const auto [Ms_scalar, Ks_scalar] =
-              create_laplace_tensor_product_matrix<dim, Number>(
-                cell_iterator,
-                fe_1D,
-                quadrature_1D,
-                harmonic_patch_extend[cell_iterator->active_cell_index()],
-                n_overlap);
-
-            for (unsigned int d = 0; d < dim; ++d)
+            for (unsigned int v = 0;
+                 v < matrix_free.n_active_entries_per_cell_batch(cell);
+                 ++v, ++cell_counter)
               {
-                if (Ms[d].size(0) == 0 || Ms[d].size(1) == 0)
+                const auto cell_iterator =
+                  matrix_free.get_cell_iterator(cell, v);
+
+                const auto cells =
+                  dealii::GridTools::extract_all_surrounding_cells_cartesian<
+                    dim>(cell_iterator,
+                         n_overlap <= 1 ? 0 : sub_mesh_approximation);
+
+                auto local_dofs =
+                  dealii::DoFTools::get_dof_indices_cell_with_overlap(
+                    dof_handler, cells, n_overlap, true);
+
+                for (auto &i : local_dofs)
+                  resolve_constraint(i);
+
+                for (const auto &i : local_dofs)
+                  if (i != numbers::invalid_unsigned_int)
+                    {
+                      const unsigned int myindex =
+                        partitioner_fdm->global_to_local(i) /
+                        chunk_size_zero_vector;
+                      if (touched_first_by[myindex] ==
+                          numbers::invalid_unsigned_int)
+                        touched_first_by[myindex] = chunk;
+                      touched_last_by[myindex] = chunk;
+                    }
+
+                constraint_info.read_dof_indices(cell_counter,
+                                                 local_dofs,
+                                                 partitioner_fdm);
+
+                const auto [Ms_scalar, Ks_scalar] =
+                  create_laplace_tensor_product_matrix<dim, Number>(
+                    cell_iterator,
+                    fe_1D,
+                    quadrature_1D,
+                    harmonic_patch_extend[cell_iterator->active_cell_index()],
+                    n_overlap);
+
+                for (unsigned int d = 0; d < dim; ++d)
                   {
-                    Ms[d].reinit(Ms_scalar[d].size(0), Ms_scalar[d].size(1));
-                    Ks[d].reinit(Ks_scalar[d].size(0), Ks_scalar[d].size(1));
+                    if (Ms[d].size(0) == 0 || Ms[d].size(1) == 0)
+                      {
+                        Ms[d].reinit(Ms_scalar[d].size(0),
+                                     Ms_scalar[d].size(1));
+                        Ks[d].reinit(Ks_scalar[d].size(0),
+                                     Ks_scalar[d].size(1));
+                      }
+
+                    for (unsigned int i = 0; i < Ms_scalar[d].size(0); ++i)
+                      for (unsigned int j = 0; j < Ms_scalar[d].size(0); ++j)
+                        Ms[d][i][j][v] = Ms_scalar[d][i][j];
+
+                    for (unsigned int i = 0; i < Ks_scalar[d].size(0); ++i)
+                      for (unsigned int j = 0; j < Ks_scalar[d].size(0); ++j)
+                        Ks[d][i][j][v] = Ks_scalar[d][i][j];
                   }
-
-                for (unsigned int i = 0; i < Ms_scalar[d].size(0); ++i)
-                  for (unsigned int j = 0; j < Ms_scalar[d].size(0); ++j)
-                    Ms[d][i][j][v] = Ms_scalar[d][i][j];
-
-                for (unsigned int i = 0; i < Ks_scalar[d].size(0); ++i)
-                  for (unsigned int j = 0; j < Ks_scalar[d].size(0); ++j)
-                    Ks[d][i][j][v] = Ks_scalar[d][i][j];
               }
+
+            cell_ptr.push_back(
+              cell_ptr.back() +
+              matrix_free.n_active_entries_per_cell_batch(cell));
+
+            fdm.insert(cell, Ms, Ks);
           }
-
-        cell_ptr.push_back(cell_ptr.back() +
-                           matrix_free.n_active_entries_per_cell_batch(cell));
-
-        fdm.insert(cell, Ms, Ks);
-      }
 
     fdm.finalize();
 
     constraint_info.finalize();
 
-    src_.reinit(partitioner_for_fdm);
-    dst_.reinit(partitioner_for_fdm);
+    src_.reinit(partitioner_fdm);
+    dst_.reinit(partitioner_fdm);
+
+    {
+      const auto vector_partitioner = partitioner_fdm;
+
+      // ensure that all indices are touched at least during the last round
+      for (auto &index : touched_first_by)
+        if (index == numbers::invalid_unsigned_int)
+          index =
+            task_info
+              .partition_row_index[task_info.partition_row_index.size() - 2] -
+            1;
+
+      // lambda to convert from a map, with keys associated to the buckets by
+      // which we sliced the index space, length chunk_size_zero_vector, and
+      // values equal to the slice index which are touched by the respective
+      // partition, to a "vectors-of-vectors" like data structure. Rather than
+      // using the vectors, we set up a sparsity-pattern like structure where
+      // one index specifies the start index (range_list_index), and the other
+      // the actual ranges (range_list).
+      auto convert_map_to_range_list =
+        [=](const unsigned int n_partitions,
+            const std::map<unsigned int, std::vector<unsigned int>> &ranges_in,
+            std::vector<unsigned int> &range_list_index,
+            std::vector<std::pair<unsigned int, unsigned int>> &range_list,
+            const unsigned int                                  max_size) {
+          range_list_index.resize(n_partitions + 1);
+          range_list_index[0] = 0;
+          range_list.clear();
+          for (unsigned int partition = 0; partition < n_partitions;
+               ++partition)
+            {
+              auto it = ranges_in.find(partition);
+              if (it != ranges_in.end())
+                {
+                  for (unsigned int i = 0; i < it->second.size(); ++i)
+                    {
+                      const unsigned int first_i = i;
+                      while (i + 1 < it->second.size() &&
+                             it->second[i + 1] == it->second[i] + 1)
+                        ++i;
+                      range_list.emplace_back(
+                        std::min(it->second[first_i] * chunk_size_zero_vector,
+                                 max_size),
+                        std::min((it->second[i] + 1) * chunk_size_zero_vector,
+                                 max_size));
+                    }
+                  range_list_index[partition + 1] = range_list.size();
+                }
+              else
+                range_list_index[partition + 1] = range_list_index[partition];
+            }
+        };
+
+      // first we determine the ranges to zero the vector
+      std::map<unsigned int, std::vector<unsigned int>> chunk_must_zero_vector;
+      for (unsigned int i = 0; i < touched_first_by.size(); ++i)
+        chunk_must_zero_vector[touched_first_by[i]].push_back(i);
+      const unsigned int n_partitions =
+        task_info.partition_row_index[task_info.partition_row_index.size() - 2];
+      convert_map_to_range_list(n_partitions,
+                                chunk_must_zero_vector,
+                                vector_zero_range_list_index,
+                                vector_zero_range_list,
+                                vector_partitioner->locally_owned_size());
+
+      // the other two operations only work on the local range (without
+      // ghosts), so we skip the latter parts of the vector now
+      touched_first_by.resize((vector_partitioner->locally_owned_size() +
+                               chunk_size_zero_vector - 1) /
+                              chunk_size_zero_vector);
+
+      // set the import indices in the vector partitioner to one index higher
+      // to indicate that we want to process it first. This additional index
+      // is reflected in the argument 'n_partitions+1' in the
+      // convert_map_to_range_list function below.
+      for (auto it : vector_partitioner->import_indices())
+        for (unsigned int i = it.first; i < it.second; ++i)
+          touched_first_by[i / chunk_size_zero_vector] = n_partitions;
+      std::map<unsigned int, std::vector<unsigned int>> chunk_must_do_pre;
+      for (unsigned int i = 0; i < touched_first_by.size(); ++i)
+        chunk_must_do_pre[touched_first_by[i]].push_back(i);
+      convert_map_to_range_list(n_partitions + 1,
+                                chunk_must_do_pre,
+                                cell_loop_pre_list_index,
+                                cell_loop_pre_list,
+                                vector_partitioner->locally_owned_size());
+
+      touched_last_by.resize((vector_partitioner->locally_owned_size() +
+                              chunk_size_zero_vector - 1) /
+                             chunk_size_zero_vector);
+
+      // set the indices which were not touched by the cell loop (i.e.,
+      // constrained indices) to the last valid partition index. Since
+      // partition_row_index contains one extra slot for ghosted faces (which
+      // are not part of the cell/face loops), we use the second to last entry
+      // in the partition list.
+      for (auto &index : touched_last_by)
+        if (index == numbers::invalid_unsigned_int)
+          index =
+            task_info
+              .partition_row_index[task_info.partition_row_index.size() - 2] -
+            1;
+      for (auto it : vector_partitioner->import_indices())
+        for (unsigned int i = it.first; i < it.second; ++i)
+          touched_last_by[i / chunk_size_zero_vector] = n_partitions;
+      std::map<unsigned int, std::vector<unsigned int>> chunk_must_do_post;
+      for (unsigned int i = 0; i < touched_last_by.size(); ++i)
+        chunk_must_do_post[touched_last_by[i]].push_back(i);
+      convert_map_to_range_list(n_partitions + 1,
+                                chunk_must_do_post,
+                                cell_loop_post_list_index,
+                                cell_loop_post_list,
+                                vector_partitioner->locally_owned_size());
+    }
 
     {
       AlignedVector<VectorizedArrayType> dst__(
@@ -251,7 +408,7 @@ public:
 
       dst_.compress(VectorOperation::add);
 
-      weights.reinit(partitioner_for_fdm);
+      weights.reinit(partitioner_fdm);
 
       weights.copy_locally_owned_data_from(dst_);
 
@@ -265,25 +422,88 @@ public:
       weights.update_ghost_values();
     }
 
-    if (fe_1D.degree >= 2 && n_overlap == 1)
+
+
+    if (n_overlap == 1)
       {
-        weights_compressed_q2.resize(matrix_free.n_cell_batches());
+        const bool actually_use_compression =
+          (weight_local_global == "compressed" && fe_1D.degree >= 2);
+        const bool actually_use_dg = (weight_local_global == "dg");
 
-        FECellIntegrator phi(matrix_free);
-
-        for (unsigned int cell = 0; cell < matrix_free.n_cell_batches(); ++cell)
+        if (actually_use_compression || actually_use_dg)
           {
-            phi.reinit(cell);
-            phi.read_dof_values_plain(weights);
+            if (actually_use_compression)
+              weights_compressed_q2.resize(matrix_free.n_cell_batches());
 
-            const bool success = dealii::internal::
-              compute_weights_fe_q_dofs_by_entity<dim, -1, VectorizedArrayType>(
-                phi.begin_dof_values(),
-                1,
-                fe_degree + 1,
-                weights_compressed_q2[cell].begin());
+            if (actually_use_dg)
+              weights_dg.reinit(matrix_free.n_cell_batches(),
+                                Utilities::pow(fe_degree + 2 * n_overlap - 1,
+                                               dim));
 
-            AssertThrow(success, ExcInternalError());
+            FECellIntegrator phi(matrix_free);
+
+            for (unsigned int cell = 0; cell < matrix_free.n_cell_batches();
+                 ++cell)
+              {
+                phi.reinit(cell);
+                phi.read_dof_values_plain(weights);
+
+                if (actually_use_compression)
+                  {
+                    const bool success =
+                      dealii::internal::compute_weights_fe_q_dofs_by_entity<
+                        dim,
+                        -1,
+                        VectorizedArrayType>(
+                        phi.begin_dof_values(),
+                        1,
+                        fe_degree + 1,
+                        weights_compressed_q2[cell].begin());
+                    AssertThrow(success, ExcInternalError());
+                  }
+
+                if (actually_use_dg)
+                  {
+                    for (unsigned int i = 0;
+                         i < Utilities::pow(fe_degree + 2 * n_overlap - 1, dim);
+                         ++i)
+                      weights_dg[cell][i] = phi.begin_dof_values()[i];
+                  }
+              }
+          }
+      }
+    else
+      {
+        const bool actually_use_dg = (weight_local_global == "dg");
+
+        if (actually_use_dg)
+          {
+            weights_dg.reinit(matrix_free.n_cell_batches(),
+                              Utilities::pow(fe_degree + 2 * n_overlap - 1,
+                                             dim));
+
+            AlignedVector<VectorizedArrayType> weights_local;
+            weights_local.resize_fast(
+              Utilities::pow(fe_degree + 2 * n_overlap - 1, dim));
+
+            for (unsigned int cell = 0; cell < matrix_free.n_cell_batches();
+                 ++cell)
+              {
+                internal::VectorReader<Number, VectorizedArrayType> reader;
+                constraint_info.read_write_operation(reader,
+                                                     weights,
+                                                     weights_local.data(),
+                                                     cell_ptr[cell],
+                                                     cell_ptr[cell + 1] -
+                                                       cell_ptr[cell],
+                                                     weights_local.size(),
+                                                     true);
+
+                for (unsigned int i = 0;
+                     i < Utilities::pow(fe_degree + 2 * n_overlap - 1, dim);
+                     ++i)
+                  weights_dg[cell][i] = weights_local[i];
+              }
           }
       }
 
@@ -294,33 +514,54 @@ public:
       }
   }
 
+  VectorType &
+  get_scratch_src_vector(const VectorType &src) const
+  {
+    if (do_weights_global && (weight_type == Restrictors::WeightingType::pre ||
+                              weight_type == Restrictors::WeightingType::symm))
+      return this->src_;
+    else
+      return const_cast<VectorType &>(src);
+  }
+
+  VectorType &
+  get_scratch_src_vector(VectorType &src) const
+  {
+    return src;
+  }
+
   /**
    * General matrix-vector product.
    */
   void
   vmult(VectorType &dst, const VectorType &src) const
   {
-    if ((partitioner_for_fdm.get() ==
-         matrix_free.get_vector_partitioner().get()) &&
-        (partitioner_for_fdm.get() == src.get_partitioner().get()))
-      {
-        // use matrix-free version
-        vmult_internal(dst,
-                       src,
-                       [&](const auto start_range, const auto end_range) {
-                         if (end_range > start_range)
-                           std::memset(dst.begin() + start_range,
-                                       0,
-                                       sizeof(Number) *
-                                         (end_range - start_range));
-                       },
-                       {});
-      }
-    else
-      {
-        // use general version
-        vmult_internal(dst, src);
-      }
+    const auto pre_operation = [&](const auto start_range,
+                                   const auto end_range) {
+      if (end_range > start_range)
+        std::memset(dst.begin() + start_range,
+                    0,
+                    sizeof(Number) * (end_range - start_range));
+    };
+
+    vmult_internal(dst, src, get_scratch_src_vector(src), pre_operation, {});
+  }
+
+  /**
+   * General matrix-vector product.
+   */
+  void
+  vmult(VectorType &dst, /*const*/ VectorType &src) const
+  {
+    const auto pre_operation = [&](const auto start_range,
+                                   const auto end_range) {
+      if (end_range > start_range)
+        std::memset(dst.begin() + start_range,
+                    0,
+                    sizeof(Number) * (end_range - start_range));
+    };
+
+    vmult_internal(dst, src, get_scratch_src_vector(src), pre_operation, {});
   }
 
   /**
@@ -331,30 +572,28 @@ public:
   vmult(VectorType &      dst,
         const VectorType &src,
         const std::function<void(const unsigned int, const unsigned int)>
-          &operation_before_matrix_vector_product,
+          &pre_operation,
         const std::function<void(const unsigned int, const unsigned int)>
-          &operation_after_matrix_vector_product = {}) const
+          &post_operation = {}) const
   {
-    if ((partitioner_for_fdm.get() ==
-         matrix_free.get_vector_partitioner().get()) &&
-        (partitioner_for_fdm.get() == src.get_partitioner().get()))
-      {
-        // use matrix-free version
-        vmult_internal(dst,
-                       src,
-                       operation_before_matrix_vector_product,
-                       operation_after_matrix_vector_product);
-      }
-    else
-      {
-        // use general version; note: the pre-operation cleares the content
-        // of dst so that we can skip zeroing
-        operation_before_matrix_vector_product(0, src.locally_owned_size());
-        vmult_internal(dst, src, /*dst is zero*/ true);
+    vmult_internal(
+      dst, src, get_scratch_src_vector(src), pre_operation, post_operation);
+  }
 
-        if (operation_after_matrix_vector_product)
-          operation_after_matrix_vector_product(0, src.locally_owned_size());
-      }
+  /**
+   * Matrix-vector product with pre- and post-operations to be used
+   * by PreconditionRelaxation and PreconditionChebyshev.
+   */
+  virtual void
+  vmult(VectorType &          dst,
+        /*const*/ VectorType &src,
+        const std::function<void(const unsigned int, const unsigned int)>
+          &pre_operation,
+        const std::function<void(const unsigned int, const unsigned int)>
+          &post_operation = {}) const
+  {
+    vmult_internal(
+      dst, src, get_scratch_src_vector(src), pre_operation, post_operation);
   }
 
   std::size_t
@@ -366,7 +605,7 @@ public:
   std::shared_ptr<const Utilities::MPI::Partitioner>
   get_partitioner() const
   {
-    return partitioner_for_fdm;
+    return partitioner_fdm;
   }
 
   unsigned int
@@ -378,177 +617,299 @@ public:
 
 private:
   void
-  vmult_internal(VectorType &      dst,
-                 const VectorType &src,
-                 const bool        dst_is_zero = false) const
-  {
-    const bool do_weights_global = true; // TODO
-
-    const bool do_inplace_dst =
-      partitioner_for_fdm.get() == src.get_partitioner().get();
-    const bool do_inplace_src =
-      do_inplace_dst &&
-      ((do_weights_global == false) ||
-       ((weight_type == Restrictors::WeightingType::pre ||
-         weight_type == Restrictors::WeightingType::symm) == false));
-
-    auto &      dst_ptr = do_inplace_dst ? dst : this->dst_;
-    const auto &src_ptr = do_inplace_src ? src : this->src_;
-
-    // apply weights and copy vector (both optional)
-    if (do_weights_global && (weight_type == Restrictors::WeightingType::pre ||
-                              weight_type == Restrictors::WeightingType::symm))
-      {
-        DEAL_II_OPENMP_SIMD_PRAGMA
-        for (std::size_t i = 0; i < src.locally_owned_size(); ++i)
-          this->src_.local_element(i) =
-            weights.local_element(i) * src.local_element(i);
-      }
-    else if (do_inplace_src == false)
-      this->src_.copy_locally_owned_data_from(src);
-
-    // update ghost values
-    src_ptr.update_ghost_values();
-
-    if ((do_inplace_dst == false) || (dst_is_zero == false))
-      dst_ptr = 0.0;
-
-    // data structures needed for the cell loop
-    AlignedVector<VectorizedArrayType> tmp;
-
-    AlignedVector<VectorizedArrayType> src_local(
-      Utilities::pow(fe_degree + 2 * n_overlap - 1, dim));
-    AlignedVector<VectorizedArrayType> dst_local(
-      Utilities::pow(fe_degree + 2 * n_overlap - 1, dim));
-    AlignedVector<VectorizedArrayType> weights_local;
-
-    if ((do_weights_global == false) &&
-        (weight_type == Restrictors::WeightingType::none))
-      weights_local.resize(Utilities::pow(fe_degree + 2 * n_overlap - 1, dim));
-
-    // loop over cells
-    for (unsigned int cell = 0; cell < matrix_free.n_cell_batches(); ++cell)
-      {
-        // 1) gather src (optional)
-        internal::VectorReader<Number, VectorizedArrayType> reader;
-        constraint_info.read_write_operation(reader,
-                                             src_ptr,
-                                             src_local.data(),
-                                             cell_ptr[cell],
-                                             cell_ptr[cell + 1] -
-                                               cell_ptr[cell],
-                                             src_local.size(),
-                                             true);
-
-        // 2) apply weights (optional)
-        if (weight_type != Restrictors::WeightingType::post)
-          apply_weights_local(cell, weights_local, src_local, true);
-
-        // 3) cell operation: fast diagonalization method
-        fdm.apply_inverse(cell,
-                          make_array_view(dst_local.begin(), dst_local.end()),
-                          make_array_view(src_local.begin(), src_local.end()),
-                          tmp);
-
-        // 4) apply weights (optional)
-        if (weight_type != Restrictors::WeightingType::post)
-          apply_weights_local(cell, weights_local, dst_local, true);
-
-        // 5) scatter
-        internal::VectorDistributorLocalToGlobal<Number, VectorizedArrayType>
-          writer;
-        constraint_info.read_write_operation(writer,
-                                             dst_ptr,
-                                             dst_local.data(),
-                                             cell_ptr[cell],
-                                             cell_ptr[cell + 1] -
-                                               cell_ptr[cell],
-                                             dst_local.size(),
-                                             true);
-      }
-
-    // compress
-    src_ptr.zero_out_ghost_values();
-    dst_ptr.compress(VectorOperation::add);
-
-    // apply weights and copy vector back (both optional)
-    if (do_weights_global && (weight_type == Restrictors::WeightingType::post ||
-                              weight_type == Restrictors::WeightingType::symm))
-      {
-        DEAL_II_OPENMP_SIMD_PRAGMA
-        for (std::size_t i = 0; i < dst.locally_owned_size(); ++i)
-          dst.local_element(i) =
-            weights.local_element(i) * dst_ptr.local_element(i);
-      }
-    else if (do_inplace_dst == false)
-      dst.copy_locally_owned_data_from(dst_ptr);
-  }
-
-  void
   vmult_internal(
     VectorType &      dst,
     const VectorType &src,
+    VectorType &      src_scratch,
     const std::function<void(const unsigned int, const unsigned int)>
-      &operation_before_matrix_vector_product,
+      &pre_operation,
     const std::function<void(const unsigned int, const unsigned int)>
-      &operation_after_matrix_vector_product) const
+      &post_operation) const
   {
-    matrix_free.template cell_loop<VectorType, VectorType>(
-      [&](
-        const auto &matrix_free, auto &dst, const auto &src, const auto cells) {
-        FECellIntegrator phi_src(matrix_free);
-        FECellIntegrator phi_dst(matrix_free);
-        FECellIntegrator phi_weights(matrix_free);
+    AlignedVector<VectorizedArrayType> tmp;
+    AlignedVector<VectorizedArrayType> src_local;
+    AlignedVector<VectorizedArrayType> dst_local;
+    AlignedVector<VectorizedArrayType> weights_local;
 
-        AlignedVector<VectorizedArrayType> tmp;
+    // version 1) of cell operation: overlap=1 -> use dealii::FEEvaluation
+    const auto cell_operation_normal = [&](const auto &matrix_free,
+                                           auto &      dst,
+                                           const auto &src,
+                                           const auto  cells) {
+      FECellIntegrator phi_src(matrix_free);
+      FECellIntegrator phi_dst(matrix_free);
+      FECellIntegrator phi_weights(matrix_free);
 
-        for (unsigned int cell = cells.first; cell < cells.second; ++cell)
+      AlignedVector<VectorizedArrayType> tmp;
+
+      for (unsigned int cell = cells.first; cell < cells.second; ++cell)
+        {
+          phi_src.reinit(cell);
+          phi_dst.reinit(cell);
+
+          if (compressed_rw)
+            compressed_rw->read_dof_values(src, phi_src);
+          else
+            phi_src.read_dof_values(src);
+
+          if (do_weights_global == false)
+            apply_weights_local(phi_weights, phi_src, true);
+
+          fdm.apply_inverse(
+            cell,
+            ArrayView<VectorizedArrayType>(phi_dst.begin_dof_values(),
+                                           phi_dst.dofs_per_cell),
+            ArrayView<const VectorizedArrayType>(phi_src.begin_dof_values(),
+                                                 phi_src.dofs_per_cell),
+            tmp);
+
+          if (do_weights_global == false)
+            apply_weights_local(phi_weights, phi_dst, false);
+
+          if (compressed_rw)
+            compressed_rw->distribute_local_to_global(dst, phi_dst);
+          else
+            phi_dst.distribute_local_to_global(dst);
+        }
+    };
+
+    // version 2) of cell operation: overlap>1 -> use ConstraintInfo and
+    // work on own buffers
+    const auto cell_operation_overlap =
+      [&](const MatrixFree<dim, Number, VectorizedArrayType> &,
+          VectorType &                                dst_ptr,
+          const VectorType &                          src_ptr,
+          const std::pair<unsigned int, unsigned int> cell_range) {
+        src_local.resize_fast(
+          Utilities::pow(fe_degree + 2 * n_overlap - 1, dim));
+        dst_local.resize_fast(
+          Utilities::pow(fe_degree + 2 * n_overlap - 1, dim));
+        if (do_weights_global == false)
+          weights_local.resize_fast(
+            Utilities::pow(fe_degree + 2 * n_overlap - 1, dim));
+
+        for (unsigned int cell = cell_range.first; cell < cell_range.second;
+             ++cell)
           {
-            phi_src.reinit(cell);
-            phi_dst.reinit(cell);
+            // 1) gather src (optional)
+            internal::VectorReader<Number, VectorizedArrayType> reader;
+            constraint_info.read_write_operation(reader,
+                                                 src_ptr,
+                                                 src_local.data(),
+                                                 cell_ptr[cell],
+                                                 cell_ptr[cell + 1] -
+                                                   cell_ptr[cell],
+                                                 src_local.size(),
+                                                 true);
 
-            if (compressed_rw)
-              compressed_rw->read_dof_values(src, phi_src);
-            else
-              phi_src.read_dof_values(src);
+            // 2) apply weights (optional)
+            if (do_weights_global == false)
+              apply_weights_local(cell, weights_local, src_local, true);
 
-            if (weight_type != Restrictors::WeightingType::post)
-              apply_weights_local(phi_weights, phi_src, true);
-
+            // 3) cell operation: fast diagonalization method
             fdm.apply_inverse(
               cell,
-              ArrayView<VectorizedArrayType>(phi_dst.begin_dof_values(),
-                                             phi_dst.dofs_per_cell),
-              ArrayView<const VectorizedArrayType>(phi_src.begin_dof_values(),
-                                                   phi_src.dofs_per_cell),
+              make_array_view(dst_local.begin(), dst_local.end()),
+              make_array_view(src_local.begin(), src_local.end()),
               tmp);
 
-            if (weight_type != Restrictors::WeightingType::post)
-              apply_weights_local(phi_weights, phi_dst, false);
+            // 4) apply weights (optional)
+            if (do_weights_global == false)
+              apply_weights_local(cell, weights_local, dst_local, false);
 
-            if (compressed_rw)
-              compressed_rw->distribute_local_to_global(dst, phi_dst);
-            else
-              phi_dst.distribute_local_to_global(dst);
+            // 5) scatter
+            internal::VectorDistributorLocalToGlobal<Number,
+                                                     VectorizedArrayType>
+              writer;
+            constraint_info.read_write_operation(writer,
+                                                 dst_ptr,
+                                                 dst_local.data(),
+                                                 cell_ptr[cell],
+                                                 cell_ptr[cell + 1] -
+                                                   cell_ptr[cell],
+                                                 dst_local.size(),
+                                                 true);
           }
-      },
-      dst,
-      src,
-      operation_before_matrix_vector_product,
-      [&](const auto begin, const auto end) {
-        if (weight_type == Restrictors::WeightingType::post)
+      };
+
+    // version 1) of pre operation: consistent partitioners
+    const auto pre_operation_with_weighting = [&](const auto begin,
+                                                  const auto end) {
+      if (pre_operation)
+        pre_operation(begin, end);
+
+      if (do_weights_global &&
+          (weight_type == Restrictors::WeightingType::pre ||
+           weight_type == Restrictors::WeightingType::symm))
+        {
+          const auto src_scratch_ptr = src_scratch.begin();
+          const auto src_ptr         = src.begin();
+          const auto weights_ptr     = weights.begin();
+
+          DEAL_II_OPENMP_SIMD_PRAGMA
+          for (std::size_t i = begin; i < end; ++i)
+            src_scratch_ptr[i] = src_ptr[i] * weights_ptr[i];
+        }
+    };
+
+    // version 2) of pre operation: inconsistent partitioners -> copy src
+    const auto pre_operation_with_copying_and_weighting = [&](const auto begin,
+                                                              const auto end) {
+      if (pre_operation)
+        pre_operation(begin, end);
+
+      const auto src_scratch_ptr = this->src_.begin();
+      const auto src_ptr         = src.begin();
+      const auto dst_scratch_ptr = this->dst_.begin();
+      const auto weights_ptr     = weights.begin();
+
+      if (do_weights_global &&
+          (weight_type == Restrictors::WeightingType::pre ||
+           weight_type == Restrictors::WeightingType::symm))
+        {
+          DEAL_II_OPENMP_SIMD_PRAGMA
+          for (std::size_t i = begin; i < end; ++i)
+            src_scratch_ptr[i] = src_ptr[i] * weights_ptr[i];
+        }
+      else
+        {
+          DEAL_II_OPENMP_SIMD_PRAGMA
+          for (std::size_t i = begin; i < end; ++i)
+            src_scratch_ptr[i] = src_ptr[i];
+        }
+
+      DEAL_II_OPENMP_SIMD_PRAGMA
+      for (std::size_t i = begin; i < end; ++i)
+        dst_scratch_ptr[i] = 0.0; // note: zeroing
+    };
+
+    // version 1) of post operation: consistent partitioners
+    const auto post_operation_with_weighting = [&](const auto begin,
+                                                   const auto end) {
+      if (do_weights_global &&
+          (weight_type == Restrictors::WeightingType::post ||
+           weight_type == Restrictors::WeightingType::symm))
+        {
+          const auto dst_ptr     = dst.begin();
+          const auto weights_ptr = weights.begin();
+
+          DEAL_II_OPENMP_SIMD_PRAGMA
+          for (std::size_t i = begin; i < end; ++i)
+            dst_ptr[i] *= weights_ptr[i];
+        }
+
+      if (post_operation)
+        post_operation(begin, end);
+    };
+
+    // version 2) of post operation: inconsistent partitioners -> copy dst
+    const auto post_operation_with_weighting_and_copying = [&](const auto begin,
+                                                               const auto end) {
+      const auto dst_scratch_ptr = this->dst_.begin();
+      const auto dst_ptr         = dst.begin();
+      const auto weights_ptr     = weights.begin();
+
+      if (do_weights_global &&
+          (weight_type == Restrictors::WeightingType::post ||
+           weight_type == Restrictors::WeightingType::symm))
+        {
+          DEAL_II_OPENMP_SIMD_PRAGMA
+          for (std::size_t i = begin; i < end; ++i)
+            dst_ptr[i] += dst_scratch_ptr[i] * weights_ptr[i]; // note: add
+        }
+      else
+        {
+          DEAL_II_OPENMP_SIMD_PRAGMA
+          for (std::size_t i = begin; i < end; ++i)
+            dst_ptr[i] += dst_scratch_ptr[i]; // note: add
+        }
+
+      if (post_operation)
+        post_operation(begin, end);
+    };
+
+    if ((partitioner_fdm.get() == matrix_free.get_vector_partitioner().get()) &&
+        (partitioner_fdm.get() == src.get_partitioner().get()))
+      {
+        // version 1) with overlap=1 -> use dealii::MatrixFree
+        if (overlap_pre_post)
           {
-            const auto dst_ptr     = dst.begin();
-            const auto weights_ptr = weights.begin();
-
-            DEAL_II_OPENMP_SIMD_PRAGMA
-            for (std::size_t i = begin; i < end; ++i)
-              dst_ptr[i] *= weights_ptr[i];
+            matrix_free.template cell_loop<VectorType, VectorType>(
+              cell_operation_normal,
+              dst,
+              src_scratch,
+              pre_operation_with_weighting,
+              post_operation_with_weighting);
           }
+        else
+          {
+            const unsigned int chunk_size_zero_vector =
+              internal::MatrixFreeFunctions::DoFInfo::chunk_size_zero_vector;
 
-        if (operation_after_matrix_vector_product)
-          operation_after_matrix_vector_product(begin, end);
-      });
+            for (unsigned int i = 0; i < src.locally_owned_size();
+                 i += chunk_size_zero_vector)
+              pre_operation_with_weighting(i,
+                                           std::min(i + chunk_size_zero_vector,
+                                                    src.locally_owned_size()));
+
+            matrix_free.template cell_loop<VectorType, VectorType>(
+              cell_operation_normal, dst, src_scratch);
+
+            for (unsigned int i = 0; i < src.locally_owned_size();
+                 i += chunk_size_zero_vector)
+              post_operation_with_weighting(i,
+                                            std::min(i + chunk_size_zero_vector,
+                                                     src.locally_owned_size()));
+          }
+      }
+    else if (partitioner_fdm.get() == src.get_partitioner().get())
+      {
+        // version 2) with overlap>1 and consistent partitioner -> use
+        // own matrix-free infrastructure
+        VectorDataExchange<Number> exchanger_dst(partitioner_fdm, buffer_dst);
+        VectorDataExchange<Number> exchanger_src(partitioner_fdm, buffer_src);
+
+        MFWorker<dim, Number, VectorizedArrayType, VectorType> worker(
+          matrix_free,
+          cell_loop_pre_list_index,
+          cell_loop_pre_list,
+          cell_loop_post_list_index,
+          cell_loop_post_list,
+          exchanger_dst,
+          exchanger_src,
+          dst,
+          src_scratch,
+          cell_operation_overlap,
+          pre_operation_with_weighting,
+          post_operation_with_weighting);
+
+        MFRunner runner(overlap_pre_post);
+        runner.loop(worker);
+      }
+    else
+      {
+        // version 3) with overlap>1 and inconsistent partitioner -> use
+        // own matrix-free infrastructure and copy vectors on the fly
+        VectorDataExchange<Number> exchanger_dst(partitioner_fdm, buffer_dst);
+        VectorDataExchange<Number> exchanger_src(partitioner_fdm, buffer_src);
+
+        MFWorker<dim, Number, VectorizedArrayType, VectorType> worker(
+          matrix_free,
+          cell_loop_pre_list_index,
+          cell_loop_pre_list,
+          cell_loop_post_list_index,
+          cell_loop_post_list,
+          exchanger_dst,
+          exchanger_src,
+          this->dst_,
+          this->src_,
+          cell_operation_overlap,
+          pre_operation_with_copying_and_weighting,
+          post_operation_with_weighting_and_copying);
+
+        MFRunner runner(overlap_pre_post);
+        runner.loop(worker);
+      }
   }
 
   void
@@ -571,6 +932,19 @@ private:
             1 /* TODO*/,
             fe_degree + 1,
             phi.begin_dof_values());
+      }
+    else if (weights_dg.size(0) > 0)
+      {
+        if (((first_call == true) &&
+             (weight_type == Restrictors::WeightingType::symm ||
+              weight_type == Restrictors::WeightingType::pre)) ||
+            ((first_call == false) &&
+             (weight_type == Restrictors::WeightingType::symm ||
+              weight_type == Restrictors::WeightingType::post)))
+          {
+            for (unsigned int i = 0; i < weights_dg.size(1); ++i)
+              phi.begin_dof_values()[i] *= weights_dg[cell][i];
+          }
       }
     else
       {
@@ -600,29 +974,45 @@ private:
                       AlignedVector<VectorizedArrayType> &data,
                       const bool                          first_call) const
   {
-    if ((first_call == true) &&
-        (weight_type != Restrictors::WeightingType::none))
+    if (weights_dg.size(0) > 0)
       {
-        internal::VectorReader<Number, VectorizedArrayType> reader;
-        constraint_info.read_write_operation(reader,
-                                             weights,
-                                             weights_local.data(),
-                                             cell_ptr[cell],
-                                             cell_ptr[cell + 1] -
-                                               cell_ptr[cell],
-                                             weights_local.size(),
-                                             true);
+        if (((first_call == true) &&
+             (weight_type == Restrictors::WeightingType::symm ||
+              weight_type == Restrictors::WeightingType::pre)) ||
+            ((first_call == false) &&
+             (weight_type == Restrictors::WeightingType::symm ||
+              weight_type == Restrictors::WeightingType::post)))
+          {
+            for (unsigned int i = 0; i < weights_dg.size(1); ++i)
+              data[i] *= weights_dg[cell][i];
+          }
       }
-
-    if (((first_call == true) &&
-         (weight_type == Restrictors::WeightingType::symm ||
-          weight_type == Restrictors::WeightingType::pre)) ||
-        ((first_call == false) &&
-         (weight_type == Restrictors::WeightingType::symm ||
-          weight_type == Restrictors::WeightingType::post)))
+    else
       {
-        for (unsigned int i = 0; i < weights_local.size(); ++i)
-          data[i] *= weights_local[i];
+        if ((first_call == true) &&
+            (weight_type != Restrictors::WeightingType::none))
+          {
+            internal::VectorReader<Number, VectorizedArrayType> reader;
+            constraint_info.read_write_operation(reader,
+                                                 weights,
+                                                 weights_local.data(),
+                                                 cell_ptr[cell],
+                                                 cell_ptr[cell + 1] -
+                                                   cell_ptr[cell],
+                                                 weights_local.size(),
+                                                 true);
+          }
+
+        if (((first_call == true) &&
+             (weight_type == Restrictors::WeightingType::symm ||
+              weight_type == Restrictors::WeightingType::pre)) ||
+            ((first_call == false) &&
+             (weight_type == Restrictors::WeightingType::symm ||
+              weight_type == Restrictors::WeightingType::post)))
+          {
+            for (unsigned int i = 0; i < weights_local.size(); ++i)
+              data[i] *= weights_local[i];
+          }
       }
   }
 
@@ -630,8 +1020,10 @@ private:
   const unsigned int                                  fe_degree;
   const unsigned int                                  n_overlap;
   const Restrictors::WeightingType                    weight_type;
+  const bool                                          do_weights_global;
+  const bool                                          overlap_pre_post;
 
-  std::shared_ptr<const Utilities::MPI::Partitioner> partitioner_for_fdm;
+  std::shared_ptr<const Utilities::MPI::Partitioner> partitioner_fdm;
 
   internal::MatrixFreeFunctions::ConstraintInfo<dim, VectorizedArrayType>
                             constraint_info;
@@ -647,7 +1039,19 @@ private:
   AlignedVector<std::array<VectorizedArrayType, Utilities::pow(3, dim)>>
     weights_compressed_q2;
 
+  Table<2, VectorizedArrayType> weights_dg;
+
   std::shared_ptr<ConstraintInfoReduced> compressed_rw;
+
+  std::vector<unsigned int> vector_zero_range_list_index;
+  std::vector<std::pair<unsigned int, unsigned int>> vector_zero_range_list;
+  std::vector<unsigned int>                          cell_loop_pre_list_index;
+  std::vector<std::pair<unsigned int, unsigned int>> cell_loop_pre_list;
+  std::vector<unsigned int>                          cell_loop_post_list_index;
+  std::vector<std::pair<unsigned int, unsigned int>> cell_loop_post_list;
+
+  mutable dealii::AlignedVector<Number> buffer_dst;
+  mutable dealii::AlignedVector<Number> buffer_src;
 };
 
 
@@ -746,9 +1150,9 @@ public:
   vmult(VectorType &      dst,
         const VectorType &src,
         const std::function<void(const unsigned int, const unsigned int)>
-          &operation_before_matrix_vector_product,
+          &pre_operation,
         const std::function<void(const unsigned int, const unsigned int)>
-          &operation_after_matrix_vector_product) const
+          &post_operation) const
   {
     matrix_free.template cell_loop<VectorType, VectorType>(
       [&](const auto &, auto &dst, const auto &src, const auto cells) {
@@ -762,8 +1166,8 @@ public:
       },
       dst,
       src,
-      operation_before_matrix_vector_product,
-      operation_after_matrix_vector_product);
+      pre_operation,
+      post_operation);
   }
 
 

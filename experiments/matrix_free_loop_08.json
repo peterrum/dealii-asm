@@ -1,0 +1,7 @@
+{
+  "dim" : 3,
+  "number type" : "float",
+  "fe degree" : 4,
+  "n subdivisions" : 40,
+  "preconditioner types" : "post-1-c pre-1-c symm-1-c post-1-l pre-1-l symm-1-l post-1-dg pre-1-dg symm-1-dg pre-1-g-s-c symm-1-g-s-c none-1-g-s-n post-1-g-s-n pre-1-g-s-n symm-1-g-s-n pre-1-g-p-c symm-1-g-p-c add-1-g-p-n none-1-g-p-n post-1-g-p-n pre-1-g-p-n symm-1-g-p-n post-2-l pre-2-l symm-2-l post-2-dg pre-2-dg symm-2-dg pre-2-g-s-c symm-2-g-s-c none-2-g-s-n post-2-g-s-n pre-2-g-s-n symm-2-g-s-n pre-2-g-p-c symm-2-g-p-c add-2-g-p-n none-2-g-p-n post-2-g-p-n pre-2-g-p-n symm-2-g-p-n"
+}
