@@ -46,6 +46,8 @@ public:
     : matrix_free(matrix_free)
     , fe_degree(matrix_free.get_dof_handler().get_fe().tensor_degree())
     , n_overlap(n_overlap)
+    , patch_size_1d(fe_degree + 2 * n_overlap - 1)
+    , patch_size(Utilities::pow(patch_size_1d, dim))
     , weight_type(weight_type)
     , do_weights_global(weight_local_global == "global")
     , overlap_pre_post(overlap_pre_post)
@@ -390,7 +392,7 @@ public:
 
     {
       AlignedVector<VectorizedArrayType> dst__(
-        Utilities::pow(fe_degree + 2 * n_overlap - 1, dim));
+        Utilities::pow(patch_size_1d, dim));
 
       dst_ = 0.0;
 
@@ -442,8 +444,7 @@ public:
 
             if (actually_use_dg)
               weights_dg.reinit(matrix_free.n_cell_batches(),
-                                Utilities::pow(fe_degree + 2 * n_overlap - 1,
-                                               dim));
+                                Utilities::pow(patch_size_1d, dim));
 
             FECellIntegrator phi(matrix_free);
 
@@ -470,7 +471,7 @@ public:
                 if (actually_use_dg)
                   {
                     for (unsigned int i = 0;
-                         i < Utilities::pow(fe_degree + 2 * n_overlap - 1, dim);
+                         i < Utilities::pow(patch_size_1d, dim);
                          ++i)
                       weights_dg[cell][i] = phi.begin_dof_values()[i];
                   }
@@ -484,12 +485,10 @@ public:
         if (actually_use_dg)
           {
             weights_dg.reinit(matrix_free.n_cell_batches(),
-                              Utilities::pow(fe_degree + 2 * n_overlap - 1,
-                                             dim));
+                              Utilities::pow(patch_size_1d, dim));
 
             AlignedVector<VectorizedArrayType> weights_local;
-            weights_local.resize_fast(
-              Utilities::pow(fe_degree + 2 * n_overlap - 1, dim));
+            weights_local.resize_fast(Utilities::pow(patch_size_1d, dim));
 
             for (unsigned int cell = 0; cell < matrix_free.n_cell_batches();
                  ++cell)
@@ -504,8 +503,7 @@ public:
                                                      weights_local.size(),
                                                      true);
 
-                for (unsigned int i = 0;
-                     i < Utilities::pow(fe_degree + 2 * n_overlap - 1, dim);
+                for (unsigned int i = 0; i < Utilities::pow(patch_size_1d, dim);
                      ++i)
                   weights_dg[cell][i] = weights_local[i];
               }
@@ -685,13 +683,10 @@ private:
           VectorType &                                dst_ptr,
           const VectorType &                          src_ptr,
           const std::pair<unsigned int, unsigned int> cell_range) {
-        src_local.resize_fast(
-          Utilities::pow(fe_degree + 2 * n_overlap - 1, dim));
-        dst_local.resize_fast(
-          Utilities::pow(fe_degree + 2 * n_overlap - 1, dim));
+        src_local.resize_fast(Utilities::pow(patch_size_1d, dim));
+        dst_local.resize_fast(Utilities::pow(patch_size_1d, dim));
         if (do_weights_global == false)
-          weights_local.resize_fast(
-            Utilities::pow(fe_degree + 2 * n_overlap - 1, dim));
+          weights_local.resize_fast(Utilities::pow(patch_size_1d, dim));
 
         for (unsigned int cell = cell_range.first; cell < cell_range.second;
              ++cell)
@@ -1024,6 +1019,8 @@ private:
   const MatrixFree<dim, Number, VectorizedArrayType> &matrix_free;
   const unsigned int                                  fe_degree;
   const unsigned int                                  n_overlap;
+  const unsigned int                                  patch_size_1d;
+  const unsigned int                                  patch_size;
   const Restrictors::WeightingType                    weight_type;
   const bool                                          do_weights_global;
   const bool                                          overlap_pre_post;
