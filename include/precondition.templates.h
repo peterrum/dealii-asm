@@ -186,6 +186,7 @@ create_fdm_preconditioner(const OperatorType &              op,
                                 n_overlap > 1 ? "global" : "compressed");
 
       const auto overlap_pre_post = params.get<bool>("overlap pre post", true);
+      const auto element_centric  = params.get<bool>("element centric", true);
 
       pcout << "    - n overlap:              " << n_overlap << std::endl;
       pcout << "    - sub mesh approximation: " << sub_mesh_approximation
@@ -205,7 +206,8 @@ create_fdm_preconditioner(const OperatorType &              op,
         weight_type,
         op.uses_compressed_indices(),
         do_weights_global,
-        overlap_pre_post);
+        overlap_pre_post,
+        element_centric);
 
       if (reuse_partitioner)
         op.set_partitioner(precon->get_partitioner());
