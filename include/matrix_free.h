@@ -39,7 +39,8 @@ public:
       Restrictors::WeightingType::post,
     const bool        compress_indices    = true,
     const std::string weight_local_global = "global",
-    const bool        overlap_pre_post    = true)
+    const bool        overlap_pre_post    = true,
+    const bool        element_centric     = true)
     : matrix_free(matrix_free)
     , fe_degree(matrix_free.get_dof_handler().get_fe().tensor_degree())
     , n_overlap(n_overlap)
@@ -48,6 +49,7 @@ public:
     , weight_type(weight_type)
     , do_weights_global(weight_local_global == "global")
     , overlap_pre_post(overlap_pre_post)
+    , element_centric(element_centric)
   {
     const auto &dof_handler = matrix_free.get_dof_handler();
     const auto &constraints = matrix_free.get_affine_constraints();
@@ -120,9 +122,15 @@ public:
                     dim>(matrix_free.get_cell_iterator(cell, v),
                          n_overlap <= 1 ? 0 : sub_mesh_approximation);
 
+                const auto cells_vertex_patch =
+                  collect_cells_for_vertex_patch(cells);
+
                 auto local_dofs =
-                  dealii::DoFTools::get_dof_indices_cell_with_overlap(
-                    dof_handler, cells, n_overlap, true);
+                  element_centric ?
+                    dealii::DoFTools::get_dof_indices_cell_with_overlap(
+                      dof_handler, cells, n_overlap, true) :
+                    dealii::DoFTools::get_dof_indices_vertex_patch(
+                      dof_handler, cells_vertex_patch);
 
                 for (auto &i : local_dofs)
                   resolve_constraint(i);
@@ -202,9 +210,15 @@ public:
                     dim>(cell_iterator,
                          n_overlap <= 1 ? 0 : sub_mesh_approximation);
 
+                const auto cells_vertex_patch =
+                  collect_cells_for_vertex_patch(cells);
+
                 auto local_dofs =
-                  dealii::DoFTools::get_dof_indices_cell_with_overlap(
-                    dof_handler, cells, n_overlap, true);
+                  element_centric ?
+                    dealii::DoFTools::get_dof_indices_cell_with_overlap(
+                      dof_handler, cells, n_overlap, true) :
+                    dealii::DoFTools::get_dof_indices_vertex_patch(
+                      dof_handler, cells_vertex_patch);
 
                 for (auto &i : local_dofs)
                   resolve_constraint(i);
@@ -1003,6 +1017,25 @@ private:
       }
   }
 
+  static std::array<typename Triangulation<dim>::cell_iterator,
+                    Utilities::pow(2, dim)>
+  collect_cells_for_vertex_patch(
+    const std::array<typename Triangulation<dim>::cell_iterator,
+                     Utilities::pow(3, dim)> &cells_all)
+  {
+    std::array<typename Triangulation<dim>::cell_iterator,
+               Utilities::pow(2, dim)>
+      cells;
+
+    for (unsigned int k = 0, c = 0; k < (dim == 3 ? 2 : 1); ++k)
+      for (unsigned int j = 0; j < (dim >= 2 ? 2 : 1); ++j)
+        for (unsigned int i = 0; i < 2; ++i, ++c)
+          cells[4 * k + 2 * j + i] =
+            cells_all[9 * (k + 1) + 3 * (j + 1) + (i + 1)];
+
+    return cells;
+  }
+
   const MatrixFree<dim, Number, VectorizedArrayType> &matrix_free;
   const unsigned int                                  fe_degree;
   const unsigned int                                  n_overlap;
@@ -1011,6 +1044,7 @@ private:
   const Restrictors::WeightingType                    weight_type;
   const bool                                          do_weights_global;
   const bool                                          overlap_pre_post;
+  const bool                                          element_centric;
 
   std::shared_ptr<const Utilities::MPI::Partitioner> partitioner_fdm;
 
