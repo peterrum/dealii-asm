@@ -40,7 +40,7 @@ public:
     const bool        compress_indices    = true,
     const std::string weight_local_global = "global",
     const bool        overlap_pre_post    = true,
-    const bool        element_centric     = false)
+    const bool        element_centric     = true)
     : matrix_free(matrix_free)
     , fe_degree(matrix_free.get_dof_handler().get_fe().tensor_degree())
     , n_overlap(n_overlap)
@@ -491,7 +491,7 @@ public:
                         VectorizedArrayType>(
                         phi.begin_dof_values(),
                         1,
-                        fe_degree + 1,
+                        patch_size_1d,
                         weights_compressed_q2[cell].begin());
                     AssertThrow(success, ExcInternalError());
                   }
@@ -507,7 +507,8 @@ public:
     else
       {
         const bool actually_use_compression =
-          (weight_local_global == "compressed" && fe_1D.degree >= 2);
+          (weight_local_global == "compressed" && fe_1D.degree >= 2 &&
+           (element_centric == false));
         const bool actually_use_dg = (weight_local_global == "dg");
 
         if (actually_use_compression || actually_use_dg)
@@ -977,7 +978,7 @@ private:
           internal::weight_fe_q_dofs_by_entity<dim, -1, VectorizedArrayType>(
             &weights_compressed_q2[cell][0],
             1 /* TODO*/,
-            fe_degree + 1,
+            patch_size_1d,
             phi.begin_dof_values());
       }
     else if (weights_dg.size(0) > 0)
