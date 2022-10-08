@@ -69,25 +69,15 @@ test(const unsigned int fe_degree)
 
       std::array<typename Triangulation<dim>::cell_iterator,
                  Utilities::pow(2, dim)>
-                                      cells;
-      dealii::ndarray<double, dim, 2> patch_extend;
+        cells;
 
-      bool valid_patch = true;
+      dealii::ndarray<double, dim, 2> patch_extend;
 
       for (unsigned int k = 0, c = 0; k < (dim == 3 ? 2 : 1); ++k)
         for (unsigned int j = 0; j < (dim >= 2 ? 2 : 1); ++j)
           for (unsigned int i = 0; i < 2; ++i, ++c)
-            {
-              const auto temp = cells_all[9 * (k + 1) + 3 * (j + 1) + (i + 1)];
-
-              if (temp == tria.end())
-                valid_patch = false;
-
-              cells[4 * k + 2 * j + i] = temp;
-            }
-
-      if (valid_patch == false)
-        continue;
+            cells[4 * k + 2 * j + i] =
+              cells_all[9 * (k + 1) + 3 * (j + 1) + (i + 1)];
 
       for (unsigned int d = 0; d < dim; ++d)
         {
@@ -102,6 +92,8 @@ test(const unsigned int fe_degree)
                                                           patch_extend);
 
       // indices
+      const auto indices =
+        DoFTools::get_dof_indices_vertex_patch<dim>(dof_handler, cells);
     }
 }
 

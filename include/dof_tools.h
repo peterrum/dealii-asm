@@ -135,5 +135,169 @@ namespace dealii
           return dof_indices_cleaned;
         }
     }
+
+    template <int dim>
+    unsigned int
+    compute_shift_within_children(const unsigned int child,
+                                  const unsigned int fe_shift_1d,
+                                  const unsigned int fe_degree)
+    {
+      // we put the degrees of freedom of all child cells in lexicographic
+      // ordering
+      unsigned int c_tensor_index[dim];
+      unsigned int tmp = child;
+      for (unsigned int d = 0; d < dim; ++d)
+        {
+          c_tensor_index[d] = tmp % 2;
+          tmp /= 2;
+        }
+      const unsigned int n_child_dofs_1d = fe_degree + 1 + fe_shift_1d;
+      unsigned int       factor          = 1;
+      unsigned int       shift           = fe_shift_1d * c_tensor_index[0];
+      for (unsigned int d = 1; d < dim; ++d)
+        {
+          factor *= n_child_dofs_1d;
+          shift = shift + factor * fe_shift_1d * c_tensor_index[d];
+        }
+      return shift;
+    }
+
+    template <int dim>
+    void
+    get_child_offset(const unsigned int         child,
+                     const unsigned int         fe_shift_1d,
+                     const unsigned int         fe_degree,
+                     std::vector<unsigned int> &local_dof_indices)
+    {
+      const unsigned int n_child_dofs_1d = fe_degree + 1 + fe_shift_1d;
+      const unsigned int shift =
+        compute_shift_within_children<dim>(child, fe_shift_1d, fe_degree);
+      const unsigned int n_components =
+        local_dof_indices.size() / Utilities::fixed_power<dim>(fe_degree + 1);
+      const unsigned int n_scalar_cell_dofs =
+        Utilities::fixed_power<dim>(n_child_dofs_1d);
+      for (unsigned int c = 0, m = 0; c < n_components; ++c)
+        for (unsigned int k = 0; k < (dim > 2 ? (fe_degree + 1) : 1); ++k)
+          for (unsigned int j = 0; j < (dim > 1 ? (fe_degree + 1) : 1); ++j)
+            for (unsigned int i = 0; i < (fe_degree + 1); ++i, ++m)
+              local_dof_indices[m] = c * n_scalar_cell_dofs +
+                                     k * n_child_dofs_1d * n_child_dofs_1d +
+                                     j * n_child_dofs_1d + i + shift;
+    }
+
+    template <int dim>
+    std::vector<std::vector<unsigned int>>
+    get_child_offsets(const unsigned int n_dofs_per_cell_coarse,
+                      const unsigned int fe_shift_1d,
+                      const unsigned int fe_degree)
+    {
+      std::vector<std::vector<unsigned int>> cell_local_chilren_indices(
+        GeometryInfo<dim>::max_children_per_cell,
+        std::vector<unsigned int>(n_dofs_per_cell_coarse));
+      for (unsigned int c = 0; c < GeometryInfo<dim>::max_children_per_cell;
+           c++)
+        get_child_offset<dim>(c,
+                              fe_shift_1d,
+                              fe_degree,
+                              cell_local_chilren_indices[c]);
+      return cell_local_chilren_indices;
+    }
+
+    template <int dim>
+    std::vector<types::global_dof_index>
+    get_dof_indices_vertex_patch(
+      const DoFHandler<dim> &                   dof_handler,
+      const std::array<typename Triangulation<dim>::cell_iterator,
+                       Utilities::pow(2, dim)> &cells)
+    {
+      const unsigned int fe_degree = dof_handler.get_fe().degree;
+      const unsigned int n_dofs_per_cell =
+        dof_handler.get_fe().n_dofs_per_cell();
+      const unsigned int n_dofs_1D_patch = fe_degree * 2 - 1;
+      const unsigned int n_dofs_per_patch =
+        Utilities::pow(n_dofs_1D_patch, dim);
+      const unsigned int n_dofs_1D_patch_extended = fe_degree * 2 + 1;
+      const unsigned int n_dofs_per_patch_extended =
+        Utilities::pow(n_dofs_1D_patch_extended, dim);
+
+      if (std::any_of(cells.begin(), cells.end(), [&](const auto &cell) {
+            return cell == dof_handler.get_triangulation().end();
+          }))
+        return std::vector<types::global_dof_index>(n_dofs_per_patch,
+                                                    numbers::invalid_dof_index);
+
+      const auto map =
+        FETools::hierarchic_to_lexicographic_numbering<dim>(fe_degree);
+
+      std::vector<types::global_dof_index> result_all(
+        n_dofs_per_patch_extended);
+
+      std::vector<types::global_dof_index> local_dof_indices(n_dofs_per_cell);
+      std::vector<types::global_dof_index> local_dof_indices_lex(
+        n_dofs_per_cell);
+
+      const auto translate =
+        get_child_offsets<dim>(n_dofs_per_cell, fe_degree, fe_degree);
+
+      for (unsigned int c = 0; c < cells.size(); ++c)
+        {
+          typename DoFHandler<dim>::cell_iterator cell(
+            &cell->get_triangulation(),
+            cell->level(),
+            cell->index(),
+            &dof_handler);
+
+          cell->get_dof_indices(local_dof_indices);
+
+          for (unsigned int i = 0; i < n_dofs_per_cell; ++i)
+            local_dof_indices_lex[map[i]] = local_dof_indices[i];
+
+          for (unsigned int i = 0; i < n_dofs_per_cell; ++i)
+            result_all[translate[c][i]] = local_dof_indices_lex[i];
+        }
+
+      std::vector<types::global_dof_index> result;
+
+      if (dim == 1)
+        {
+          for (unsigned int i = 0, c = 0; i < n_dofs_1D_patch_extended;
+               ++i, ++c)
+            {
+              if (i == 0 || i == (n_dofs_1D_patch_extended - 1))
+                continue;
+
+              result.push_back(result_all[c]);
+            }
+        }
+      else if (dim == 2)
+        {
+          for (unsigned int j = 0, c = 0; j < n_dofs_1D_patch_extended; ++j)
+            for (unsigned int i = 0; i < n_dofs_1D_patch_extended; ++i, ++c)
+              {
+                if (i == 0 || i == (n_dofs_1D_patch_extended - 1) || j == 0 ||
+                    j == (n_dofs_1D_patch_extended - 1))
+                  continue;
+
+                result.push_back(result_all[c]);
+              }
+        }
+      else if (dim == 3)
+        {
+          for (unsigned int k = 0, c = 0; k < n_dofs_1D_patch_extended; ++k)
+            for (unsigned int j = 0; j < n_dofs_1D_patch_extended; ++j)
+              for (unsigned int i = 0; i < n_dofs_1D_patch_extended; ++i, ++c)
+                {
+                  if (i == 0 || i == (n_dofs_1D_patch_extended - 1) || j == 0 ||
+                      j == (n_dofs_1D_patch_extended - 1) || k == 0 ||
+                      k == (n_dofs_1D_patch_extended - 1))
+                    continue;
+
+                  result.push_back(result_all[c]);
+                }
+        }
+
+
+      return result;
+    }
   } // namespace DoFTools
 } // namespace dealii
