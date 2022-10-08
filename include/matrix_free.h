@@ -110,6 +110,13 @@ public:
 
         std::vector<types::global_dof_index> ghost_indices;
 
+        for (const auto i :
+             matrix_free.get_vector_partitioner()->locally_owned_range())
+          ghost_indices.push_back(i);
+        for (const auto i :
+             matrix_free.get_vector_partitioner()->ghost_indices())
+          ghost_indices.push_back(i);
+
         for (unsigned int cell = 0, cell_counter = 0;
              cell < matrix_free.n_cell_batches();
              ++cell)
