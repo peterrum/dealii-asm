@@ -44,7 +44,8 @@ public:
     : matrix_free(matrix_free)
     , fe_degree(matrix_free.get_dof_handler().get_fe().tensor_degree())
     , n_overlap(n_overlap)
-    , patch_size_1d(fe_degree + 2 * n_overlap - 1)
+    , patch_size_1d(element_centric ? (fe_degree + 2 * n_overlap - 1) :
+                                      (fe_degree * 2 - 1))
     , patch_size(Utilities::pow(patch_size_1d, dim))
     , weight_type(weight_type)
     , do_weights_global(weight_local_global == "global")
@@ -94,7 +95,7 @@ public:
         }
     };
 
-    if (n_overlap == 1)
+    if ((n_overlap == 1) && element_centric)
       {
         if (compress_indices)
           {
@@ -120,7 +121,9 @@ public:
                 const auto cells =
                   dealii::GridTools::extract_all_surrounding_cells_cartesian<
                     dim>(matrix_free.get_cell_iterator(cell, v),
-                         n_overlap <= 1 ? 0 : sub_mesh_approximation);
+                         element_centric ?
+                           (n_overlap <= 1 ? 0 : sub_mesh_approximation) :
+                           dim);
 
                 const auto cells_vertex_patch =
                   collect_cells_for_vertex_patch(cells);
@@ -208,7 +211,9 @@ public:
                 const auto cells =
                   dealii::GridTools::extract_all_surrounding_cells_cartesian<
                     dim>(cell_iterator,
-                         n_overlap <= 1 ? 0 : sub_mesh_approximation);
+                         element_centric ?
+                           (n_overlap <= 1 ? 0 : sub_mesh_approximation) :
+                           dim);
 
                 const auto cells_vertex_patch =
                   collect_cells_for_vertex_patch(cells);
@@ -239,15 +244,26 @@ public:
                                                  local_dofs,
                                                  partitioner_fdm);
 
-                const auto [Ms_scalar, Ks_scalar] = TensorProductMatrixCreator::
-                  create_laplace_tensor_product_matrix<dim, Number>(
-                    cell_iterator,
-                    {1},
-                    {2},
-                    fe_1D,
-                    quadrature_1D,
-                    harmonic_patch_extend[cell_iterator->active_cell_index()],
-                    n_overlap);
+                const auto patch_extend =
+                  harmonic_patch_extend[cell_iterator->active_cell_index()];
+
+                const auto patch_extend_for_vertex_patch =
+                  collect_patch_extend(patch_extend);
+
+                const auto [Ms_scalar, Ks_scalar] =
+                  element_centric ?
+                    TensorProductMatrixCreator::
+                      create_laplace_tensor_product_matrix<dim, Number>(
+                        cell_iterator,
+                        {1},
+                        {2},
+                        fe_1D,
+                        quadrature_1D,
+                        patch_extend,
+                        n_overlap) :
+                    TensorProductMatrixCreator::
+                      create_laplace_tensor_product_matrix<dim, Number>(
+                        fe_1D, quadrature_1D, patch_extend_for_vertex_patch);
 
                 for (unsigned int d = 0; d < dim; ++d)
                   {
@@ -1035,6 +1051,23 @@ private:
 
     return cells;
   }
+
+  static dealii::ndarray<double, dim, 2>
+  collect_patch_extend(const dealii::ndarray<double, dim, 3> &patch_extend_all)
+  {
+    dealii::ndarray<double, dim, 2> patch_extend;
+
+    for (unsigned int d = 0; d < dim; ++d)
+      {
+        patch_extend[d][0] =
+          patch_extend_all[d][1] != 0.0 ? patch_extend_all[d][1] : 1.0;
+        patch_extend[d][1] =
+          patch_extend_all[d][2] != 0.0 ? patch_extend_all[d][2] : 1.0;
+      }
+
+    return patch_extend;
+  }
+
 
   const MatrixFree<dim, Number, VectorizedArrayType> &matrix_free;
   const unsigned int                                  fe_degree;
