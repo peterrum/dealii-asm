@@ -1060,7 +1060,7 @@ private:
         for (unsigned int i = 0; i < 2; ++i)
           cells[4 * k + 2 * j + i] =
             cells_all[9 * ((dim == 3) ? (k + 1) : 0) +
-                      3 * ((dim >= 3) ? (j + 1) : 0) + (i + 1)];
+                      3 * ((dim >= 2) ? (j + 1) : 0) + (i + 1)];
 
     return cells;
   }

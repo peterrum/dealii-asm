@@ -60,6 +60,14 @@ test(const unsigned int fe_degree)
   const auto harmonic_patch_extend =
     GridTools::compute_harmonic_patch_extend(mapping, tria, quadrature_face);
 
+  Restrictors::ElementCenteredRestrictor<Vector<double>>::AdditionalData ad;
+  ad.type = "vertex";
+
+  Restrictors::ElementCenteredRestrictor<Vector<double>> restrictor;
+  restrictor.reinit(dof_handler, ad);
+
+  std::cout << std::endl;
+
   for (const auto &cell : tria.active_cell_iterators())
     {
       const auto cell_index = cell->active_cell_index();
@@ -80,7 +88,7 @@ test(const unsigned int fe_degree)
           for (unsigned int i = 0; i < 2; ++i, ++c)
             cells[4 * k + 2 * j + i] =
               cells_all[9 * ((dim == 3) ? (k + 1) : 0) +
-                        3 * ((dim >= 3) ? (j + 1) : 0) + (i + 1)];
+                        3 * ((dim >= 2) ? (j + 1) : 0) + (i + 1)];
 
       for (unsigned int d = 0; d < dim; ++d)
         {
@@ -95,8 +103,14 @@ test(const unsigned int fe_degree)
                                                           patch_extend);
 
       // indices
-      const auto indices =
+      auto indices =
         DoFTools::get_dof_indices_vertex_patch<dim>(dof_handler, cells);
+
+      std::sort(indices.begin(), indices.end());
+
+      for (const auto i : indices)
+        std::cout << i << " ";
+      std::cout << std::endl;
     }
 }
 

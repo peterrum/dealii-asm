@@ -223,8 +223,8 @@ namespace dealii
       if (std::any_of(cells.begin(), cells.end(), [&](const auto &cell) {
             return cell == dof_handler.get_triangulation().end();
           }))
-        return std::vector<types::global_dof_index>(n_dofs_per_patch,
-                                                    numbers::invalid_dof_index);
+        return std::vector<types::global_dof_index>(
+          n_dofs_per_patch, numbers::invalid_unsigned_int);
 
       const auto map =
         FETools::hierarchic_to_lexicographic_numbering<dim>(fe_degree);
