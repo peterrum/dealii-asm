@@ -391,8 +391,7 @@ public:
     }
 
     {
-      AlignedVector<VectorizedArrayType> dst__(
-        Utilities::pow(patch_size_1d, dim));
+      AlignedVector<VectorizedArrayType> dst__(patch_size);
 
       dst_ = 0.0;
 
@@ -443,8 +442,7 @@ public:
               weights_compressed_q2.resize(matrix_free.n_cell_batches());
 
             if (actually_use_dg)
-              weights_dg.reinit(matrix_free.n_cell_batches(),
-                                Utilities::pow(patch_size_1d, dim));
+              weights_dg.reinit(matrix_free.n_cell_batches(), patch_size);
 
             FECellIntegrator phi(matrix_free);
 
@@ -470,9 +468,7 @@ public:
 
                 if (actually_use_dg)
                   {
-                    for (unsigned int i = 0;
-                         i < Utilities::pow(patch_size_1d, dim);
-                         ++i)
+                    for (unsigned int i = 0; i < patch_size; ++i)
                       weights_dg[cell][i] = phi.begin_dof_values()[i];
                   }
               }
@@ -484,11 +480,10 @@ public:
 
         if (actually_use_dg)
           {
-            weights_dg.reinit(matrix_free.n_cell_batches(),
-                              Utilities::pow(patch_size_1d, dim));
+            weights_dg.reinit(matrix_free.n_cell_batches(), patch_size);
 
             AlignedVector<VectorizedArrayType> weights_local;
-            weights_local.resize_fast(Utilities::pow(patch_size_1d, dim));
+            weights_local.resize_fast(patch_size);
 
             for (unsigned int cell = 0; cell < matrix_free.n_cell_batches();
                  ++cell)
@@ -503,8 +498,7 @@ public:
                                                      weights_local.size(),
                                                      true);
 
-                for (unsigned int i = 0; i < Utilities::pow(patch_size_1d, dim);
-                     ++i)
+                for (unsigned int i = 0; i < patch_size; ++i)
                   weights_dg[cell][i] = weights_local[i];
               }
           }
@@ -683,10 +677,10 @@ private:
           VectorType &                                dst_ptr,
           const VectorType &                          src_ptr,
           const std::pair<unsigned int, unsigned int> cell_range) {
-        src_local.resize_fast(Utilities::pow(patch_size_1d, dim));
-        dst_local.resize_fast(Utilities::pow(patch_size_1d, dim));
+        src_local.resize_fast(patch_size);
+        dst_local.resize_fast(patch_size);
         if (do_weights_global == false)
-          weights_local.resize_fast(Utilities::pow(patch_size_1d, dim));
+          weights_local.resize_fast(patch_size);
 
         for (unsigned int cell = cell_range.first; cell < cell_range.second;
              ++cell)
