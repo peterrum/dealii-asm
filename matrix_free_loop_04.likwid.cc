@@ -151,7 +151,7 @@ test(const unsigned int fe_degree,
   LaplaceOperatorMatrixFree<dim, Number, VectorizedArrayType> op(matrix_free,
                                                                  op_as);
 
-  ASPoissonPreconditioner<dim, Number, VectorizedArrayType, -1> precon_fdm(
+  ASPoissonPreconditioner<dim, Number, VectorizedArrayType> precon_fdm(
     matrix_free,
     n_overlap,
     dim,

@@ -17,10 +17,7 @@
 #include "restrictors.h"
 #include "vector_access_reduced.h"
 
-template <int dim,
-          typename Number,
-          typename VectorizedArrayType,
-          int n_rows_1d = -1>
+template <int dim, typename Number, typename VectorizedArrayType>
 class ASPoissonPreconditioner
   : public PreconditionerBase<LinearAlgebra::distributed::Vector<Number>>
 {
@@ -52,10 +49,6 @@ public:
     , do_weights_global(weight_local_global == "global")
     , overlap_pre_post(overlap_pre_post)
   {
-    AssertThrow((n_rows_1d == -1) || (static_cast<unsigned int>(n_rows_1d) ==
-                                      fe_1D.degree + 2 * n_overlap - 1),
-                ExcNotImplemented());
-
     const auto &dof_handler = matrix_free.get_dof_handler();
     const auto &constraints = matrix_free.get_affine_constraints();
 
@@ -1025,8 +1018,7 @@ private:
                             constraint_info;
   std::vector<unsigned int> cell_ptr;
 
-  TensorProductMatrixSymmetricSumCollection<dim, VectorizedArrayType, n_rows_1d>
-    fdm;
+  TensorProductMatrixSymmetricSumCollection<dim, VectorizedArrayType> fdm;
 
   mutable VectorType src_;
   mutable VectorType dst_;

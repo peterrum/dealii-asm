@@ -8,8 +8,7 @@ template <typename OperatorType>
 std::shared_ptr<
   const ASPoissonPreconditioner<OperatorType::dimension,
                                 typename OperatorType::value_type,
-                                typename OperatorType::vectorized_array_type,
-                                -1>>
+                                typename OperatorType::vectorized_array_type>>
 create_fdm_preconditioner(const OperatorType &              op,
                           const boost::property_tree::ptree params);
 
