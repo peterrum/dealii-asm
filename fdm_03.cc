@@ -73,11 +73,14 @@ test(const unsigned int fe_degree)
 
       dealii::ndarray<double, dim, 2> patch_extend;
 
-      for (unsigned int k = 0, c = 0; k < (dim == 3 ? 2 : 1); ++k)
-        for (unsigned int j = 0; j < (dim >= 2 ? 2 : 1); ++j)
+      unsigned int c = 0;
+
+      for (unsigned int k = 0; k < ((dim == 3) ? 2 : 1); ++k)
+        for (unsigned int j = 0; j < ((dim >= 2) ? 2 : 1); ++j)
           for (unsigned int i = 0; i < 2; ++i, ++c)
             cells[4 * k + 2 * j + i] =
-              cells_all[9 * (k + 1) + 3 * (j + 1) + (i + 1)];
+              cells_all[9 * ((dim == 3) ? (k + 1) : 0) +
+                        3 * ((dim >= 3) ? (j + 1) : 0) + (i + 1)];
 
       for (unsigned int d = 0; d < dim; ++d)
         {

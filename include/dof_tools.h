@@ -242,9 +242,9 @@ namespace dealii
       for (unsigned int c = 0; c < cells.size(); ++c)
         {
           typename DoFHandler<dim>::cell_iterator cell(
-            &cell->get_triangulation(),
-            cell->level(),
-            cell->index(),
+            &cells[c]->get_triangulation(),
+            cells[c]->level(),
+            cells[c]->index(),
             &dof_handler);
 
           cell->get_dof_indices(local_dof_indices);

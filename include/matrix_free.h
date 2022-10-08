@@ -40,7 +40,7 @@ public:
     const bool        compress_indices    = true,
     const std::string weight_local_global = "global",
     const bool        overlap_pre_post    = true,
-    const bool        element_centric     = true)
+    const bool        element_centric     = false)
     : matrix_free(matrix_free)
     , fe_degree(matrix_free.get_dof_handler().get_fe().tensor_degree())
     , n_overlap(n_overlap)
@@ -58,6 +58,11 @@ public:
     ConditionalOStream pcout(std::cout,
                              Utilities::MPI::this_mpi_process(
                                dof_handler.get_communicator()) == 0);
+
+    if (element_centric == false)
+      {
+        AssertThrow(weight_local_global != "compressed", ExcNotImplemented());
+      }
 
     // set up ConstraintInfo
     // ... allocate memory
@@ -95,7 +100,7 @@ public:
         }
     };
 
-    if ((n_overlap == 1) && element_centric)
+    if (element_centric && (n_overlap == 1))
       {
         if (compress_indices)
           {
@@ -460,7 +465,7 @@ public:
 
 
 
-    if (n_overlap == 1)
+    if (element_centric && (n_overlap == 1))
       {
         const bool actually_use_compression =
           (weight_local_global == "compressed" && fe_1D.degree >= 2);
@@ -1050,11 +1055,12 @@ private:
                Utilities::pow(2, dim)>
       cells;
 
-    for (unsigned int k = 0, c = 0; k < (dim == 3 ? 2 : 1); ++k)
-      for (unsigned int j = 0; j < (dim >= 2 ? 2 : 1); ++j)
-        for (unsigned int i = 0; i < 2; ++i, ++c)
+    for (unsigned int k = 0; k < ((dim == 3) ? 2 : 1); ++k)
+      for (unsigned int j = 0; j < ((dim >= 2) ? 2 : 1); ++j)
+        for (unsigned int i = 0; i < 2; ++i)
           cells[4 * k + 2 * j + i] =
-            cells_all[9 * (k + 1) + 3 * (j + 1) + (i + 1)];
+            cells_all[9 * ((dim == 3) ? (k + 1) : 0) +
+                      3 * ((dim >= 3) ? (j + 1) : 0) + (i + 1)];
 
     return cells;
   }
@@ -1067,9 +1073,9 @@ private:
     for (unsigned int d = 0; d < dim; ++d)
       {
         patch_extend[d][0] =
-          patch_extend_all[d][1] != 0.0 ? patch_extend_all[d][1] : 1.0;
+          (patch_extend_all[d][1] != 0.0) ? patch_extend_all[d][1] : 1.0;
         patch_extend[d][1] =
-          patch_extend_all[d][2] != 0.0 ? patch_extend_all[d][2] : 1.0;
+          (patch_extend_all[d][2] != 0.0) ? patch_extend_all[d][2] : 1.0;
       }
 
     return patch_extend;
