@@ -74,7 +74,7 @@
     - degree: 1
     - min ev: 1.10372
     - max ev: 1.32446
-    - omega:  0.823662
+    - omega:  0.823661
 
 - Setting up smoother on level 3
 
@@ -88,7 +88,7 @@
     - degree: 1
     - min ev: 1.16311
     - max ev: 1.39573
-    - omega:  0.781605
+    - omega:  0.781606
 
  - Solving with GMRES
    - max iterations: 1000

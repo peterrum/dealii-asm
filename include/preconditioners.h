@@ -568,6 +568,18 @@ public:
       global_sparsity_pattern,
       restrictor->get_indices(),
       this->blocks);
+
+    if (false)
+      for (const auto &block : this->blocks)
+        {
+          unsigned int counter = 0;
+
+          for (unsigned int i = 0; i < block.m(); ++i)
+            for (unsigned int j = 0; j < block.n(); ++j)
+              if (std::abs(block[i][j]) > 0.0)
+                counter++;
+          std::cout << counter << std::endl;
+        }
   }
 
   void

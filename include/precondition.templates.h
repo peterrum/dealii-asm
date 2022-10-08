@@ -596,6 +596,9 @@ create_system_preconditioner(const OperatorType &              op,
       restrictor_ad.n_overlap =
         std::min(params.get<unsigned int>("n overlap", 1), fe_degree + 1);
       restrictor_ad.weighting_type = get_weighting_type(params);
+      restrictor_ad.type =
+        params.get<std::string>("restriction type", "element");
+
 
       const auto restrictor =
         std::make_shared<const RestictorType>(op_approx->get_dof_handler(),
