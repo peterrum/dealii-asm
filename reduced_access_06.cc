@@ -47,24 +47,27 @@ gather(const dealii::LinearAlgebra::distributed::Vector<Number> &vec,
 
           for (unsigned int i = 0; i < n_inside_1d; ++i, ++c)
             for (unsigned int v = 0; v < n_lanes; ++v)
-              dof_values[c][v] = vec.local_element(
-                indices[v] + k_offset * n_inside_1d * n_inside_1d +
-                j_offset * n_inside_1d + i);
+              if (indices[v] != dealii::numbers::invalid_unsigned_int)
+                dof_values[c][v] = vec.local_element(
+                  indices[v] + k_offset * n_inside_1d * n_inside_1d +
+                  j_offset * n_inside_1d + i);
 
           indices += n_lanes;
 
           for (unsigned int v = 0; v < n_lanes; ++v)
-            dof_values[c][v] = vec.local_element(
-              indices[v] + n_inside_1d * n_inside_1d + j_offset);
+            if (indices[v] != dealii::numbers::invalid_unsigned_int)
+              dof_values[c][v] = vec.local_element(
+                indices[v] + n_inside_1d * n_inside_1d + j_offset);
 
           c += 1;
           indices += n_lanes;
 
           for (unsigned int i = 0; i < n_inside_1d; ++i, ++c)
             for (unsigned int v = 0; v < n_lanes; ++v)
-              dof_values[c][v] = vec.local_element(
-                indices[v] + k_offset * n_inside_1d * n_inside_1d +
-                j_offset * n_inside_1d + i);
+              if (indices[v] != dealii::numbers::invalid_unsigned_int)
+                dof_values[c][v] = vec.local_element(
+                  indices[v] + k_offset * n_inside_1d * n_inside_1d +
+                  j_offset * n_inside_1d + i);
 
           if (((j + 1) == n_inside_1d) || (j == n_inside_1d))
             j_offset = 0;
