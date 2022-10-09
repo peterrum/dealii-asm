@@ -18,6 +18,20 @@
 #include "restrictors.h"
 #include "vector_access_reduced.h"
 
+// clang-format off
+#define EXPAND_OPERATIONS_RWV(OPERATION)                              \
+  switch (patch_size_1d)                                                        \
+    {                                                                    \
+      case  3: OPERATION((( 2 <= MAX_DEGREE_RW) ?  3 : -1), -1); break; \
+      case  5: OPERATION((( 3 <= MAX_DEGREE_RW) ?  5 : -1), -1); break; \
+      case  7: OPERATION((( 4 <= MAX_DEGREE_RW) ?  7 : -1), -1); break; \
+      case  9: OPERATION((( 5 <= MAX_DEGREE_RW) ?  9 : -1), -1); break; \
+      case 11: OPERATION((( 6 <= MAX_DEGREE_RW) ? 11 : -1), -1); break; \
+      default:                                                           \
+        OPERATION(-1, -1);                                               \
+    }
+// clang-format on
+
 template <int dim, typename Number, typename VectorizedArrayType>
 class ASPoissonPreconditioner
   : public PreconditionerBase<LinearAlgebra::distributed::Vector<Number>>
@@ -777,12 +791,18 @@ private:
                   cell * VectorizedArrayType::size() *
                     dealii::Utilities::pow(3, dim);
 
-                read_write_operation<dim, -1>(reader,
-                                              src_ptr,
-                                              dim,
-                                              patch_size_1d,
-                                              indices,
+#define OPERATION(c, d)                             \
+  AssertThrow(c != -1, ExcNotImplemented());        \
+                                                    \
+                read_write_operation<dim, c>(reader, \
+                                              src_ptr, \
+                                              dim, \
+                                              patch_size_1d, \
+                                              indices, \
                                               src_local.data());
+
+        EXPAND_OPERATIONS_RWV(OPERATION);
+#undef OPERATION
               }
             else
               {
@@ -822,12 +842,18 @@ private:
                   cell * VectorizedArrayType::size() *
                     dealii::Utilities::pow(3, dim);
 
-                read_write_operation<dim, -1>(writer,
-                                              dst_ptr,
-                                              dim,
-                                              patch_size_1d,
-                                              indices,
+#define OPERATION(c, d)                             \
+  AssertThrow(c != -1, ExcNotImplemented());        \
+                                                    \
+                read_write_operation<dim, c>(writer, \
+                                              dst_ptr, \
+                                              dim, \
+                                              patch_size_1d, \
+                                              indices, \
                                               dst_local.data());
+
+        EXPAND_OPERATIONS_RWV(OPERATION);
+#undef OPERATION
               }
             else
               {
