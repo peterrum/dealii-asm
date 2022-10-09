@@ -12,7 +12,7 @@ read_write_operation(const ProcessorType &processor,
                      VectorizedArrayType *dof_values)
 {
   const unsigned int n_inside_1d = n_points_1d / 2;
-  const unsigned int n_lanes     = 1;
+  const unsigned int n_lanes     = VectorizedArrayType::size();
 
   unsigned int compressed_index[100];
 
@@ -74,4 +74,19 @@ read_write_operation(const ProcessorType &processor,
       else
         k_offset++;
     }
+}
+
+bool
+read_write_operation_setup(
+  const std::vector<types::global_dof_index> &dof_indices,
+  const unsigned int                          dim,
+  const unsigned int                          n_points_1d,
+  std::vector<unsigned int> &                 compressed)
+{
+  (void)dof_indices;
+  (void)dim;
+  (void)n_points_1d;
+  (void)compressed;
+
+  return false;
 }

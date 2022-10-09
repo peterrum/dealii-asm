@@ -196,6 +196,11 @@ public:
       (n_dofs + chunk_size_zero_vector - 1) / chunk_size_zero_vector,
       numbers::invalid_unsigned_int);
 
+    if ((element_centric == false) && (weight_local_global == "compressed"))
+      compressed_dof_indices_vertex_patch.resize(VectorizedArrayType::size() *
+                                                 matrix_free.n_cell_batches() *
+                                                 Utilities::pow(3, dim));
+
     for (unsigned int part = 0, cell_counter = 0;
          part < task_info.partition_row_index.size() - 2;
          ++part)
@@ -251,6 +256,24 @@ public:
                 constraint_info.read_dof_indices(cell_counter,
                                                  local_dofs,
                                                  partitioner_fdm);
+
+                if (compressed_dof_indices_vertex_patch.size())
+                  {
+                    std::vector<unsigned int> compressed_dof_indices;
+
+                    const auto success = read_write_operation_setup(
+                      local_dofs, dim, patch_size_1d, compressed_dof_indices);
+
+                    AssertThrow(success, ExcInternalError());
+
+                    for (unsigned int i = 0; i < compressed_dof_indices.size();
+                         ++i)
+                      compressed_dof_indices_vertex_patch
+                        [cell * VectorizedArrayType::size() *
+                           compressed_dof_indices.size() +
+                         i * VectorizedArrayType::size() + v] =
+                          compressed_dof_indices[i];
+                  }
 
                 const auto patch_extend =
                   harmonic_patch_extend[cell_iterator->active_cell_index()];
