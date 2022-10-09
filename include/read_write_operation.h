@@ -1,10 +1,12 @@
 #pragma once
 
-template <typename ProcessorType, typename Number, typename VectorizedArrayType>
+template <typename ProcessorType,
+          typename VectorType,
+          typename VectorizedArrayType>
 void
 read_write_operation(const ProcessorType &processor,
-                     dealii::LinearAlgebra::distributed::Vector<Number> &vec,
-                     const unsigned int                                  dim,
+                     VectorType &         vec,
+                     const unsigned int   dim,
                      const unsigned int   n_points_1d,
                      const unsigned int * cell_indices,
                      VectorizedArrayType *dof_values)

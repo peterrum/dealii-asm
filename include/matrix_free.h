@@ -14,6 +14,7 @@
 #include "grid_tools.h"
 #include "matrix_free_internal.h"
 #include "preconditioners.h"
+#include "read_write_operation.h"
 #include "restrictors.h"
 #include "vector_access_reduced.h"
 
@@ -741,14 +742,31 @@ private:
           {
             // 1) gather src (optional)
             internal::VectorReader<Number, VectorizedArrayType> reader;
-            constraint_info.read_write_operation(reader,
-                                                 src_ptr,
-                                                 src_local.data(),
-                                                 cell_ptr[cell],
-                                                 cell_ptr[cell + 1] -
-                                                   cell_ptr[cell],
-                                                 src_local.size(),
-                                                 true);
+            if (compressed_dof_indices_vertex_patch.size() > 0)
+              {
+                const auto indices =
+                  compressed_dof_indices_vertex_patch.data() +
+                  cell * VectorizedArrayType::size() *
+                    dealii::Utilities::pow(3, dim);
+
+                read_write_operation(reader,
+                                     src_ptr,
+                                     dim,
+                                     patch_size_1d,
+                                     indices,
+                                     src_local.data());
+              }
+            else
+              {
+                constraint_info.read_write_operation(reader,
+                                                     src_ptr,
+                                                     src_local.data(),
+                                                     cell_ptr[cell],
+                                                     cell_ptr[cell + 1] -
+                                                       cell_ptr[cell],
+                                                     src_local.size(),
+                                                     true);
+              }
 
             // 2) apply weights (optional)
             if (do_weights_global == false)
@@ -769,14 +787,31 @@ private:
             internal::VectorDistributorLocalToGlobal<Number,
                                                      VectorizedArrayType>
               writer;
-            constraint_info.read_write_operation(writer,
-                                                 dst_ptr,
-                                                 dst_local.data(),
-                                                 cell_ptr[cell],
-                                                 cell_ptr[cell + 1] -
-                                                   cell_ptr[cell],
-                                                 dst_local.size(),
-                                                 true);
+            if (compressed_dof_indices_vertex_patch.size() > 0)
+              {
+                const auto indices =
+                  compressed_dof_indices_vertex_patch.data() +
+                  cell * VectorizedArrayType::size() *
+                    dealii::Utilities::pow(3, dim);
+
+                read_write_operation(writer,
+                                     dst_ptr,
+                                     dim,
+                                     patch_size_1d,
+                                     indices,
+                                     dst_local.data());
+              }
+            else
+              {
+                constraint_info.read_write_operation(writer,
+                                                     dst_ptr,
+                                                     dst_local.data(),
+                                                     cell_ptr[cell],
+                                                     cell_ptr[cell + 1] -
+                                                       cell_ptr[cell],
+                                                     dst_local.size(),
+                                                     true);
+              }
           }
       };
 
@@ -1154,6 +1189,8 @@ private:
 
   mutable dealii::AlignedVector<Number> buffer_dst;
   mutable dealii::AlignedVector<Number> buffer_src;
+
+  std::vector<unsigned int> compressed_dof_indices_vertex_patch;
 };
 
 
