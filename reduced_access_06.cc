@@ -14,16 +14,15 @@
 
 using namespace dealii;
 
-template <typename Number, typename VectorizedArrayType>
+template <typename ProcessorType, typename Number, typename VectorizedArrayType>
 void
-gather(const dealii::LinearAlgebra::distributed::Vector<Number> &vec,
-       const unsigned int                                        dim,
-       const unsigned int                                        n_points_1d,
-       const std::vector<unsigned int> &compressed_dof_indices,
-       VectorizedArrayType *            dof_values)
+process(const ProcessorType &                               processor,
+        dealii::LinearAlgebra::distributed::Vector<Number> &vec,
+        const unsigned int                                  dim,
+        const unsigned int                                  n_points_1d,
+        const std::vector<unsigned int> &compressed_dof_indices,
+        VectorizedArrayType *            dof_values)
 {
-  internal::VectorReader<Number, VectorizedArrayType> processor;
-
   const unsigned int *cell_indices = compressed_dof_indices.data();
 
   const unsigned int n_inside_1d = n_points_1d / 2;
@@ -61,7 +60,7 @@ gather(const dealii::LinearAlgebra::distributed::Vector<Number> &vec,
 
           for (unsigned int v = 0; v < n_lanes; ++v)
             if (indices[v] != dealii::numbers::invalid_unsigned_int)
-              processor.process_dof(indices[v] + n_inside_1d * n_inside_1d +
+              processor.process_dof(indices[v] + k_offset * n_inside_1d +
                                       j_offset,
                                     vec,
                                     dof_values[c][v]);
@@ -137,9 +136,8 @@ main(int argc, char *argv[])
     std::cout << i << " ";
   std::cout << std::endl;
 
-  gather(vec, dim, n_points_1d, compressed_dof_indices, data.data());
-
-
+  internal::VectorReader<Number, VectorizedArrayType> reader;
+  process(reader, vec, dim, n_points_1d, compressed_dof_indices, data.data());
 
   for (unsigned int i_1 = 0, c = 0; i_1 < n_points_1d; ++i_1)
     {
@@ -147,5 +145,18 @@ main(int argc, char *argv[])
         printf("%4.0f", data[c][0]);
       std::cout << std::endl;
     }
+  std::cout << std::endl;
+
+  for (const auto v : vec)
+    printf("%4.0f", v);
+  std::cout << std::endl;
+
+  internal::VectorDistributorLocalToGlobal<Number, VectorizedArrayType>
+    distributor;
+  process(
+    distributor, vec, dim, n_points_1d, compressed_dof_indices, data.data());
+
+  for (const auto v : vec)
+    printf("%4.0f", v);
   std::cout << std::endl;
 }
