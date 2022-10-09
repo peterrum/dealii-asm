@@ -10,6 +10,7 @@
 
 #include <deal.II/matrix_free/matrix_free.h>
 #include <deal.II/matrix_free/shape_info.h>
+#include <deal.II/matrix_free/vector_access_internal.h>
 
 using namespace dealii;
 
@@ -21,6 +22,8 @@ gather(const dealii::LinearAlgebra::distributed::Vector<Number> &vec,
        const std::vector<unsigned int> &compressed_dof_indices,
        VectorizedArrayType *            dof_values)
 {
+  internal::VectorReader<Number, VectorizedArrayType> processor;
+
   const unsigned int *cell_indices = compressed_dof_indices.data();
 
   const unsigned int n_inside_1d = n_points_1d / 2;
@@ -48,16 +51,20 @@ gather(const dealii::LinearAlgebra::distributed::Vector<Number> &vec,
           for (unsigned int i = 0; i < n_inside_1d; ++i, ++c)
             for (unsigned int v = 0; v < n_lanes; ++v)
               if (indices[v] != dealii::numbers::invalid_unsigned_int)
-                dof_values[c][v] = vec.local_element(
-                  indices[v] + k_offset * n_inside_1d * n_inside_1d +
-                  j_offset * n_inside_1d + i);
+                processor.process_dof(indices[v] +
+                                        k_offset * n_inside_1d * n_inside_1d +
+                                        j_offset * n_inside_1d + i,
+                                      vec,
+                                      dof_values[c][v]);
 
           indices += n_lanes;
 
           for (unsigned int v = 0; v < n_lanes; ++v)
             if (indices[v] != dealii::numbers::invalid_unsigned_int)
-              dof_values[c][v] = vec.local_element(
-                indices[v] + n_inside_1d * n_inside_1d + j_offset);
+              processor.process_dof(indices[v] + n_inside_1d * n_inside_1d +
+                                      j_offset,
+                                    vec,
+                                    dof_values[c][v]);
 
           c += 1;
           indices += n_lanes;
@@ -65,9 +72,11 @@ gather(const dealii::LinearAlgebra::distributed::Vector<Number> &vec,
           for (unsigned int i = 0; i < n_inside_1d; ++i, ++c)
             for (unsigned int v = 0; v < n_lanes; ++v)
               if (indices[v] != dealii::numbers::invalid_unsigned_int)
-                dof_values[c][v] = vec.local_element(
-                  indices[v] + k_offset * n_inside_1d * n_inside_1d +
-                  j_offset * n_inside_1d + i);
+                processor.process_dof(indices[v] +
+                                        k_offset * n_inside_1d * n_inside_1d +
+                                        j_offset * n_inside_1d + i,
+                                      vec,
+                                      dof_values[c][v]);
 
           if (((j + 1) == n_inside_1d) || (j == n_inside_1d))
             j_offset = 0;
