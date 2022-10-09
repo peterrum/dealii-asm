@@ -36,18 +36,22 @@ read_write_operation(const ProcessorType &processor,
           for (unsigned int i = 0; i < n_inside_1d; ++i, ++c)
             for (unsigned int v = 0; v < n_lanes; ++v)
               if (indices[v] != dealii::numbers::invalid_unsigned_int)
-                processor.process_dof(indices[v] +
-                                        k_offset * n_inside_1d * n_inside_1d +
-                                        j_offset * n_inside_1d + i,
-                                      vec,
-                                      dof_values[c][v]);
+                processor.process_dof(
+                  indices[v] + ((j == n_inside_1d) ?
+                                  (k_offset * n_inside_1d + i) :
+                                  (k_offset * n_inside_1d * n_inside_1d +
+                                   j_offset * n_inside_1d + i)),
+                  vec,
+                  dof_values[c][v]);
 
           indices += n_lanes;
 
           for (unsigned int v = 0; v < n_lanes; ++v)
             if (indices[v] != dealii::numbers::invalid_unsigned_int)
-              processor.process_dof(indices[v] + k_offset * n_inside_1d +
-                                      j_offset,
+              processor.process_dof(indices[v] +
+                                      ((j == n_inside_1d) ?
+                                         (k_offset) :
+                                         (k_offset * n_inside_1d + j_offset)),
                                     vec,
                                     dof_values[c][v]);
 
@@ -57,11 +61,13 @@ read_write_operation(const ProcessorType &processor,
           for (unsigned int i = 0; i < n_inside_1d; ++i, ++c)
             for (unsigned int v = 0; v < n_lanes; ++v)
               if (indices[v] != dealii::numbers::invalid_unsigned_int)
-                processor.process_dof(indices[v] +
-                                        k_offset * n_inside_1d * n_inside_1d +
-                                        j_offset * n_inside_1d + i,
-                                      vec,
-                                      dof_values[c][v]);
+                processor.process_dof(
+                  indices[v] + ((j == n_inside_1d) ?
+                                  (k_offset * n_inside_1d + i) :
+                                  (k_offset * n_inside_1d * n_inside_1d +
+                                   j_offset * n_inside_1d + i)),
+                  vec,
+                  dof_values[c][v]);
 
           if (((j + 1) == n_inside_1d) || (j == n_inside_1d))
             j_offset = 0;
@@ -140,20 +146,26 @@ read_write_operation_setup(
 
           for (unsigned int i = 0; i < n_inside_1d; ++i)
             if (!try_to_set(indices[0],
-                            k_offset * n_inside_1d * n_inside_1d +
-                              j_offset * n_inside_1d + i,
+                            (j == n_inside_1d) ?
+                              (k_offset * n_inside_1d + i) :
+                              (k_offset * n_inside_1d * n_inside_1d +
+                               j_offset * n_inside_1d + i),
                             dof_indices[c++]))
               return false;
 
           if (!try_to_set(indices[1],
-                          k_offset * n_inside_1d + j_offset,
+                          (j == n_inside_1d) ?
+                            (k_offset) :
+                            (k_offset * n_inside_1d + j_offset),
                           dof_indices[c++]))
             return false;
 
           for (unsigned int i = 0; i < n_inside_1d; ++i)
             if (!try_to_set(indices[2],
-                            k_offset * n_inside_1d * n_inside_1d +
-                              j_offset * n_inside_1d + i,
+                            (j == n_inside_1d) ?
+                              (k_offset * n_inside_1d + i) :
+                              (k_offset * n_inside_1d * n_inside_1d +
+                               j_offset * n_inside_1d + i),
                             dof_indices[c++]))
               return false;
 

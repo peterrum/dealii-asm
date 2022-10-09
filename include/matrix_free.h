@@ -196,7 +196,7 @@ public:
       (n_dofs + chunk_size_zero_vector - 1) / chunk_size_zero_vector,
       numbers::invalid_unsigned_int);
 
-    if ((element_centric == false) && (weight_local_global == "compressed"))
+    if ((element_centric == false) && compress_indices && (fe_degree >= 2))
       compressed_dof_indices_vertex_patch.resize(
         VectorizedArrayType::size() * matrix_free.n_cell_batches() *
           Utilities::pow(3, dim),
