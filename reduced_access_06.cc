@@ -26,7 +26,7 @@ main(int argc, char *argv[])
   using VectorType = dealii::LinearAlgebra::distributed::Vector<Number>;
   using VectorizedArrayType = VectorizedArray<Number, 1>;
 
-  const unsigned int dim         = 2;
+  const int          dim         = 2;
   const unsigned int fe_degree   = 3;
   const unsigned int n_points_1d = fe_degree * 2 - 1;
   const unsigned int n_points    = Utilities::pow(n_points_1d, dim);
@@ -63,7 +63,7 @@ main(int argc, char *argv[])
   std::cout << std::endl;
 
   internal::VectorReader<Number, VectorizedArrayType> reader;
-  read_write_operation(
+  read_write_operation<dim, -1>(
     reader, vec, dim, n_points_1d, compressed_dof_indices.data(), data.data());
 
   for (unsigned int i_1 = 0, c = 0; i_1 < n_points_1d; ++i_1)
@@ -80,12 +80,12 @@ main(int argc, char *argv[])
 
   internal::VectorDistributorLocalToGlobal<Number, VectorizedArrayType>
     distributor;
-  read_write_operation(distributor,
-                       vec,
-                       dim,
-                       n_points_1d,
-                       compressed_dof_indices.data(),
-                       data.data());
+  read_write_operation<dim, -1>(distributor,
+                                vec,
+                                dim,
+                                n_points_1d,
+                                compressed_dof_indices.data(),
+                                data.data());
 
   for (const auto v : vec)
     printf("%4.0f", v);

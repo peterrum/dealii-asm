@@ -777,12 +777,12 @@ private:
                   cell * VectorizedArrayType::size() *
                     dealii::Utilities::pow(3, dim);
 
-                read_write_operation(reader,
-                                     src_ptr,
-                                     dim,
-                                     patch_size_1d,
-                                     indices,
-                                     src_local.data());
+                read_write_operation<dim, -1>(reader,
+                                              src_ptr,
+                                              dim,
+                                              patch_size_1d,
+                                              indices,
+                                              src_local.data());
               }
             else
               {
@@ -822,12 +822,12 @@ private:
                   cell * VectorizedArrayType::size() *
                     dealii::Utilities::pow(3, dim);
 
-                read_write_operation(writer,
-                                     dst_ptr,
-                                     dim,
-                                     patch_size_1d,
-                                     indices,
-                                     dst_local.data());
+                read_write_operation<dim, -1>(writer,
+                                              dst_ptr,
+                                              dim,
+                                              patch_size_1d,
+                                              indices,
+                                              dst_local.data());
               }
             else
               {

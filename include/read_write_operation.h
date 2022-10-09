@@ -1,16 +1,24 @@
 #pragma once
 
-template <typename ProcessorType,
+template <int dim_templated,
+          int n_points_1d_templated,
+          typename ProcessorType,
           typename VectorType,
           typename VectorizedArrayType>
 void
 read_write_operation(const ProcessorType &processor,
                      VectorType &         vec,
-                     const unsigned int   dim,
-                     const unsigned int   n_points_1d,
+                     const unsigned int   dim_non_templated,
+                     const unsigned int   n_points_1d_non_templated,
                      const unsigned int * cell_indices,
                      VectorizedArrayType *dof_values)
 {
+  const unsigned int dim =
+    (dim_templated != -1) ? dim_templated : dim_non_templated;
+  const unsigned int n_points_1d = (n_points_1d_templated != -1) ?
+                                     n_points_1d_templated :
+                                     n_points_1d_non_templated;
+
   const unsigned int n_inside_1d = n_points_1d / 2;
   const unsigned int n_lanes     = VectorizedArrayType::size();
 
