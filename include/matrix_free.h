@@ -197,9 +197,10 @@ public:
       numbers::invalid_unsigned_int);
 
     if ((element_centric == false) && (weight_local_global == "compressed"))
-      compressed_dof_indices_vertex_patch.resize(VectorizedArrayType::size() *
-                                                 matrix_free.n_cell_batches() *
-                                                 Utilities::pow(3, dim));
+      compressed_dof_indices_vertex_patch.resize(
+        VectorizedArrayType::size() * matrix_free.n_cell_batches() *
+          Utilities::pow(3, dim),
+        dealii::numbers::invalid_unsigned_int);
 
     for (unsigned int part = 0, cell_counter = 0;
          part < task_info.partition_row_index.size() - 2;
@@ -261,8 +262,12 @@ public:
                   {
                     std::vector<unsigned int> compressed_dof_indices;
 
-                    const auto success = read_write_operation_setup(
-                      local_dofs, dim, patch_size_1d, compressed_dof_indices);
+                    const auto success =
+                      read_write_operation_setup(local_dofs,
+                                                 dim,
+                                                 patch_size_1d,
+                                                 compressed_dof_indices,
+                                                 partitioner_fdm);
 
                     AssertThrow(success, ExcInternalError());
 
