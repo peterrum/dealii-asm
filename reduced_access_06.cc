@@ -16,12 +16,12 @@ using namespace dealii;
 
 template <typename ProcessorType, typename Number, typename VectorizedArrayType>
 void
-process(const ProcessorType &                               processor,
-        dealii::LinearAlgebra::distributed::Vector<Number> &vec,
-        const unsigned int                                  dim,
-        const unsigned int                                  n_points_1d,
-        const unsigned int *                                cell_indices,
-        VectorizedArrayType *                               dof_values)
+read_write_operation(const ProcessorType &processor,
+                     dealii::LinearAlgebra::distributed::Vector<Number> &vec,
+                     const unsigned int                                  dim,
+                     const unsigned int   n_points_1d,
+                     const unsigned int * cell_indices,
+                     VectorizedArrayType *dof_values)
 {
   const unsigned int n_inside_1d = n_points_1d / 2;
   const unsigned int n_lanes     = 1;
@@ -135,7 +135,7 @@ main(int argc, char *argv[])
   std::cout << std::endl;
 
   internal::VectorReader<Number, VectorizedArrayType> reader;
-  process(
+  read_write_operation(
     reader, vec, dim, n_points_1d, compressed_dof_indices.data(), data.data());
 
   for (unsigned int i_1 = 0, c = 0; i_1 < n_points_1d; ++i_1)
@@ -152,12 +152,12 @@ main(int argc, char *argv[])
 
   internal::VectorDistributorLocalToGlobal<Number, VectorizedArrayType>
     distributor;
-  process(distributor,
-          vec,
-          dim,
-          n_points_1d,
-          compressed_dof_indices.data(),
-          data.data());
+  read_write_operation(distributor,
+                       vec,
+                       dim,
+                       n_points_1d,
+                       compressed_dof_indices.data(),
+                       data.data());
 
   for (const auto v : vec)
     printf("%4.0f", v);
