@@ -13,13 +13,13 @@
 
 using namespace dealii;
 
-template <typename Number>
+template <typename Number, typename VectorizedArrayType>
 void
 gather(const dealii::LinearAlgebra::distributed::Vector<Number> &vec,
        const unsigned int                                        dim,
        const unsigned int                                        n_points_1d,
        const std::vector<unsigned int> &compressed_dof_indices,
-       Number *                         dof_values)
+       VectorizedArrayType *            dof_values)
 {
   const unsigned int *cell_indices = compressed_dof_indices.data();
 
@@ -45,18 +45,26 @@ gather(const dealii::LinearAlgebra::distributed::Vector<Number> &vec,
             cell_indices +
             3 * n_lanes * (3 * compressed_index[k] + compressed_index[j]);
 
-          for (unsigned int i = 0; i < n_inside_1d; ++i)
-            dof_values[c++] = vec.local_element(
-              indices[0] + k_offset * n_inside_1d * n_inside_1d +
-              j_offset * n_inside_1d + i);
+          for (unsigned int i = 0; i < n_inside_1d; ++i, ++c)
+            for (unsigned int v = 0; v < n_lanes; ++v)
+              dof_values[c][v] = vec.local_element(
+                indices[v] + k_offset * n_inside_1d * n_inside_1d +
+                j_offset * n_inside_1d + i);
 
-          dof_values[c++] = vec.local_element(
-            indices[1] + n_inside_1d * n_inside_1d + j_offset);
+          indices += n_lanes;
 
-          for (unsigned int i = 0; i < n_inside_1d; ++i)
-            dof_values[c++] = vec.local_element(
-              indices[2] + k_offset * n_inside_1d * n_inside_1d +
-              j_offset * n_inside_1d + i);
+          for (unsigned int v = 0; v < n_lanes; ++v)
+            dof_values[c][v] = vec.local_element(
+              indices[v] + n_inside_1d * n_inside_1d + j_offset);
+
+          c += 1;
+          indices += n_lanes;
+
+          for (unsigned int i = 0; i < n_inside_1d; ++i, ++c)
+            for (unsigned int v = 0; v < n_lanes; ++v)
+              dof_values[c][v] = vec.local_element(
+                indices[v] + k_offset * n_inside_1d * n_inside_1d +
+                j_offset * n_inside_1d + i);
 
           if (((j + 1) == n_inside_1d) || (j == n_inside_1d))
             j_offset = 0;
@@ -79,6 +87,7 @@ main(int argc, char *argv[])
 
   using Number     = double;
   using VectorType = dealii::LinearAlgebra::distributed::Vector<Number>;
+  using VectorizedArrayType = VectorizedArray<Number, 1>;
 
   const unsigned int dim         = 2;
   const unsigned int fe_degree   = 3;
@@ -92,8 +101,8 @@ main(int argc, char *argv[])
   for (unsigned int i = 0; i < n_points; ++i)
     vec[i] = i;
 
-  AlignedVector<Number>     data(n_points);
-  std::vector<unsigned int> compressed_dof_indices;
+  AlignedVector<VectorizedArrayType> data(n_points);
+  std::vector<unsigned int>          compressed_dof_indices;
   compressed_dof_indices.push_back(0);
 
   for (unsigned int j = 0; j < 3; ++j)
@@ -123,7 +132,7 @@ main(int argc, char *argv[])
   for (unsigned int i_1 = 0, c = 0; i_1 < n_points_1d; ++i_1)
     {
       for (unsigned int i_0 = 0; i_0 < n_points_1d; ++i_0, ++c)
-        printf("%4.0f", data[c]);
+        printf("%4.0f", data[c][0]);
       std::cout << std::endl;
     }
   std::cout << std::endl;
