@@ -53,11 +53,14 @@ read_write_operation(const ProcessorType &processor,
           // left end
           if (unconstrained[0])
             {
-              for (unsigned int i = 0; i < n_inside_1d; ++i, ++c)
-                for (unsigned int v = 0; v < n_lanes; ++v)
-                  processor.process_dof(indices[v] + offset * n_inside_1d + i,
-                                        vec,
-                                        dof_values[c][v]);
+              processor.process_dofs_vectorized_transpose(
+                n_inside_1d,
+                indices,
+                vec,
+                offset * n_inside_1d,
+                dof_values + c,
+                std::integral_constant<bool, true>());
+              c += n_inside_1d;
             }
           else
             {
@@ -74,10 +77,12 @@ read_write_operation(const ProcessorType &processor,
           // interior
           if (unconstrained[1])
             {
-              for (unsigned int v = 0; v < n_lanes; ++v)
-                processor.process_dof(indices[v] + offset,
-                                      vec,
-                                      dof_values[c][v]);
+              processor.process_dof_gather(
+                indices,
+                vec,
+                offset,
+                dof_values[c],
+                std::integral_constant<bool, true>());
             }
           else
             {
@@ -94,11 +99,14 @@ read_write_operation(const ProcessorType &processor,
           // right end
           if (unconstrained[2])
             {
-              for (unsigned int i = 0; i < n_inside_1d; ++i, ++c)
-                for (unsigned int v = 0; v < n_lanes; ++v)
-                  processor.process_dof(indices[v] + offset * n_inside_1d + i,
-                                        vec,
-                                        dof_values[c][v]);
+              processor.process_dofs_vectorized_transpose(
+                n_inside_1d,
+                indices,
+                vec,
+                offset * n_inside_1d,
+                dof_values + c,
+                std::integral_constant<bool, true>());
+              c += n_inside_1d;
             }
           else
             {
