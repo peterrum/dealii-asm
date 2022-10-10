@@ -37,14 +37,14 @@ read_write_operation(const ProcessorType &processor,
       for (unsigned int j = 0, j_offset = 0; j < (dim > 1 ? n_points_1d : 1);
            ++j)
         {
+          const unsigned int  offset = (j == n_inside_1d) ?
+                                         (k_offset) :
+                                         (k_offset * n_inside_1d + j_offset);
           const unsigned int *indices =
             cell_indices +
             3 * n_lanes * (3 * compressed_index[k] + compressed_index[j]);
 
-          const unsigned int offset = (j == n_inside_1d) ?
-                                        (k_offset) :
-                                        (k_offset * n_inside_1d + j_offset);
-
+          // left end
           for (unsigned int i = 0; i < n_inside_1d; ++i, ++c)
             for (unsigned int v = 0; v < n_lanes; ++v)
               if (indices[v] != dealii::numbers::invalid_unsigned_int)
@@ -54,6 +54,7 @@ read_write_operation(const ProcessorType &processor,
 
           indices += n_lanes;
 
+          // interior
           for (unsigned int v = 0; v < n_lanes; ++v)
             if (indices[v] != dealii::numbers::invalid_unsigned_int)
               processor.process_dof(indices[v] + offset, vec, dof_values[c][v]);
@@ -61,6 +62,7 @@ read_write_operation(const ProcessorType &processor,
           c += 1;
           indices += n_lanes;
 
+          // right end
           for (unsigned int i = 0; i < n_inside_1d; ++i, ++c)
             for (unsigned int v = 0; v < n_lanes; ++v)
               if (indices[v] != dealii::numbers::invalid_unsigned_int)
