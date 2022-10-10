@@ -9,7 +9,9 @@ def format(i):
 
 def main():
     op   = ["add", "none", "post", "pre", "symm"]
-    type = ["1-c", "1-l", "1-dg", "1-g-s-c", "1-g-s-n", "1-g-p-c", "1-g-p-n", "2-l", "2-dg", "2-g-s-c", "2-g-s-n", "2-g-p-c", "2-g-p-n"]
+    type = ["1-c", "1-l", "1-dg", "1-g-s-c", "1-g-s-n", "1-g-p-c", "1-g-p-n", 
+                   "2-l", "2-dg", "2-g-s-c", "2-g-s-n", "2-g-p-c", "2-g-p-n",
+            "v-c", "v-l", "v-dg", "v-g-s-c", "v-g-s-n", "v-g-p-c", "v-g-p-n"]
 
     w = len(op)
     h = len(type)
@@ -59,7 +61,7 @@ def main():
 
     print("\\midrule")
     for r in range(0, h):
-        if r == 7:
+        if r == 7 or r == 13:
             print("\midrule")
         print(type[r] + " & " + " & ".join([format(i) for i in matrix[r]]) + " \\\\")
     print("\\bottomrule")

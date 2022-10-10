@@ -173,8 +173,16 @@ test(const Parameters params_in)
       // configure preconditioner
       boost::property_tree::ptree params;
       params.put("weighting type", (type == "add") ? "none" : type);
-      params.put("n overlap", n_overlap);
-      params.put("element centric", false);
+
+      if (n_overlap == "v")
+        {
+          params.put("element centric", false);
+        }
+      else
+        {
+          params.put("n overlap", n_overlap);
+          params.put("element centric", true);
+        }
 
       params.put("weight sequence",
                  weighting_sequence == "g" ?
