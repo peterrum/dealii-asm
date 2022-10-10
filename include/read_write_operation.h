@@ -55,10 +55,9 @@ read_write_operation(const ProcessorType &processor,
             {
               for (unsigned int i = 0; i < n_inside_1d; ++i, ++c)
                 for (unsigned int v = 0; v < n_lanes; ++v)
-                  if (indices[v] != dealii::numbers::invalid_unsigned_int)
-                    processor.process_dof(indices[v] + offset * n_inside_1d + i,
-                                          vec,
-                                          dof_values[c][v]);
+                  processor.process_dof(indices[v] + offset * n_inside_1d + i,
+                                        vec,
+                                        dof_values[c][v]);
             }
           else
             {
@@ -76,10 +75,9 @@ read_write_operation(const ProcessorType &processor,
           if (unconstrained[1])
             {
               for (unsigned int v = 0; v < n_lanes; ++v)
-                if (indices[v] != dealii::numbers::invalid_unsigned_int)
-                  processor.process_dof(indices[v] + offset,
-                                        vec,
-                                        dof_values[c][v]);
+                processor.process_dof(indices[v] + offset,
+                                      vec,
+                                      dof_values[c][v]);
             }
           else
             {
@@ -98,10 +96,9 @@ read_write_operation(const ProcessorType &processor,
             {
               for (unsigned int i = 0; i < n_inside_1d; ++i, ++c)
                 for (unsigned int v = 0; v < n_lanes; ++v)
-                  if (indices[v] != dealii::numbers::invalid_unsigned_int)
-                    processor.process_dof(indices[v] + offset * n_inside_1d + i,
-                                          vec,
-                                          dof_values[c][v]);
+                  processor.process_dof(indices[v] + offset * n_inside_1d + i,
+                                        vec,
+                                        dof_values[c][v]);
             }
           else
             {

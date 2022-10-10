@@ -211,15 +211,10 @@ public:
       numbers::invalid_unsigned_int);
 
     if ((element_centric == false) && compress_indices && (fe_degree >= 2))
-      {
-        compressed_dof_indices_vertex_patch.resize(
-          VectorizedArrayType::size() * matrix_free.n_cell_batches() *
-            Utilities::pow(3, dim),
-          dealii::numbers::invalid_unsigned_int);
-        all_indices_uniform_vertex_patch.resize(matrix_free.n_cell_batches() *
-                                                  Utilities::pow(3, dim),
-                                                1);
-      }
+      compressed_dof_indices_vertex_patch.resize(
+        VectorizedArrayType::size() * matrix_free.n_cell_batches() *
+          Utilities::pow(3, dim),
+        dealii::numbers::invalid_unsigned_int);
 
     for (unsigned int part = 0, cell_counter = 0;
          part < task_info.partition_row_index.size() - 2;
@@ -353,6 +348,27 @@ public:
 
     src_.reinit(partitioner_fdm);
     dst_.reinit(partitioner_fdm);
+
+    if (compressed_dof_indices_vertex_patch.size() > 0)
+      {
+        all_indices_uniform_vertex_patch.resize(matrix_free.n_cell_batches() *
+                                                Utilities::pow(3, dim));
+
+        for (unsigned int i = 0;
+             i < matrix_free.n_cell_batches() * Utilities::pow(3, dim);
+             ++i)
+          {
+            char not_constrained = 1;
+
+            for (unsigned int v = 0; v < VectorizedArrayType::size(); ++v)
+              if (compressed_dof_indices_vertex_patch
+                    [i * VectorizedArrayType::size() + v] ==
+                  numbers::invalid_unsigned_int)
+                not_constrained = 0;
+
+            all_indices_uniform_vertex_patch[i] = not_constrained;
+          }
+      }
 
     {
       const auto vector_partitioner = partitioner_fdm;
@@ -797,8 +813,7 @@ private:
                     dealii::Utilities::pow(3, dim);
 
                 const auto mask = all_indices_uniform_vertex_patch.data() +
-                                  cell * VectorizedArrayType::size() *
-                                    dealii::Utilities::pow(3, dim);
+                                  cell * dealii::Utilities::pow(3, dim);
 
 #define OPERATION(c, d)                      \
   AssertThrow(c != -1, ExcNotImplemented()); \
@@ -848,8 +863,7 @@ private:
                     dealii::Utilities::pow(3, dim);
 
                 const auto mask = all_indices_uniform_vertex_patch.data() +
-                                  cell * VectorizedArrayType::size() *
-                                    dealii::Utilities::pow(3, dim);
+                                  cell * dealii::Utilities::pow(3, dim);
 
 #define OPERATION(c, d)                      \
   AssertThrow(c != -1, ExcNotImplemented()); \
