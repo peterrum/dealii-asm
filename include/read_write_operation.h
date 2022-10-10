@@ -11,8 +11,11 @@ read_write_operation(const ProcessorType &processor,
                      const unsigned int   dim_non_templated,
                      const unsigned int   n_points_1d_non_templated,
                      const unsigned int * cell_indices,
+                     const unsigned char *cell_unconstrained,
                      VectorizedArrayType *dof_values)
 {
+  (void)cell_unconstrained;
+
   const unsigned int dim =
     (dim_templated != -1) ? dim_templated : dim_non_templated;
   const unsigned int n_points_1d = (n_points_1d_templated != -1) ?

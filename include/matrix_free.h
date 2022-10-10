@@ -211,10 +211,15 @@ public:
       numbers::invalid_unsigned_int);
 
     if ((element_centric == false) && compress_indices && (fe_degree >= 2))
-      compressed_dof_indices_vertex_patch.resize(
-        VectorizedArrayType::size() * matrix_free.n_cell_batches() *
-          Utilities::pow(3, dim),
-        dealii::numbers::invalid_unsigned_int);
+      {
+        compressed_dof_indices_vertex_patch.resize(
+          VectorizedArrayType::size() * matrix_free.n_cell_batches() *
+            Utilities::pow(3, dim),
+          dealii::numbers::invalid_unsigned_int);
+        all_indices_uniform_vertex_patch.resize(matrix_free.n_cell_batches() *
+                                                  Utilities::pow(3, dim),
+                                                1);
+      }
 
     for (unsigned int part = 0, cell_counter = 0;
          part < task_info.partition_row_index.size() - 2;
@@ -791,11 +796,15 @@ private:
                   cell * VectorizedArrayType::size() *
                     dealii::Utilities::pow(3, dim);
 
+                const auto mask = all_indices_uniform_vertex_patch.data() +
+                                  cell * VectorizedArrayType::size() *
+                                    dealii::Utilities::pow(3, dim);
+
 #define OPERATION(c, d)                      \
   AssertThrow(c != -1, ExcNotImplemented()); \
                                              \
   read_write_operation<dim, c>(              \
-    reader, src_ptr, dim, patch_size_1d, indices, src_local.data());
+    reader, src_ptr, dim, patch_size_1d, indices, mask, src_local.data());
 
                 EXPAND_OPERATIONS_RWV(OPERATION);
 #undef OPERATION
@@ -838,11 +847,15 @@ private:
                   cell * VectorizedArrayType::size() *
                     dealii::Utilities::pow(3, dim);
 
+                const auto mask = all_indices_uniform_vertex_patch.data() +
+                                  cell * VectorizedArrayType::size() *
+                                    dealii::Utilities::pow(3, dim);
+
 #define OPERATION(c, d)                      \
   AssertThrow(c != -1, ExcNotImplemented()); \
                                              \
   read_write_operation<dim, c>(              \
-    writer, dst_ptr, dim, patch_size_1d, indices, dst_local.data());
+    writer, dst_ptr, dim, patch_size_1d, indices, mask, dst_local.data());
 
                 EXPAND_OPERATIONS_RWV(OPERATION);
 #undef OPERATION
@@ -1236,7 +1249,8 @@ private:
   mutable dealii::AlignedVector<Number> buffer_dst;
   mutable dealii::AlignedVector<Number> buffer_src;
 
-  std::vector<unsigned int> compressed_dof_indices_vertex_patch;
+  std::vector<unsigned int>  compressed_dof_indices_vertex_patch;
+  std::vector<unsigned char> all_indices_uniform_vertex_patch;
 };
 
 
