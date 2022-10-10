@@ -41,27 +41,22 @@ read_write_operation(const ProcessorType &processor,
             cell_indices +
             3 * n_lanes * (3 * compressed_index[k] + compressed_index[j]);
 
+          const unsigned int offset = (j == n_inside_1d) ?
+                                        (k_offset) :
+                                        (k_offset * n_inside_1d + j_offset);
+
           for (unsigned int i = 0; i < n_inside_1d; ++i, ++c)
             for (unsigned int v = 0; v < n_lanes; ++v)
               if (indices[v] != dealii::numbers::invalid_unsigned_int)
-                processor.process_dof(
-                  indices[v] + ((j == n_inside_1d) ?
-                                  (k_offset * n_inside_1d + i) :
-                                  (k_offset * n_inside_1d * n_inside_1d +
-                                   j_offset * n_inside_1d + i)),
-                  vec,
-                  dof_values[c][v]);
+                processor.process_dof(indices[v] + offset * n_inside_1d + i,
+                                      vec,
+                                      dof_values[c][v]);
 
           indices += n_lanes;
 
           for (unsigned int v = 0; v < n_lanes; ++v)
             if (indices[v] != dealii::numbers::invalid_unsigned_int)
-              processor.process_dof(indices[v] +
-                                      ((j == n_inside_1d) ?
-                                         (k_offset) :
-                                         (k_offset * n_inside_1d + j_offset)),
-                                    vec,
-                                    dof_values[c][v]);
+              processor.process_dof(indices[v] + offset, vec, dof_values[c][v]);
 
           c += 1;
           indices += n_lanes;
@@ -69,13 +64,9 @@ read_write_operation(const ProcessorType &processor,
           for (unsigned int i = 0; i < n_inside_1d; ++i, ++c)
             for (unsigned int v = 0; v < n_lanes; ++v)
               if (indices[v] != dealii::numbers::invalid_unsigned_int)
-                processor.process_dof(
-                  indices[v] + ((j == n_inside_1d) ?
-                                  (k_offset * n_inside_1d + i) :
-                                  (k_offset * n_inside_1d * n_inside_1d +
-                                   j_offset * n_inside_1d + i)),
-                  vec,
-                  dof_values[c][v]);
+                processor.process_dof(indices[v] + offset * n_inside_1d + i,
+                                      vec,
+                                      dof_values[c][v]);
 
           if (((j + 1) == n_inside_1d) || (j == n_inside_1d))
             j_offset = 0;
@@ -152,28 +143,22 @@ read_write_operation_setup(
             compressed.data() +
             3 * (3 * compressed_index[k] + compressed_index[j]);
 
+          const unsigned int offset = (j == n_inside_1d) ?
+                                        (k_offset) :
+                                        (k_offset * n_inside_1d + j_offset);
+
           for (unsigned int i = 0; i < n_inside_1d; ++i)
             if (!try_to_set(indices[0],
-                            (j == n_inside_1d) ?
-                              (k_offset * n_inside_1d + i) :
-                              (k_offset * n_inside_1d * n_inside_1d +
-                               j_offset * n_inside_1d + i),
+                            offset * n_inside_1d + i,
                             dof_indices[c++]))
               return false;
 
-          if (!try_to_set(indices[1],
-                          (j == n_inside_1d) ?
-                            (k_offset) :
-                            (k_offset * n_inside_1d + j_offset),
-                          dof_indices[c++]))
+          if (!try_to_set(indices[1], offset, dof_indices[c++]))
             return false;
 
           for (unsigned int i = 0; i < n_inside_1d; ++i)
             if (!try_to_set(indices[2],
-                            (j == n_inside_1d) ?
-                              (k_offset * n_inside_1d + i) :
-                              (k_offset * n_inside_1d * n_inside_1d +
-                               j_offset * n_inside_1d + i),
+                            offset * n_inside_1d + i,
                             dof_indices[c++]))
               return false;
 

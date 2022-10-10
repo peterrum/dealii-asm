@@ -791,17 +791,13 @@ private:
                   cell * VectorizedArrayType::size() *
                     dealii::Utilities::pow(3, dim);
 
-#define OPERATION(c, d)                             \
-  AssertThrow(c != -1, ExcNotImplemented());        \
-                                                    \
-                read_write_operation<dim, c>(reader, \
-                                              src_ptr, \
-                                              dim, \
-                                              patch_size_1d, \
-                                              indices, \
-                                              src_local.data());
+#define OPERATION(c, d)                      \
+  AssertThrow(c != -1, ExcNotImplemented()); \
+                                             \
+  read_write_operation<dim, c>(              \
+    reader, src_ptr, dim, patch_size_1d, indices, src_local.data());
 
-        EXPAND_OPERATIONS_RWV(OPERATION);
+                EXPAND_OPERATIONS_RWV(OPERATION);
 #undef OPERATION
               }
             else
@@ -842,17 +838,13 @@ private:
                   cell * VectorizedArrayType::size() *
                     dealii::Utilities::pow(3, dim);
 
-#define OPERATION(c, d)                             \
-  AssertThrow(c != -1, ExcNotImplemented());        \
-                                                    \
-                read_write_operation<dim, c>(writer, \
-                                              dst_ptr, \
-                                              dim, \
-                                              patch_size_1d, \
-                                              indices, \
-                                              dst_local.data());
+#define OPERATION(c, d)                      \
+  AssertThrow(c != -1, ExcNotImplemented()); \
+                                             \
+  read_write_operation<dim, c>(              \
+    writer, dst_ptr, dim, patch_size_1d, indices, dst_local.data());
 
-        EXPAND_OPERATIONS_RWV(OPERATION);
+                EXPAND_OPERATIONS_RWV(OPERATION);
 #undef OPERATION
               }
             else
