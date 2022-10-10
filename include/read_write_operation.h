@@ -46,32 +46,72 @@ read_write_operation(const ProcessorType &processor,
           const unsigned int *indices =
             cell_indices +
             3 * n_lanes * (3 * compressed_index[k] + compressed_index[j]);
+          const unsigned char *unconstrained =
+            cell_unconstrained +
+            3 * (3 * compressed_index[k] + compressed_index[j]);
 
           // left end
-          for (unsigned int i = 0; i < n_inside_1d; ++i, ++c)
-            for (unsigned int v = 0; v < n_lanes; ++v)
-              if (indices[v] != dealii::numbers::invalid_unsigned_int)
-                processor.process_dof(indices[v] + offset * n_inside_1d + i,
-                                      vec,
-                                      dof_values[c][v]);
+          if (unconstrained[0])
+            {
+              for (unsigned int i = 0; i < n_inside_1d; ++i, ++c)
+                for (unsigned int v = 0; v < n_lanes; ++v)
+                  if (indices[v] != dealii::numbers::invalid_unsigned_int)
+                    processor.process_dof(indices[v] + offset * n_inside_1d + i,
+                                          vec,
+                                          dof_values[c][v]);
+            }
+          else
+            {
+              for (unsigned int i = 0; i < n_inside_1d; ++i, ++c)
+                for (unsigned int v = 0; v < n_lanes; ++v)
+                  if (indices[v] != dealii::numbers::invalid_unsigned_int)
+                    processor.process_dof(indices[v] + offset * n_inside_1d + i,
+                                          vec,
+                                          dof_values[c][v]);
+            }
 
           indices += n_lanes;
 
           // interior
-          for (unsigned int v = 0; v < n_lanes; ++v)
-            if (indices[v] != dealii::numbers::invalid_unsigned_int)
-              processor.process_dof(indices[v] + offset, vec, dof_values[c][v]);
+          if (unconstrained[1])
+            {
+              for (unsigned int v = 0; v < n_lanes; ++v)
+                if (indices[v] != dealii::numbers::invalid_unsigned_int)
+                  processor.process_dof(indices[v] + offset,
+                                        vec,
+                                        dof_values[c][v]);
+            }
+          else
+            {
+              for (unsigned int v = 0; v < n_lanes; ++v)
+                if (indices[v] != dealii::numbers::invalid_unsigned_int)
+                  processor.process_dof(indices[v] + offset,
+                                        vec,
+                                        dof_values[c][v]);
+            }
 
           c += 1;
           indices += n_lanes;
 
           // right end
-          for (unsigned int i = 0; i < n_inside_1d; ++i, ++c)
-            for (unsigned int v = 0; v < n_lanes; ++v)
-              if (indices[v] != dealii::numbers::invalid_unsigned_int)
-                processor.process_dof(indices[v] + offset * n_inside_1d + i,
-                                      vec,
-                                      dof_values[c][v]);
+          if (unconstrained[2])
+            {
+              for (unsigned int i = 0; i < n_inside_1d; ++i, ++c)
+                for (unsigned int v = 0; v < n_lanes; ++v)
+                  if (indices[v] != dealii::numbers::invalid_unsigned_int)
+                    processor.process_dof(indices[v] + offset * n_inside_1d + i,
+                                          vec,
+                                          dof_values[c][v]);
+            }
+          else
+            {
+              for (unsigned int i = 0; i < n_inside_1d; ++i, ++c)
+                for (unsigned int v = 0; v < n_lanes; ++v)
+                  if (indices[v] != dealii::numbers::invalid_unsigned_int)
+                    processor.process_dof(indices[v] + offset * n_inside_1d + i,
+                                          vec,
+                                          dof_values[c][v]);
+            }
 
           if (((j + 1) == n_inside_1d) || (j == n_inside_1d))
             j_offset = 0;
