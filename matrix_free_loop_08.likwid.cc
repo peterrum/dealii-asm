@@ -174,6 +174,7 @@ test(const Parameters params_in)
       boost::property_tree::ptree params;
       params.put("weighting type", (type == "add") ? "none" : type);
       params.put("n overlap", n_overlap);
+      params.put("element centric", false);
 
       params.put("weight sequence",
                  weighting_sequence == "g" ?
@@ -262,12 +263,7 @@ test(const Parameters params_in)
 
 
 /**
- * python ../experiments/matrix_free_loop_08_2.py
- *
- * likwid-mpirun -np 40 -f -g CACHES -m -O ./matrix_free_loop_08 matrix_free_loop_08.json | tee result.out
- *
- * python ../experiments/matrix_free_loop_08_2.py result.out_1 result.out_2
- * result.out_3
+ * see: ../experiments/matrix_free_loop_08.sh
  */
 int
 main(int argc, char *argv[])
