@@ -264,7 +264,7 @@ test(const Parameters params_in)
 
       pcout << ">> " << label << " " << std::to_string(dof_handler.n_dofs())
             << " " << std::to_string(params_in.n_repetitions) << " " << time
-            << " " << std::endl;
+            << " " << std::to_string(sizeof(Number)) << " " << std::endl;
     }
 }
 

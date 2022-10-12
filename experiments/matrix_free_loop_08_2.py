@@ -32,6 +32,7 @@ def main():
         time        = float(data[4])
         dofs        = float(data[2])
         repetitions = float(data[3])
+        number_size = float(data[5])
 
         data   = data_r[i].strip().split(",")
         read   = float(data[1])
@@ -46,8 +47,8 @@ def main():
         index_c = op.index(label_c)
 
         matrix[index_r][index_c][0] = time
-        matrix[index_r][index_c][1] = read  * 1e9 / dofs / repetitions / 4 # TODO
-        matrix[index_r][index_c][2] = write * 1e9 / dofs / repetitions / 4 # TODO
+        matrix[index_r][index_c][1] = read  * 1e9 / dofs / repetitions / number_size
+        matrix[index_r][index_c][2] = write * 1e9 / dofs / repetitions / number_size
 
     print("\\begin{tabular}{l|" + " | ".join(">{\\centering\\arraybackslash}p{0.7cm} >{\\centering\\arraybackslash}p{0.7cm} >{\\centering\\arraybackslash}p{1.0cm}" for i in op) + "}")
     print("\\toprule")
