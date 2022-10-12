@@ -328,7 +328,7 @@ create_system_preconditioner(const OperatorType &              op,
             {
               // optimization 0: A (-) and P (-)
               return setup_relaxation(
-                static_cast<const LaplaceOperatorBase<VectorType> &>(op),
+                static_cast<const LaplaceOperatorBase<dim, VectorType> &>(op),
                 std::make_shared<
                   PreconditionerAdapter<VectorType,
                                         DiagonalMatrix<VectorType>>>(diag));
@@ -337,7 +337,7 @@ create_system_preconditioner(const OperatorType &              op,
             {
               // optimization 1: A (-) and P (pp)
               return setup_relaxation(
-                static_cast<const LaplaceOperatorBase<VectorType> &>(op),
+                static_cast<const LaplaceOperatorBase<dim, VectorType> &>(op),
                 my_diag);
             }
           else if (preconditioner_optimize == 2)
@@ -370,7 +370,7 @@ create_system_preconditioner(const OperatorType &              op,
             {
               // optimization 0: A (-) and P (-)
               return setup_relaxation(
-                static_cast<const LaplaceOperatorBase<VectorType> &>(op),
+                static_cast<const LaplaceOperatorBase<dim, VectorType> &>(op),
                 std::make_shared<PreconditionerAdapter<
                   VectorType,
                   ASPoissonPreconditioner<dim, Number, VectorizedArrayType>>>(
@@ -380,7 +380,7 @@ create_system_preconditioner(const OperatorType &              op,
             {
               // optimization 1: A (-) and P (pp)
               return setup_relaxation(
-                static_cast<const LaplaceOperatorBase<VectorType> &>(op),
+                static_cast<const LaplaceOperatorBase<dim, VectorType> &>(op),
                 std::const_pointer_cast<
                   ASPoissonPreconditioner<dim, Number, VectorizedArrayType>>(
                   fdm));
@@ -470,7 +470,7 @@ create_system_preconditioner(const OperatorType &              op,
             {
               // optimization 0: A (-) and P (-)
               return setup_chebshev(
-                static_cast<const LaplaceOperatorBase<VectorType> &>(op),
+                static_cast<const LaplaceOperatorBase<dim, VectorType> &>(op),
                 std::make_shared<
                   PreconditionerAdapter<VectorType,
                                         DiagonalMatrix<VectorType>>>(diag));
@@ -479,7 +479,7 @@ create_system_preconditioner(const OperatorType &              op,
             {
               // optimization 1: A (-) and P (pp)
               return setup_chebshev(
-                static_cast<const LaplaceOperatorBase<VectorType> &>(op),
+                static_cast<const LaplaceOperatorBase<dim, VectorType> &>(op),
                 my_diag);
             }
           else if (preconditioner_optimize == 2)
@@ -512,7 +512,7 @@ create_system_preconditioner(const OperatorType &              op,
             {
               // optimization 0: A (-) and P (-)
               return setup_chebshev(
-                static_cast<const LaplaceOperatorBase<VectorType> &>(op),
+                static_cast<const LaplaceOperatorBase<dim, VectorType> &>(op),
                 std::make_shared<PreconditionerAdapter<
                   VectorType,
                   ASPoissonPreconditioner<dim, Number, VectorizedArrayType>>>(
@@ -522,7 +522,7 @@ create_system_preconditioner(const OperatorType &              op,
             {
               // optimization 1: A (-) and P (pp)
               return setup_chebshev(
-                static_cast<const LaplaceOperatorBase<VectorType> &>(op),
+                static_cast<const LaplaceOperatorBase<dim, VectorType> &>(op),
                 std::const_pointer_cast<
                   ASPoissonPreconditioner<dim, Number, VectorizedArrayType>>(
                   fdm));

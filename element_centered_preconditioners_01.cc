@@ -330,12 +330,18 @@ test(const boost::property_tree::ptree params, ConvergenceTable &table)
   const FE_Q<dim>   fe(fe_degree);
   const QGauss<dim> quadrature(fe_degree + 1);
 
+  std::shared_ptr<Function<dim>> rhs_func =
+    std::make_shared<RightHandSide<dim>>();
+  std::shared_ptr<Function<dim>> dbc_func =
+    std::make_shared<Functions::ZeroFunction<dim>>();
+
   OperatorType op(mapping,
                   tria,
                   fe,
                   quadrature,
                   typename OperatorType::AdditionalData(op_compress_indices,
-                                                        op_mapping_type));
+                                                        op_mapping_type),
+                  dbc_func);
 
   table.add_value("n_cells", tria.n_global_active_cells());
   table.add_value("L", tria.n_global_levels());
@@ -347,12 +353,7 @@ test(const boost::property_tree::ptree params, ConvergenceTable &table)
   op.initialize_dof_vector(solution);
   op.initialize_dof_vector(rhs);
 
-  VectorTools::create_right_hand_side(op.get_dof_handler(),
-                                      op.get_quadrature(),
-                                      RightHandSide<dim>(),
-                                      rhs,
-                                      op.get_constraints());
-
+  op.rhs(rhs, rhs_func);
   rhs.zero_out_ghost_values();
 
   std::shared_ptr<ReductionControl> reduction_control;
