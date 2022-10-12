@@ -32,6 +32,7 @@
 
 using namespace dealii;
 
+#include "include/functions.h"
 #include "include/json.h"
 #include "include/kershaw.h"
 #include "include/matrix_free.h"
@@ -334,6 +335,20 @@ test(const boost::property_tree::ptree params, ConvergenceTable &table)
     std::make_shared<RightHandSide<dim>>();
   std::shared_ptr<Function<dim>> dbc_func =
     std::make_shared<Functions::ZeroFunction<dim>>();
+
+  if (true)
+    {
+      rhs_func = std::make_shared<RightHandSide<dim>>();
+      dbc_func = std::make_shared<Functions::ZeroFunction<dim>>();
+    }
+  else
+    {
+      const std::vector<Point<dim>> points = {Point<dim>(-0.5, -0.5, -0.5)};
+      const double                  width  = 0.1;
+
+      rhs_func = std::make_shared<GaussianRightHandSide<dim>>(points, width);
+      dbc_func = std::make_shared<GaussianSolution<dim>>(points, width);
+    }
 
   OperatorType op(mapping,
                   tria,
