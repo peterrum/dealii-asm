@@ -27,6 +27,7 @@
 #include <deal.II/matrix_free/matrix_free.h>
 #include <deal.II/matrix_free/tools.h>
 
+#include <deal.II/numerics/data_out.h>
 #include <deal.II/numerics/matrix_creator.h>
 #include <deal.II/numerics/vector_tools.h>
 
@@ -245,6 +246,14 @@ test(const boost::property_tree::ptree params, ConvergenceTable &table)
       GridGenerator::hyper_cube(tria);
       mapping_degree = std::min(mapping_degree, 1u);
     }
+  else if (geometry_name == "symmetric hypercube")
+    {
+      pcout << "- Create mesh: symmetric hypercube" << std::endl;
+      pcout << std::endl;
+
+      GridGenerator::hyper_cube(tria, -1.0, +1.0);
+      mapping_degree = std::min(mapping_degree, 1u);
+    }
   else if (geometry_name == "anisotropy")
     {
       const auto stratch = mesh_parameters.get<double>("stratch", 1.0);
@@ -336,7 +345,7 @@ test(const boost::property_tree::ptree params, ConvergenceTable &table)
   std::shared_ptr<Function<dim>> dbc_func =
     std::make_shared<Functions::ZeroFunction<dim>>();
 
-  if (true)
+  if (true) // TODO
     {
       rhs_func = std::make_shared<RightHandSide<dim>>();
       dbc_func = std::make_shared<Functions::ZeroFunction<dim>>();
@@ -567,6 +576,26 @@ test(const boost::property_tree::ptree params, ConvergenceTable &table)
 
       reduction_control =
         solve(op, solution, rhs, preconditioner, solver_parameters, table);
+    }
+
+
+  if (false) // TODO
+    {
+      DataOutBase::VtkFlags flags;
+      flags.write_higher_order_cells = true;
+
+      DataOut<dim> data_out;
+      data_out.set_flags(flags);
+
+      data_out.attach_dof_handler(op.get_dof_handler());
+
+      solution.update_ghost_values();
+      op.get_constraints().distribute(solution);
+      data_out.add_data_vector(solution, "solution");
+
+      data_out.build_patches(mapping, 3);
+
+      data_out.write_vtu_in_parallel("multigrid.vtu", MPI_COMM_WORLD);
     }
 }
 
