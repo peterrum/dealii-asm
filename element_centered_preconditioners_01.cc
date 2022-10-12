@@ -345,18 +345,26 @@ test(const boost::property_tree::ptree params, ConvergenceTable &table)
   std::shared_ptr<Function<dim>> dbc_func =
     std::make_shared<Functions::ZeroFunction<dim>>();
 
-  if (true) // TODO
+  const std::string rhs_name = params.get<std::string>("rhs", "constant");
+
+  if (rhs_name == "constant")
     {
       rhs_func = std::make_shared<RightHandSide<dim>>();
       dbc_func = std::make_shared<Functions::ZeroFunction<dim>>();
     }
-  else
+  else if (rhs_name == "gaussian")
     {
       const std::vector<Point<dim>> points = {Point<dim>(-0.5, -0.5, -0.5)};
       const double                  width  = 0.1;
 
       rhs_func = std::make_shared<GaussianRightHandSide<dim>>(points, width);
       dbc_func = std::make_shared<GaussianSolution<dim>>(points, width);
+    }
+  else
+    {
+      AssertThrow(false,
+                  ExcMessage("RHS with the name <" + rhs_name +
+                             "> is not known!"));
     }
 
   OperatorType op(mapping,
@@ -579,7 +587,7 @@ test(const boost::property_tree::ptree params, ConvergenceTable &table)
     }
 
 
-  if (false) // TODO
+  if (params.get<bool>("do output", false))
     {
       DataOutBase::VtkFlags flags;
       flags.write_higher_order_cells = true;
