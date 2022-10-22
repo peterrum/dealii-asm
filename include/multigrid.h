@@ -128,11 +128,13 @@ public:
     const MGLevelObject<std::shared_ptr<
       const AffineConstraints<typename VectorType_::value_type>>>
       &                                                    mg_constraints,
-    const MGLevelObject<std::shared_ptr<LevelMatrixType>> &mg_operators)
+    const MGLevelObject<std::shared_ptr<LevelMatrixType>> &mg_operators,
+    const bool use_one_sided_v_cycle)
     : dof_handler(dof_handler)
     , mg_dof_handlers(mg_dof_handlers)
     , mg_constraints(mg_constraints)
     , mg_operators(mg_operators)
+    , use_one_sided_v_cycle(use_one_sided_v_cycle)
     , min_level(mg_dof_handlers.min_level())
     , max_level(mg_dof_handlers.max_level())
     , transfers(min_level, max_level)
@@ -249,13 +251,22 @@ public:
 
     // create multigrid algorithm (put level operators, smoothers, transfer
     // operators and smoothers together)
-    mg = std::make_unique<Multigrid<VectorType>>(*mg_matrix,
-                                                 *mg_coarse,
-                                                 *transfer,
-                                                 mg_smoother,
-                                                 mg_smoother,
-                                                 min_level,
-                                                 max_level);
+    if (use_one_sided_v_cycle)
+      mg = std::make_unique<Multigrid<VectorType>>(*mg_matrix,
+                                                   *mg_coarse,
+                                                   *transfer,
+                                                   mg_smoother,
+                                                   mg_smoother_identity,
+                                                   min_level,
+                                                   max_level);
+    else
+      mg = std::make_unique<Multigrid<VectorType>>(*mg_matrix,
+                                                   *mg_coarse,
+                                                   *transfer,
+                                                   mg_smoother,
+                                                   mg_smoother,
+                                                   min_level,
+                                                   max_level);
 
     // convert multigrid algorithm to preconditioner
     preconditioner =
@@ -339,6 +350,8 @@ protected:
                                                         mg_constraints;
   const MGLevelObject<std::shared_ptr<LevelMatrixType>> mg_operators;
 
+  const bool use_one_sided_v_cycle;
+
   const unsigned int min_level;
   const unsigned int max_level;
 
@@ -353,6 +366,8 @@ protected:
   // smoothers
   mutable MGSmootherRelaxation<LevelMatrixType, SmootherType, VectorType>
     mg_smoother;
+
+  mutable MGSmootherIdentity<VectorType> mg_smoother_identity;
 
   // multigrid
   mutable std::unique_ptr<mg::Matrix<VectorType>> mg_matrix;
