@@ -298,12 +298,11 @@ public:
             for (unsigned int q = 0; q < phi.n_q_points; ++q)
               if constexpr (n_components == 1)
                 {
-                  VectorizedArray<Number> coeff = 0;
+                  VectorizedArrayType coeff = 0;
 
                   const auto point_batch = phi.quadrature_point(q);
 
-                  for (unsigned int v = 0; v < VectorizedArray<Number>::size();
-                       ++v)
+                  for (unsigned int v = 0; v < VectorizedArrayType::size(); ++v)
                     {
                       Point<dim> single_point;
                       for (unsigned int d = 0; d < dim; d++)
@@ -349,11 +348,11 @@ public:
     this->initialize_dof_vector(b);
     this->initialize_dof_vector(x);
 
-    typename MatrixFree<dim, Number>::AdditionalData data;
+    typename MatrixFree<dim, Number, VectorizedArrayType>::AdditionalData data;
     data.mapping_update_flags =
       update_values | update_gradients | update_quadrature_points;
 
-    MatrixFree<dim, Number> matrix_free;
+    MatrixFree<dim, Number, VectorizedArrayType> matrix_free;
     matrix_free.reinit(
       mapping, dof_handler, constraints_without_dbc, quad, data);
 
@@ -426,7 +425,7 @@ public:
         setup_constraints();
       }
 
-    typename MatrixFree<dim, Number>::AdditionalData data;
+    typename MatrixFree<dim, Number, VectorizedArrayType>::AdditionalData data;
     data.mapping_update_flags =
       update_values | update_gradients | update_quadrature_points;
 
