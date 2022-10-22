@@ -108,7 +108,9 @@ public:
                         VectorTypeOuter>(dof_handler,
                                          mg_dof_handlers,
                                          mg_constraints,
-                                         mg_operators)
+                                         mg_operators,
+                                         params.get<bool>("one-sided v-cycle",
+                                                          false))
     , params(params)
     , pcout(std::cout, Utilities::MPI::this_mpi_process(MPI_COMM_WORLD) == 0)
   {
