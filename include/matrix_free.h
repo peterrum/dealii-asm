@@ -14,13 +14,25 @@
 #include "grid_tools.h"
 #include "matrix_free_internal.h"
 #include "preconditioners.h"
+#include "read_write_operation.h"
 #include "restrictors.h"
 #include "vector_access_reduced.h"
 
-template <int dim,
-          typename Number,
-          typename VectorizedArrayType,
-          int n_rows_1d = -1>
+// clang-format off
+#define EXPAND_OPERATIONS_RWV(OPERATION)                              \
+  switch (patch_size_1d)                                                        \
+    {                                                                    \
+      case  3: OPERATION((( 2 <= MAX_DEGREE_RW) ?  3 : -1), -1); break; \
+      case  5: OPERATION((( 3 <= MAX_DEGREE_RW) ?  5 : -1), -1); break; \
+      case  7: OPERATION((( 4 <= MAX_DEGREE_RW) ?  7 : -1), -1); break; \
+      case  9: OPERATION((( 5 <= MAX_DEGREE_RW) ?  9 : -1), -1); break; \
+      case 11: OPERATION((( 6 <= MAX_DEGREE_RW) ? 11 : -1), -1); break; \
+      default:                                                           \
+        OPERATION(-1, -1);                                               \
+    }
+// clang-format on
+
+template <int dim, typename Number, typename VectorizedArrayType>
 class ASPoissonPreconditioner
   : public PreconditionerBase<LinearAlgebra::distributed::Vector<Number>>
 {
@@ -42,18 +54,19 @@ public:
       Restrictors::WeightingType::post,
     const bool        compress_indices    = true,
     const std::string weight_local_global = "global",
-    const bool        overlap_pre_post    = true)
+    const bool        overlap_pre_post    = true,
+    const bool        element_centric     = true)
     : matrix_free(matrix_free)
     , fe_degree(matrix_free.get_dof_handler().get_fe().tensor_degree())
     , n_overlap(n_overlap)
+    , patch_size_1d(element_centric ? (fe_degree + 2 * n_overlap - 1) :
+                                      (fe_degree * 2 - 1))
+    , patch_size(Utilities::pow(patch_size_1d, dim))
     , weight_type(weight_type)
     , do_weights_global(weight_local_global == "global")
     , overlap_pre_post(overlap_pre_post)
+    , element_centric(element_centric)
   {
-    AssertThrow((n_rows_1d == -1) || (static_cast<unsigned int>(n_rows_1d) ==
-                                      fe_1D.degree + 2 * n_overlap - 1),
-                ExcNotImplemented());
-
     const auto &dof_handler = matrix_free.get_dof_handler();
     const auto &constraints = matrix_free.get_affine_constraints();
 
@@ -97,7 +110,7 @@ public:
         }
     };
 
-    if (n_overlap == 1)
+    if (element_centric && (n_overlap == 1))
       {
         if (compress_indices)
           {
@@ -112,6 +125,13 @@ public:
 
         std::vector<types::global_dof_index> ghost_indices;
 
+        for (const auto i :
+             matrix_free.get_vector_partitioner()->locally_owned_range())
+          ghost_indices.push_back(i);
+        for (const auto i :
+             matrix_free.get_vector_partitioner()->ghost_indices())
+          ghost_indices.push_back(i);
+
         for (unsigned int cell = 0, cell_counter = 0;
              cell < matrix_free.n_cell_batches();
              ++cell)
@@ -123,11 +143,19 @@ public:
                 const auto cells =
                   dealii::GridTools::extract_all_surrounding_cells_cartesian<
                     dim>(matrix_free.get_cell_iterator(cell, v),
-                         n_overlap <= 1 ? 0 : sub_mesh_approximation);
+                         element_centric ?
+                           (n_overlap <= 1 ? 0 : sub_mesh_approximation) :
+                           dim);
+
+                const auto cells_vertex_patch =
+                  collect_cells_for_vertex_patch(cells);
 
                 auto local_dofs =
-                  dealii::DoFTools::get_dof_indices_cell_with_overlap(
-                    dof_handler, cells, n_overlap, true);
+                  element_centric ?
+                    dealii::DoFTools::get_dof_indices_cell_with_overlap(
+                      dof_handler, cells, n_overlap, true) :
+                    dealii::DoFTools::get_dof_indices_vertex_patch(
+                      dof_handler, cells_vertex_patch);
 
                 for (auto &i : local_dofs)
                   resolve_constraint(i);
@@ -182,6 +210,12 @@ public:
       (n_dofs + chunk_size_zero_vector - 1) / chunk_size_zero_vector,
       numbers::invalid_unsigned_int);
 
+    if ((element_centric == false) && compress_indices && (fe_degree >= 2))
+      compressed_dof_indices_vertex_patch.resize(
+        VectorizedArrayType::size() * matrix_free.n_cell_batches() *
+          Utilities::pow(3, dim),
+        dealii::numbers::invalid_unsigned_int);
+
     for (unsigned int part = 0, cell_counter = 0;
          part < task_info.partition_row_index.size() - 2;
          ++part)
@@ -205,11 +239,19 @@ public:
                 const auto cells =
                   dealii::GridTools::extract_all_surrounding_cells_cartesian<
                     dim>(cell_iterator,
-                         n_overlap <= 1 ? 0 : sub_mesh_approximation);
+                         element_centric ?
+                           (n_overlap <= 1 ? 0 : sub_mesh_approximation) :
+                           dim);
+
+                const auto cells_vertex_patch =
+                  collect_cells_for_vertex_patch(cells);
 
                 auto local_dofs =
-                  dealii::DoFTools::get_dof_indices_cell_with_overlap(
-                    dof_handler, cells, n_overlap, true);
+                  element_centric ?
+                    dealii::DoFTools::get_dof_indices_cell_with_overlap(
+                      dof_handler, cells, n_overlap, true) :
+                    dealii::DoFTools::get_dof_indices_vertex_patch(
+                      dof_handler, cells_vertex_patch);
 
                 for (auto &i : local_dofs)
                   resolve_constraint(i);
@@ -230,15 +272,48 @@ public:
                                                  local_dofs,
                                                  partitioner_fdm);
 
-                const auto [Ms_scalar, Ks_scalar] = TensorProductMatrixCreator::
-                  create_laplace_tensor_product_matrix<dim, Number>(
-                    cell_iterator,
-                    {1},
-                    {2},
-                    fe_1D,
-                    quadrature_1D,
-                    harmonic_patch_extend[cell_iterator->active_cell_index()],
-                    n_overlap);
+                if (compressed_dof_indices_vertex_patch.size())
+                  {
+                    std::vector<unsigned int> compressed_dof_indices;
+
+                    const auto success =
+                      read_write_operation_setup(local_dofs,
+                                                 dim,
+                                                 patch_size_1d,
+                                                 compressed_dof_indices,
+                                                 partitioner_fdm);
+
+                    AssertThrow(success, ExcInternalError());
+
+                    for (unsigned int i = 0; i < compressed_dof_indices.size();
+                         ++i)
+                      compressed_dof_indices_vertex_patch
+                        [cell * VectorizedArrayType::size() *
+                           compressed_dof_indices.size() +
+                         i * VectorizedArrayType::size() + v] =
+                          compressed_dof_indices[i];
+                  }
+
+                const auto patch_extend =
+                  harmonic_patch_extend[cell_iterator->active_cell_index()];
+
+                const auto patch_extend_for_vertex_patch =
+                  collect_patch_extend(patch_extend);
+
+                const auto [Ms_scalar, Ks_scalar] =
+                  element_centric ?
+                    TensorProductMatrixCreator::
+                      create_laplace_tensor_product_matrix<dim, Number>(
+                        cell_iterator,
+                        {1},
+                        {2},
+                        fe_1D,
+                        quadrature_1D,
+                        patch_extend,
+                        n_overlap) :
+                    TensorProductMatrixCreator::
+                      create_laplace_tensor_product_matrix<dim, Number>(
+                        fe_1D, quadrature_1D, patch_extend_for_vertex_patch);
 
                 for (unsigned int d = 0; d < dim; ++d)
                   {
@@ -273,6 +348,27 @@ public:
 
     src_.reinit(partitioner_fdm);
     dst_.reinit(partitioner_fdm);
+
+    if (compressed_dof_indices_vertex_patch.size() > 0)
+      {
+        all_indices_uniform_vertex_patch.resize(matrix_free.n_cell_batches() *
+                                                Utilities::pow(3, dim));
+
+        for (unsigned int i = 0;
+             i < matrix_free.n_cell_batches() * Utilities::pow(3, dim);
+             ++i)
+          {
+            char not_constrained = 1;
+
+            for (unsigned int v = 0; v < VectorizedArrayType::size(); ++v)
+              if (compressed_dof_indices_vertex_patch
+                    [i * VectorizedArrayType::size() + v] ==
+                  numbers::invalid_unsigned_int)
+                not_constrained = 0;
+
+            all_indices_uniform_vertex_patch[i] = not_constrained;
+          }
+      }
 
     {
       const auto vector_partitioner = partitioner_fdm;
@@ -389,8 +485,7 @@ public:
     }
 
     {
-      AlignedVector<VectorizedArrayType> dst__(
-        Utilities::pow(fe_degree + 2 * n_overlap - 1, dim));
+      AlignedVector<VectorizedArrayType> dst__(patch_size);
 
       dst_ = 0.0;
 
@@ -429,7 +524,7 @@ public:
 
 
 
-    if (n_overlap == 1)
+    if (element_centric && (n_overlap == 1))
       {
         const bool actually_use_compression =
           (weight_local_global == "compressed" && fe_1D.degree >= 2);
@@ -441,9 +536,7 @@ public:
               weights_compressed_q2.resize(matrix_free.n_cell_batches());
 
             if (actually_use_dg)
-              weights_dg.reinit(matrix_free.n_cell_batches(),
-                                Utilities::pow(fe_degree + 2 * n_overlap - 1,
-                                               dim));
+              weights_dg.reinit(matrix_free.n_cell_batches(), patch_size);
 
             FECellIntegrator phi(matrix_free);
 
@@ -462,16 +555,14 @@ public:
                         VectorizedArrayType>(
                         phi.begin_dof_values(),
                         1,
-                        fe_degree + 1,
+                        patch_size_1d,
                         weights_compressed_q2[cell].begin());
                     AssertThrow(success, ExcInternalError());
                   }
 
                 if (actually_use_dg)
                   {
-                    for (unsigned int i = 0;
-                         i < Utilities::pow(fe_degree + 2 * n_overlap - 1, dim);
-                         ++i)
+                    for (unsigned int i = 0; i < patch_size; ++i)
                       weights_dg[cell][i] = phi.begin_dof_values()[i];
                   }
               }
@@ -479,17 +570,21 @@ public:
       }
     else
       {
+        const bool actually_use_compression =
+          (weight_local_global == "compressed" && fe_1D.degree >= 2 &&
+           (element_centric == false));
         const bool actually_use_dg = (weight_local_global == "dg");
 
-        if (actually_use_dg)
+        if (actually_use_compression || actually_use_dg)
           {
-            weights_dg.reinit(matrix_free.n_cell_batches(),
-                              Utilities::pow(fe_degree + 2 * n_overlap - 1,
-                                             dim));
+            if (actually_use_compression)
+              weights_compressed_q2.resize(matrix_free.n_cell_batches());
+
+            if (actually_use_dg)
+              weights_dg.reinit(matrix_free.n_cell_batches(), patch_size);
 
             AlignedVector<VectorizedArrayType> weights_local;
-            weights_local.resize_fast(
-              Utilities::pow(fe_degree + 2 * n_overlap - 1, dim));
+            weights_local.resize_fast(patch_size);
 
             for (unsigned int cell = 0; cell < matrix_free.n_cell_batches();
                  ++cell)
@@ -504,10 +599,25 @@ public:
                                                      weights_local.size(),
                                                      true);
 
-                for (unsigned int i = 0;
-                     i < Utilities::pow(fe_degree + 2 * n_overlap - 1, dim);
-                     ++i)
-                  weights_dg[cell][i] = weights_local[i];
+                if (actually_use_compression)
+                  {
+                    const bool success = dealii::internal::
+                      compute_weights_fe_q_dofs_by_entity_shifted<
+                        dim,
+                        -1,
+                        VectorizedArrayType>(
+                        weights_local.begin(),
+                        1,
+                        patch_size_1d,
+                        weights_compressed_q2[cell].begin());
+                    AssertThrow(success, ExcInternalError());
+                  }
+
+                if (actually_use_dg)
+                  {
+                    for (unsigned int i = 0; i < patch_size; ++i)
+                      weights_dg[cell][i] = weights_local[i];
+                  }
               }
           }
       }
@@ -685,27 +795,46 @@ private:
           VectorType &                                dst_ptr,
           const VectorType &                          src_ptr,
           const std::pair<unsigned int, unsigned int> cell_range) {
-        src_local.resize_fast(
-          Utilities::pow(fe_degree + 2 * n_overlap - 1, dim));
-        dst_local.resize_fast(
-          Utilities::pow(fe_degree + 2 * n_overlap - 1, dim));
+        src_local.resize_fast(patch_size);
+        dst_local.resize_fast(patch_size);
         if (do_weights_global == false)
-          weights_local.resize_fast(
-            Utilities::pow(fe_degree + 2 * n_overlap - 1, dim));
+          weights_local.resize_fast(patch_size);
 
         for (unsigned int cell = cell_range.first; cell < cell_range.second;
              ++cell)
           {
             // 1) gather src (optional)
             internal::VectorReader<Number, VectorizedArrayType> reader;
-            constraint_info.read_write_operation(reader,
-                                                 src_ptr,
-                                                 src_local.data(),
-                                                 cell_ptr[cell],
-                                                 cell_ptr[cell + 1] -
-                                                   cell_ptr[cell],
-                                                 src_local.size(),
-                                                 true);
+            if (compressed_dof_indices_vertex_patch.size() > 0)
+              {
+                const auto indices =
+                  compressed_dof_indices_vertex_patch.data() +
+                  cell * VectorizedArrayType::size() *
+                    dealii::Utilities::pow(3, dim);
+
+                const auto mask = all_indices_uniform_vertex_patch.data() +
+                                  cell * dealii::Utilities::pow(3, dim);
+
+#define OPERATION(c, d)                      \
+  AssertThrow(c != -1, ExcNotImplemented()); \
+                                             \
+  read_write_operation<dim, c>(              \
+    reader, src_ptr, dim, patch_size_1d, indices, mask, src_local.data());
+
+                EXPAND_OPERATIONS_RWV(OPERATION);
+#undef OPERATION
+              }
+            else
+              {
+                constraint_info.read_write_operation(reader,
+                                                     src_ptr,
+                                                     src_local.data(),
+                                                     cell_ptr[cell],
+                                                     cell_ptr[cell + 1] -
+                                                       cell_ptr[cell],
+                                                     src_local.size(),
+                                                     true);
+              }
 
             // 2) apply weights (optional)
             if (do_weights_global == false)
@@ -726,14 +855,36 @@ private:
             internal::VectorDistributorLocalToGlobal<Number,
                                                      VectorizedArrayType>
               writer;
-            constraint_info.read_write_operation(writer,
-                                                 dst_ptr,
-                                                 dst_local.data(),
-                                                 cell_ptr[cell],
-                                                 cell_ptr[cell + 1] -
-                                                   cell_ptr[cell],
-                                                 dst_local.size(),
-                                                 true);
+            if (compressed_dof_indices_vertex_patch.size() > 0)
+              {
+                const auto indices =
+                  compressed_dof_indices_vertex_patch.data() +
+                  cell * VectorizedArrayType::size() *
+                    dealii::Utilities::pow(3, dim);
+
+                const auto mask = all_indices_uniform_vertex_patch.data() +
+                                  cell * dealii::Utilities::pow(3, dim);
+
+#define OPERATION(c, d)                      \
+  AssertThrow(c != -1, ExcNotImplemented()); \
+                                             \
+  read_write_operation<dim, c>(              \
+    writer, dst_ptr, dim, patch_size_1d, indices, mask, dst_local.data());
+
+                EXPAND_OPERATIONS_RWV(OPERATION);
+#undef OPERATION
+              }
+            else
+              {
+                constraint_info.read_write_operation(writer,
+                                                     dst_ptr,
+                                                     dst_local.data(),
+                                                     cell_ptr[cell],
+                                                     cell_ptr[cell + 1] -
+                                                       cell_ptr[cell],
+                                                     dst_local.size(),
+                                                     true);
+              }
           }
       };
 
@@ -935,7 +1086,7 @@ private:
           internal::weight_fe_q_dofs_by_entity<dim, -1, VectorizedArrayType>(
             &weights_compressed_q2[cell][0],
             1 /* TODO*/,
-            fe_degree + 1,
+            patch_size_1d,
             phi.begin_dof_values());
       }
     else if (weights_dg.size(0) > 0)
@@ -979,7 +1130,22 @@ private:
                       AlignedVector<VectorizedArrayType> &data,
                       const bool                          first_call) const
   {
-    if (weights_dg.size(0) > 0)
+    if (weights_compressed_q2.size() > 0)
+      {
+        if (((first_call == true) &&
+             (weight_type == Restrictors::WeightingType::symm ||
+              weight_type == Restrictors::WeightingType::pre)) ||
+            ((first_call == false) &&
+             (weight_type == Restrictors::WeightingType::symm ||
+              weight_type == Restrictors::WeightingType::post)))
+          internal::
+            weight_fe_q_dofs_by_entity_shifted<dim, -1, VectorizedArrayType>(
+              &weights_compressed_q2[cell][0],
+              1 /* TODO*/,
+              patch_size_1d,
+              data.begin());
+      }
+    else if (weights_dg.size(0) > 0)
       {
         if (((first_call == true) &&
              (weight_type == Restrictors::WeightingType::symm ||
@@ -1021,12 +1187,52 @@ private:
       }
   }
 
+  static std::array<typename Triangulation<dim>::cell_iterator,
+                    Utilities::pow(2, dim)>
+  collect_cells_for_vertex_patch(
+    const std::array<typename Triangulation<dim>::cell_iterator,
+                     Utilities::pow(3, dim)> &cells_all)
+  {
+    std::array<typename Triangulation<dim>::cell_iterator,
+               Utilities::pow(2, dim)>
+      cells;
+
+    for (unsigned int k = 0; k < ((dim == 3) ? 2 : 1); ++k)
+      for (unsigned int j = 0; j < ((dim >= 2) ? 2 : 1); ++j)
+        for (unsigned int i = 0; i < 2; ++i)
+          cells[4 * k + 2 * j + i] =
+            cells_all[9 * ((dim == 3) ? (k + 1) : 0) +
+                      3 * ((dim >= 2) ? (j + 1) : 0) + (i + 1)];
+
+    return cells;
+  }
+
+  static dealii::ndarray<double, dim, 2>
+  collect_patch_extend(const dealii::ndarray<double, dim, 3> &patch_extend_all)
+  {
+    dealii::ndarray<double, dim, 2> patch_extend;
+
+    for (unsigned int d = 0; d < dim; ++d)
+      {
+        patch_extend[d][0] =
+          (patch_extend_all[d][1] != 0.0) ? patch_extend_all[d][1] : 1.0;
+        patch_extend[d][1] =
+          (patch_extend_all[d][2] != 0.0) ? patch_extend_all[d][2] : 1.0;
+      }
+
+    return patch_extend;
+  }
+
+
   const MatrixFree<dim, Number, VectorizedArrayType> &matrix_free;
   const unsigned int                                  fe_degree;
   const unsigned int                                  n_overlap;
+  const unsigned int                                  patch_size_1d;
+  const unsigned int                                  patch_size;
   const Restrictors::WeightingType                    weight_type;
   const bool                                          do_weights_global;
   const bool                                          overlap_pre_post;
+  const bool                                          element_centric;
 
   std::shared_ptr<const Utilities::MPI::Partitioner> partitioner_fdm;
 
@@ -1034,8 +1240,7 @@ private:
                             constraint_info;
   std::vector<unsigned int> cell_ptr;
 
-  TensorProductMatrixSymmetricSumCollection<dim, VectorizedArrayType, n_rows_1d>
-    fdm;
+  TensorProductMatrixSymmetricSumCollection<dim, VectorizedArrayType> fdm;
 
   mutable VectorType src_;
   mutable VectorType dst_;
@@ -1057,6 +1262,9 @@ private:
 
   mutable dealii::AlignedVector<Number> buffer_dst;
   mutable dealii::AlignedVector<Number> buffer_src;
+
+  std::vector<unsigned int>  compressed_dof_indices_vertex_patch;
+  std::vector<unsigned char> all_indices_uniform_vertex_patch;
 };
 
 

@@ -173,7 +173,16 @@ test(const Parameters params_in)
       // configure preconditioner
       boost::property_tree::ptree params;
       params.put("weighting type", (type == "add") ? "none" : type);
-      params.put("n overlap", n_overlap);
+
+      if (n_overlap == "v")
+        {
+          params.put("element centric", false);
+        }
+      else
+        {
+          params.put("n overlap", n_overlap);
+          params.put("element centric", true);
+        }
 
       params.put("weight sequence",
                  weighting_sequence == "g" ?
@@ -255,19 +264,14 @@ test(const Parameters params_in)
 
       pcout << ">> " << label << " " << std::to_string(dof_handler.n_dofs())
             << " " << std::to_string(params_in.n_repetitions) << " " << time
-            << " " << std::endl;
+            << " " << std::to_string(sizeof(Number)) << " " << std::endl;
     }
 }
 
 
 
 /**
- * python ../experiments/matrix_free_loop_08_2.py
- *
- * likwid-mpirun -np 40 -f -g CACHES -m -O ./matrix_free_loop_08 matrix_free_loop_08.json | tee result.out
- *
- * python ../experiments/matrix_free_loop_08_2.py result.out_1 result.out_2
- * result.out_3
+ * see: ../experiments/matrix_free_loop_08.sh
  */
 int
 main(int argc, char *argv[])

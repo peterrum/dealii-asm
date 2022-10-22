@@ -9,7 +9,9 @@ def format(i):
 
 def main():
     op   = ["add", "none", "post", "pre", "symm"]
-    type = ["1-c", "1-l", "1-dg", "1-g-s-c", "1-g-s-n", "1-g-p-c", "1-g-p-n", "2-l", "2-dg", "2-g-s-c", "2-g-s-n", "2-g-p-c", "2-g-p-n"]
+    type = ["1-c", "1-l", "1-dg", "1-g-s-c", "1-g-s-n", "1-g-p-c", "1-g-p-n", 
+                   "2-l", "2-dg", "2-g-s-c", "2-g-s-n", "2-g-p-c", "2-g-p-n",
+            "v-c", "v-l", "v-dg", "v-g-s-c", "v-g-s-n", "v-g-p-c", "v-g-p-n"]
 
     w = len(op)
     h = len(type)
@@ -30,6 +32,7 @@ def main():
         time        = float(data[4])
         dofs        = float(data[2])
         repetitions = float(data[3])
+        number_size = float(data[5])
 
         data   = data_r[i].strip().split(",")
         read   = float(data[1])
@@ -44,8 +47,8 @@ def main():
         index_c = op.index(label_c)
 
         matrix[index_r][index_c][0] = time
-        matrix[index_r][index_c][1] = read  * 1e9 / dofs / repetitions / 4 # TODO
-        matrix[index_r][index_c][2] = write * 1e9 / dofs / repetitions / 4 # TODO
+        matrix[index_r][index_c][1] = read  * 1e9 / dofs / repetitions / number_size
+        matrix[index_r][index_c][2] = write * 1e9 / dofs / repetitions / number_size
 
     print("\\begin{tabular}{l|" + " | ".join(">{\\centering\\arraybackslash}p{0.7cm} >{\\centering\\arraybackslash}p{0.7cm} >{\\centering\\arraybackslash}p{1.0cm}" for i in op) + "}")
     print("\\toprule")
@@ -59,7 +62,7 @@ def main():
 
     print("\\midrule")
     for r in range(0, h):
-        if r == 7:
+        if r == 7 or r == 13:
             print("\midrule")
         print(type[r] + " & " + " & ".join([format(i) for i in matrix[r]]) + " \\\\")
     print("\\bottomrule")

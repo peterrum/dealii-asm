@@ -27,11 +27,13 @@
 #include <deal.II/matrix_free/matrix_free.h>
 #include <deal.II/matrix_free/tools.h>
 
+#include <deal.II/numerics/data_out.h>
 #include <deal.II/numerics/matrix_creator.h>
 #include <deal.II/numerics/vector_tools.h>
 
 using namespace dealii;
 
+#include "include/functions.h"
 #include "include/json.h"
 #include "include/kershaw.h"
 #include "include/matrix_free.h"
@@ -123,6 +125,14 @@ solve(const MatrixType &                              A,
           {
             typename SolverGMRES<VectorType>::AdditionalData additional_data;
             additional_data.right_preconditioning = true;
+            additional_data.orthogonalization_strategy =
+              SolverGMRES<VectorType>::AdditionalData::
+                OrthogonalizationStrategy::classical_gram_schmidt;
+
+            const auto max_n_tmp_vectors =
+              params.get<int>("max n tmp vectors", 0);
+            if (max_n_tmp_vectors > 0)
+              additional_data.max_n_tmp_vectors = max_n_tmp_vectors;
 
             SolverGMRES<VectorType> solver(*reduction_control, additional_data);
             solver.solve(A, x, b, *preconditioner);
@@ -244,6 +254,14 @@ test(const boost::property_tree::ptree params, ConvergenceTable &table)
       GridGenerator::hyper_cube(tria);
       mapping_degree = std::min(mapping_degree, 1u);
     }
+  else if (geometry_name == "symmetric hypercube")
+    {
+      pcout << "- Create mesh: symmetric hypercube" << std::endl;
+      pcout << std::endl;
+
+      GridGenerator::hyper_cube(tria, -1.0, +1.0);
+      mapping_degree = std::min(mapping_degree, 1u);
+    }
   else if (geometry_name == "anisotropy")
     {
       const auto stratch = mesh_parameters.get<double>("stratch", 1.0);
@@ -330,12 +348,40 @@ test(const boost::property_tree::ptree params, ConvergenceTable &table)
   const FE_Q<dim>   fe(fe_degree);
   const QGauss<dim> quadrature(fe_degree + 1);
 
+  std::shared_ptr<Function<dim>> rhs_func =
+    std::make_shared<RightHandSide<dim>>();
+  std::shared_ptr<Function<dim>> dbc_func =
+    std::make_shared<Functions::ZeroFunction<dim>>();
+
+  const std::string rhs_name = params.get<std::string>("rhs", "constant");
+
+  if (rhs_name == "constant")
+    {
+      rhs_func = std::make_shared<RightHandSide<dim>>();
+      dbc_func = std::make_shared<Functions::ZeroFunction<dim>>();
+    }
+  else if (rhs_name == "gaussian")
+    {
+      const std::vector<Point<dim>> points = {Point<dim>(-0.5, -0.5, -0.5)};
+      const double                  width  = 0.1;
+
+      rhs_func = std::make_shared<GaussianRightHandSide<dim>>(points, width);
+      dbc_func = std::make_shared<GaussianSolution<dim>>(points, width);
+    }
+  else
+    {
+      AssertThrow(false,
+                  ExcMessage("RHS with the name <" + rhs_name +
+                             "> is not known!"));
+    }
+
   OperatorType op(mapping,
                   tria,
                   fe,
                   quadrature,
                   typename OperatorType::AdditionalData(op_compress_indices,
-                                                        op_mapping_type));
+                                                        op_mapping_type),
+                  dbc_func);
 
   table.add_value("n_cells", tria.n_global_active_cells());
   table.add_value("L", tria.n_global_levels());
@@ -347,12 +393,7 @@ test(const boost::property_tree::ptree params, ConvergenceTable &table)
   op.initialize_dof_vector(solution);
   op.initialize_dof_vector(rhs);
 
-  VectorTools::create_right_hand_side(op.get_dof_handler(),
-                                      op.get_quadrature(),
-                                      RightHandSide<dim>(),
-                                      rhs,
-                                      op.get_constraints());
-
+  op.rhs(rhs, rhs_func);
   rhs.zero_out_ghost_values();
 
   std::shared_ptr<ReductionControl> reduction_control;
@@ -551,6 +592,26 @@ test(const boost::property_tree::ptree params, ConvergenceTable &table)
 
       reduction_control =
         solve(op, solution, rhs, preconditioner, solver_parameters, table);
+    }
+
+
+  if (params.get<bool>("do output", false))
+    {
+      DataOutBase::VtkFlags flags;
+      flags.write_higher_order_cells = true;
+
+      DataOut<dim> data_out;
+      data_out.set_flags(flags);
+
+      data_out.attach_dof_handler(op.get_dof_handler());
+
+      solution.update_ghost_values();
+      op.get_constraints().distribute(solution);
+      data_out.add_data_vector(solution, "solution");
+
+      data_out.build_patches(mapping, 3);
+
+      data_out.write_vtu_in_parallel("multigrid.vtu", MPI_COMM_WORLD);
     }
 }
 

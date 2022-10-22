@@ -15,6 +15,7 @@
 #include <deal.II/matrix_free/tools.h>
 
 #include <deal.II/numerics/matrix_creator.h>
+#include <deal.II/numerics/vector_tools.h>
 
 #include "dof_tools.h"
 #include "exceptions.h"
@@ -27,7 +28,7 @@
  * LaplaceOperatorMatrixFree. It provedes an interface
  * for a simle vmult and not the version with pre/post operations.
  */
-template <typename VectorType>
+template <int dim, typename VectorType>
 class LaplaceOperatorBase : public Subscriptor
 {
 public:
@@ -44,6 +45,10 @@ public:
   virtual const AffineConstraints<Number> &
   get_constraints() const = 0;
 
+  virtual void
+  rhs(VectorType &                                  vec,
+      const std::shared_ptr<Function<dim, Number>> &rhs_func) = 0;
+
 private:
 };
 
@@ -54,7 +59,7 @@ private:
  */
 template <int dim, typename Number>
 class LaplaceOperatorMatrixBased
-  : public LaplaceOperatorBase<LinearAlgebra::distributed::Vector<Number>>
+  : public LaplaceOperatorBase<dim, LinearAlgebra::distributed::Vector<Number>>
 {
 public:
   static const int dimension = dim;
@@ -78,11 +83,13 @@ public:
     std::string mapping_type;
   };
 
-  LaplaceOperatorMatrixBased(const Mapping<dim> &      mapping,
-                             const Triangulation<dim> &tria,
-                             const FiniteElement<dim> &fe,
-                             const Quadrature<dim> &   quadrature,
-                             const AdditionalData &    ad = AdditionalData())
+  LaplaceOperatorMatrixBased(
+    const Mapping<dim> &                          mapping,
+    const Triangulation<dim> &                    tria,
+    const FiniteElement<dim> &                    fe,
+    const Quadrature<dim> &                       quadrature,
+    const AdditionalData &                        ad       = AdditionalData(),
+    const std::shared_ptr<Function<dim, Number>> &dbc_func = {})
     : mapping(mapping)
     , dof_handler(tria)
     , quadrature(quadrature)
@@ -92,7 +99,11 @@ public:
 
     dof_handler.distribute_dofs(fe);
 
-    DoFTools::make_zero_boundary_constraints(dof_handler, 1, constraints);
+    if (dbc_func)
+      VectorTools::interpolate_boundary_values(
+        mapping, dof_handler, 1, *dbc_func, constraints);
+    else
+      DoFTools::make_zero_boundary_constraints(dof_handler, 1, constraints);
     constraints.close();
 
     // create system matrix
@@ -114,6 +125,13 @@ public:
       dof_handler.locally_owned_dofs(),
       DoFTools::extract_locally_relevant_dofs(dof_handler),
       dof_handler.get_communicator());
+  }
+
+  virtual void
+  rhs(VectorType &vec, const std::shared_ptr<Function<dim, Number>> &rhs_func)
+  {
+    VectorTools::create_right_hand_side(
+      mapping, dof_handler, quadrature, *rhs_func, vec, constraints);
   }
 
   virtual bool
@@ -237,7 +255,7 @@ template <int dim,
           typename Number,
           typename VectorizedArrayType = VectorizedArray<Number>>
 class LaplaceOperatorMatrixFree
-  : public LaplaceOperatorBase<LinearAlgebra::distributed::Vector<Number>>
+  : public LaplaceOperatorBase<dim, LinearAlgebra::distributed::Vector<Number>>
 {
 public:
   static const int dimension  = dim;
@@ -264,11 +282,112 @@ public:
     std::string mapping_type;
   };
 
-  LaplaceOperatorMatrixFree(const Mapping<dim> &      mapping,
-                            const Triangulation<dim> &tria,
-                            const FiniteElement<dim> &fe,
-                            const Quadrature<dim> &   quadrature,
-                            const AdditionalData &    ad = AdditionalData())
+  virtual void
+  rhs(VectorType &                                  system_rhs,
+      const std::shared_ptr<Function<dim, Number>> &rhs_func)
+  {
+    const int dummy = 0;
+
+    this->matrix_free.template cell_loop<VectorType, int>(
+      [&rhs_func](
+        const auto &matrix_free, auto &dst, const auto &, const auto cells) {
+        FECellIntegrator phi(matrix_free, cells);
+        for (unsigned int cell = cells.first; cell < cells.second; ++cell)
+          {
+            phi.reinit(cell);
+            for (unsigned int q = 0; q < phi.n_q_points; ++q)
+              if constexpr (n_components == 1)
+                {
+                  VectorizedArrayType coeff = 0;
+
+                  const auto point_batch = phi.quadrature_point(q);
+
+                  for (unsigned int v = 0; v < VectorizedArrayType::size(); ++v)
+                    {
+                      Point<dim> single_point;
+                      for (unsigned int d = 0; d < dim; d++)
+                        single_point[d] = point_batch[d][v];
+                      coeff[v] = rhs_func->value(single_point);
+                    }
+
+                  phi.submit_value(coeff, q);
+                }
+              else
+                {
+                  Tensor<1, n_components> temp;
+
+                  Assert(false, ExcNotImplemented());
+
+                  for (unsigned int i = 0; i < n_components; ++i)
+                    temp[i] = 1.0;
+
+                  phi.submit_value(temp, q);
+                }
+
+            phi.integrate_scatter(EvaluationFlags::values, dst);
+          }
+      },
+      system_rhs,
+      dummy,
+      true);
+
+    const auto &constraints = get_constraints();
+    const auto &mapping     = get_mapping();
+    const auto &dof_handler = get_dof_handler();
+    const auto &quad        = get_quadrature();
+
+    AffineConstraints<Number> constraints_without_dbc;
+    constraints_without_dbc.reinit(
+      DoFTools::extract_locally_relevant_dofs(dof_handler));
+    DoFTools::make_hanging_node_constraints(dof_handler,
+                                            constraints_without_dbc);
+    constraints_without_dbc.close();
+
+    VectorType b, x;
+
+    this->initialize_dof_vector(b);
+    this->initialize_dof_vector(x);
+
+    typename MatrixFree<dim, Number, VectorizedArrayType>::AdditionalData data;
+    data.mapping_update_flags =
+      update_values | update_gradients | update_quadrature_points;
+
+    MatrixFree<dim, Number, VectorizedArrayType> matrix_free;
+    matrix_free.reinit(
+      mapping, dof_handler, constraints_without_dbc, quad, data);
+
+    // set constrained
+    constraints.distribute(x);
+
+    // perform matrix-vector multiplication (with unconstrained system and
+    // constrained set in vector)
+    matrix_free.template cell_loop<VectorType, VectorType>(
+      [&](const auto &, auto &dst, const auto &src, const auto cells) {
+        FECellIntegrator phi(matrix_free);
+        for (unsigned int cell = cells.first; cell < cells.second; ++cell)
+          {
+            phi.reinit(cell);
+            do_cell_integral_global(phi, dst, src);
+          }
+      },
+      b,
+      x,
+      true);
+
+    // clear constrained values
+    constraints.set_zero(b);
+
+    // move to the right-hand side
+    system_rhs -= b;
+  }
+
+  LaplaceOperatorMatrixFree(
+    const Mapping<dim> &                          mapping,
+    const Triangulation<dim> &                    tria,
+    const FiniteElement<dim> &                    fe,
+    const Quadrature<dim> &                       quadrature,
+    const AdditionalData &                        ad       = AdditionalData(),
+    const std::shared_ptr<Function<dim, Number>> &dbc_func = {})
     : dof_handler_internal(tria)
     , matrix_free(matrix_free_internal)
     , pcout(std::cout,
@@ -279,9 +398,13 @@ public:
 
     const auto setup_constraints = [&]() {
       constraints_internal.clear();
-      DoFTools::make_zero_boundary_constraints(dof_handler_internal,
-                                               1,
-                                               constraints_internal);
+      if (dbc_func)
+        VectorTools::interpolate_boundary_values(
+          mapping, dof_handler_internal, 1, *dbc_func, constraints_internal);
+      else
+        DoFTools::make_zero_boundary_constraints(dof_handler_internal,
+                                                 1,
+                                                 constraints_internal);
       constraints_internal.close();
     };
 
@@ -302,10 +425,12 @@ public:
         setup_constraints();
       }
 
-    matrix_free_internal.reinit(mapping,
-                                dof_handler_internal,
-                                constraints_internal,
-                                quadrature);
+    typename MatrixFree<dim, Number, VectorizedArrayType>::AdditionalData data;
+    data.mapping_update_flags =
+      update_values | update_gradients | update_quadrature_points;
+
+    matrix_free_internal.reinit(
+      mapping, dof_handler_internal, constraints_internal, quadrature, data);
 
     pcout << "- Create operator:" << std::endl;
     pcout << "  - n cells:          "

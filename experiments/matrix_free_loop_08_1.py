@@ -2,11 +2,11 @@
 def main():
     configurations = []
 
-    for k in [1, 2]:
+    for k in ["1", "2", "v"]:
         for type in ["c", "l", "dg", "g-s-c", "g-s-n", "g-p-c", "g-p-n"]:
             for op in ["add", "none", "post", "pre", "symm"]:
                 predicate = False
-                if k == 1 and type == "c" and (op == "post" or op == "pre" or op == "symm"):
+                if (k == "1" or k == "v") and type == "c" and (op == "post" or op == "pre" or op == "symm"):
                     predicate = True
                 elif (type == "l" or type == "dg") and (op == "post" or op == "pre" or op == "symm"):
                     predicate = True
@@ -18,7 +18,7 @@ def main():
                     predicate = True
 
                 if predicate:
-                    configurations.append("%s-%d-%s" % (op, k, type))
+                    configurations.append("%s-%s-%s" % (op, k, type))
 
     print(" ".join(configurations))
 
