@@ -179,6 +179,16 @@ test(const unsigned int fe_degree,
           SolverGMRES<VectorType> solver(reduction_control, additional_data);
           solver.solve(op, dst, src, precon);
         }
+      else if (type == "GMRES-classical")
+        {
+          typename SolverGMRES<VectorType>::AdditionalData additional_data;
+          additional_data.right_preconditioning      = true;
+          additional_data.orthogonalization_strategy = SolverGMRES<VectorType>::
+            AdditionalData::OrthogonalizationStrategy::classical_gram_schmidt;
+
+          SolverGMRES<VectorType> solver(reduction_control, additional_data);
+          solver.solve(op, dst, src, precon);
+        }
       else if (type == "FGMRES")
         {
           SolverFGMRES<VectorType> solver(reduction_control);

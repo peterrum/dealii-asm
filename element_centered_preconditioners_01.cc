@@ -125,6 +125,14 @@ solve(const MatrixType &                              A,
           {
             typename SolverGMRES<VectorType>::AdditionalData additional_data;
             additional_data.right_preconditioning = true;
+            additional_data.orthogonalization_strategy =
+              SolverGMRES<VectorType>::AdditionalData::
+                OrthogonalizationStrategy::classical_gram_schmidt;
+
+            const auto max_n_tmp_vectors =
+              params.get<int>("max n tmp vectors", 0);
+            if (max_n_tmp_vectors > 0)
+              additional_data.max_n_tmp_vectors = max_n_tmp_vectors;
 
             SolverGMRES<VectorType> solver(*reduction_control, additional_data);
             solver.solve(A, x, b, *preconditioner);
