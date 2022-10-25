@@ -19,16 +19,17 @@
 #include "vector_access_reduced.h"
 
 // clang-format off
-#define EXPAND_OPERATIONS_RWV(OPERATION)                              \
-  switch (patch_size_1d)                                                        \
-    {                                                                    \
+#define EXPAND_OPERATIONS_RWV(OPERATION)                                \
+  switch (patch_size_1d)                                                \
+    {                                                                   \
       case  3: OPERATION((( 2 <= MAX_DEGREE_RW) ?  3 : -1), -1); break; \
       case  5: OPERATION((( 3 <= MAX_DEGREE_RW) ?  5 : -1), -1); break; \
       case  7: OPERATION((( 4 <= MAX_DEGREE_RW) ?  7 : -1), -1); break; \
       case  9: OPERATION((( 5 <= MAX_DEGREE_RW) ?  9 : -1), -1); break; \
       case 11: OPERATION((( 6 <= MAX_DEGREE_RW) ? 11 : -1), -1); break; \
-      default:                                                           \
-        OPERATION(-1, -1);                                               \
+      case 13: OPERATION((( 7 <= MAX_DEGREE_RW) ? 13 : -1), -1); break; \
+      default:                                                          \
+        OPERATION(-1, -1);                                              \
     }
 // clang-format on
 

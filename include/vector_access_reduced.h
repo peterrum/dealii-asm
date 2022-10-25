@@ -4,19 +4,20 @@
 
 #include "reduced_access.h"
 
-#define MAX_DEGREE_RW 6
+#define MAX_DEGREE_RW 7
 
 // clang-format off
-#define EXPAND_OPERATIONS_RW(OPERATION)                              \
-  switch (degree)                                                        \
-    {                                                                    \
+#define EXPAND_OPERATIONS_RW(OPERATION)                                 \
+  switch (degree)                                                       \
+    {                                                                   \
       case  2: OPERATION((( 2 <= MAX_DEGREE_RW) ?  2 : -1), -1); break; \
       case  3: OPERATION((( 3 <= MAX_DEGREE_RW) ?  3 : -1), -1); break; \
       case  4: OPERATION((( 4 <= MAX_DEGREE_RW) ?  4 : -1), -1); break; \
       case  5: OPERATION((( 5 <= MAX_DEGREE_RW) ?  5 : -1), -1); break; \
       case  6: OPERATION((( 6 <= MAX_DEGREE_RW) ?  6 : -1), -1); break; \
-      default:                                                           \
-        OPERATION(-1, -1);                                               \
+      case  7: OPERATION((( 7 <= MAX_DEGREE_RW) ?  7 : -1), -1); break; \
+      default:                                                          \
+        OPERATION(-1, -1);                                              \
     }
 // clang-format on
 
