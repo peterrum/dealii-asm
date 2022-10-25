@@ -285,6 +285,10 @@ test(const boost::property_tree::ptree params, ConvergenceTable &table)
       auto epsy = mesh_parameters.get<double>("epsy", 0.0);
       auto epsz = mesh_parameters.get<double>("epsz", 0.0);
 
+      auto n_intial_refinements =
+        mesh_parameters.get<int>("n initial refinements", 1);
+      auto n_subdivisions = mesh_parameters.get<int>("n subdivisions", 3);
+
       if (epsy == 0.0 || epsz == 0.0)
         {
           auto eps = mesh_parameters.get<double>("eps", 1.0);
@@ -302,8 +306,8 @@ test(const boost::property_tree::ptree params, ConvergenceTable &table)
       // replace 6 coarse cells by 3 coarse cells and
       // an additional refinement to favor GMG (TODO: is this
       // according to specification)
-      GridGenerator::subdivided_hyper_cube(tria, 3);
-      tria.refine_global(1);
+      GridGenerator::subdivided_hyper_cube(tria, n_subdivisions);
+      tria.refine_global(n_intial_refinements);
 
       mapping_degree = std::min(mapping_degree, 3u /*TODO*/);
 
