@@ -80,7 +80,9 @@ setup_constraints(const DoFHandler<dim> &    dof_handler,
 }
 
 std::vector<std::string>
-split_string(const std::string text, const char deliminator)
+split_string(const std::string  text,
+             const char         deliminator,
+             const unsigned int size = numbers::invalid_unsigned_int)
 {
   std::stringstream stream;
   stream << text;
@@ -90,6 +92,10 @@ split_string(const std::string text, const char deliminator)
 
   while (std::getline(stream, substring, deliminator))
     substring_list.push_back(substring);
+
+  if (size != numbers::invalid_unsigned_int)
+    for (unsigned int i = substring_list.size(); i < size; ++i)
+      substring_list.push_back("-");
 
   return substring_list;
 }
@@ -160,7 +166,7 @@ test(const Parameters params_in)
   for (const auto label : labels)
     {
       // extract properties
-      const auto props              = split_string(label, '-');
+      const auto props              = split_string(label, '-', 5);
       const auto type               = props[0];
       const auto n_overlap          = props[1];
       const auto weighting_sequence = props[2];
@@ -170,32 +176,40 @@ test(const Parameters params_in)
       const std::string constness =
         (weighting_sequence == "g") ? (props[4]) : std::string("c");
 
-      // configure preconditioner
-      boost::property_tree::ptree params;
-      params.put("weighting type", (type == "add") ? "none" : type);
-
-      if (n_overlap == "v")
-        {
-          params.put("element centric", false);
-        }
-      else
-        {
-          params.put("n overlap", n_overlap);
-          params.put("element centric", true);
-        }
-
-      params.put("weight sequence",
-                 weighting_sequence == "g" ?
-                   "global" :
-                   (weighting_sequence == "l" ?
-                      "local" :
-                      (weighting_sequence == "dg" ? "DG" : "compressed")));
-
-      params.put("overlap pre post", overlap_pre_post);
-
       // create preconditioner
       LaplaceOperatorMatrixFree<dim, Number> op(matrix_free, ad_operator);
-      const auto precondition = create_fdm_preconditioner(op, params);
+
+      std::shared_ptr<
+        const ASPoissonPreconditioner<dim, Number, VectorizedArray<Number>>>
+        precondition;
+
+      if (type != "vmult")
+        {
+          // configure preconditioner
+          boost::property_tree::ptree params;
+          params.put("weighting type", (type == "add") ? "none" : type);
+
+          if (n_overlap == "v")
+            {
+              params.put("element centric", false);
+            }
+          else
+            {
+              params.put("n overlap", n_overlap);
+              params.put("element centric", true);
+            }
+
+          params.put("weight sequence",
+                     weighting_sequence == "g" ?
+                       "global" :
+                       (weighting_sequence == "l" ?
+                          "local" :
+                          (weighting_sequence == "dg" ? "DG" : "compressed")));
+
+          params.put("overlap pre post", overlap_pre_post);
+
+          precondition = create_fdm_preconditioner(op, params);
+        }
 
       // create vectors
       VectorType src, dst;
@@ -205,7 +219,11 @@ test(const Parameters params_in)
 
       // function to be excuated
       const auto fu = [&]() {
-        if (type == "add")
+        if (type == "vmult")
+          {
+            op.vmult(dst, src);
+          }
+        else if (type == "add")
           {
             precondition->vmult(dst, src, {}, {});
           }
@@ -284,20 +302,22 @@ main(int argc, char *argv[])
 #endif
 
   AssertThrow(argc == 2, ExcNotImplemented());
+  for (int i = 1; i < argc; ++i)
+    {
+      Parameters params;
+      params.parse(argv[i]);
 
-  Parameters params;
-  params.parse(argv[1]);
-
-  if ((params.dim == 2) && (params.number_type == "float"))
-    test<2, float>(params);
-  else if ((params.dim == 3) && (params.number_type == "float"))
-    test<3, float>(params);
-  else if ((params.dim == 2) && (params.number_type == "double"))
-    test<2, double>(params);
-  else if ((params.dim == 3) && (params.number_type == "double"))
-    test<3, double>(params);
-  else
-    AssertThrow(false, ExcNotImplemented());
+      if ((params.dim == 2) && (params.number_type == "float"))
+        test<2, float>(params);
+      else if ((params.dim == 3) && (params.number_type == "float"))
+        test<3, float>(params);
+      else if ((params.dim == 2) && (params.number_type == "double"))
+        test<2, double>(params);
+      else if ((params.dim == 3) && (params.number_type == "double"))
+        test<3, double>(params);
+      else
+        AssertThrow(false, ExcNotImplemented());
+    }
 
 #ifdef LIKWID_PERFMON
   LIKWID_MARKER_CLOSE;
