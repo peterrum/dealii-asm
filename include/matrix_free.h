@@ -591,6 +591,10 @@ public:
                  ++cell)
               {
                 internal::VectorReader<Number, VectorizedArrayType> reader;
+
+                for (auto &i : weights_local)
+                  i = 0.0;
+
                 constraint_info.read_write_operation(reader,
                                                      weights,
                                                      weights_local.data(),
@@ -611,6 +615,28 @@ public:
                         1,
                         patch_size_1d,
                         weights_compressed_q2[cell].begin());
+                    if (success == false)
+                      {
+                        for (unsigned int v = 0;
+                             v < VectorizedArrayType::size();
+                             ++v)
+                          {
+                            for (unsigned int i = 0, c = 0; i < patch_size_1d;
+                                 ++i)
+                              {
+                                for (unsigned int j = 0; j < patch_size_1d; ++j)
+                                  {
+                                    for (unsigned int k = 0; k < patch_size_1d;
+                                         ++k)
+                                      std::cout << weights_local[c++][v] << " ";
+                                    std::cout << std::endl;
+                                  }
+                                std::cout << std::endl;
+                              }
+                            std::cout << std::endl;
+                          }
+                        std::cout << std::endl;
+                      }
                     AssertThrow(success, ExcInternalError());
                   }
 
