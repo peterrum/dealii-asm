@@ -37,3 +37,13 @@ array=($(ls *.json))
 mpirun -np 40 ../element_centered_preconditioners_01 "${array[@]}" | tee output.out
 cd ..
 ```
+
+```
+mkdir experiment-patch-degree
+cd experiment-patch-degree
+python ../../experiments/matrix_free_loop_08_degree_01.py
+array=($(ls *.json))
+likwid-mpirun -np 40 -f -g CACHES -m -O ../matrix_free_loop_08 "${array[@]}"   | tee result_caches.out
+likwid-mpirun -np 40 -f -g FLOPS_SP -m -O ../matrix_free_loop_08 "${array[@]}" | tee result_flops.out
+
+```

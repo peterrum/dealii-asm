@@ -282,7 +282,8 @@ test(const Parameters params_in)
 
       pcout << ">> " << label << " " << std::to_string(dof_handler.n_dofs())
             << " " << std::to_string(params_in.n_repetitions) << " " << time
-            << " " << std::to_string(sizeof(Number)) << " " << std::endl;
+            << " " << std::to_string(sizeof(Number)) << " "
+            << std::to_string(params_in.fe_degree) << " " << std::endl;
     }
 }
 
@@ -301,7 +302,7 @@ main(int argc, char *argv[])
   LIKWID_MARKER_THREADINIT;
 #endif
 
-  AssertThrow(argc == 2, ExcNotImplemented());
+  AssertThrow(argc >= 2, ExcNotImplemented());
   for (int i = 1; i < argc; ++i)
     {
       Parameters params;
