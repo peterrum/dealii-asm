@@ -166,49 +166,65 @@ test(const Parameters params_in)
   for (const auto label : labels)
     {
       // extract properties
-      const auto props              = split_string(label, '-', 5);
-      const auto type               = props[0];
-      const auto n_overlap          = props[1];
-      const auto weighting_sequence = props[2];
-
-      const bool overlap_pre_post =
-        (weighting_sequence == "g") ? (props[3] == "p") : true;
-      const std::string constness =
-        (weighting_sequence == "g") ? (props[4]) : std::string("c");
+      const auto  props     = split_string(label, '-', 5);
+      const auto  type      = props[0];
+      std::string constness = "";
 
       // create preconditioner
       LaplaceOperatorMatrixFree<dim, Number> op(matrix_free, ad_operator);
 
       std::shared_ptr<
         const ASPoissonPreconditioner<dim, Number, VectorizedArray<Number>>>
-        precondition;
+        precondition_fdm;
+
+      std::shared_ptr<const PreconditionerBase<VectorType>> precondition;
 
       if (type != "vmult")
         {
-          // configure preconditioner
-          boost::property_tree::ptree params;
-          params.put("weighting type", (type == "add") ? "none" : type);
-
-          if (n_overlap == "v")
+          if (type == "cheby")
             {
-              params.put("element centric", false);
+              AssertThrow(false, ExcNotImplemented());
+
+              boost::property_tree::ptree params;
+
+              precondition = create_system_preconditioner(op, params);
             }
           else
             {
-              params.put("n overlap", n_overlap);
-              params.put("element centric", true);
+              const auto n_overlap          = props[1];
+              const auto weighting_sequence = props[2];
+
+              const bool overlap_pre_post =
+                (weighting_sequence == "g") ? (props[3] == "p") : true;
+              constness =
+                (weighting_sequence == "g") ? (props[4]) : std::string("c");
+
+              // configure preconditioner
+              boost::property_tree::ptree params;
+              params.put("weighting type", (type == "add") ? "none" : type);
+
+              if (n_overlap == "v")
+                {
+                  params.put("element centric", false);
+                }
+              else
+                {
+                  params.put("n overlap", n_overlap);
+                  params.put("element centric", true);
+                }
+
+              params.put("weight sequence",
+                         weighting_sequence == "g" ?
+                           "global" :
+                           (weighting_sequence == "l" ?
+                              "local" :
+                              (weighting_sequence == "dg" ? "DG" :
+                                                            "compressed")));
+
+              params.put("overlap pre post", overlap_pre_post);
+
+              precondition_fdm = create_fdm_preconditioner(op, params);
             }
-
-          params.put("weight sequence",
-                     weighting_sequence == "g" ?
-                       "global" :
-                       (weighting_sequence == "l" ?
-                          "local" :
-                          (weighting_sequence == "dg" ? "DG" : "compressed")));
-
-          params.put("overlap pre post", overlap_pre_post);
-
-          precondition = create_fdm_preconditioner(op, params);
         }
 
       // create vectors
@@ -225,15 +241,26 @@ test(const Parameters params_in)
           }
         else if (type == "add")
           {
-            precondition->vmult(dst, src, {}, {});
+            AssertThrow(precondition_fdm, ExcNotImplemented());
+
+            precondition_fdm->vmult(dst, src, {}, {});
           }
         else if (constness == "c")
           {
-            precondition->vmult(dst, static_cast<const VectorType &>(src));
+            if (precondition_fdm)
+              {
+                precondition_fdm->vmult(dst,
+                                        static_cast<const VectorType &>(src));
+              }
+            else
+              {
+                precondition->vmult(dst, src);
+              }
           }
         else if (constness == "n")
           {
-            precondition->vmult(dst, src);
+            AssertThrow(precondition_fdm, ExcNotImplemented());
+            precondition_fdm->vmult(dst, src);
           }
         else
           {
