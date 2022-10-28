@@ -252,9 +252,13 @@ test(const Parameters params_in)
                 precondition_fdm->vmult(dst,
                                         static_cast<const VectorType &>(src));
               }
+            else if (precondition)
+              {
+                precondition->step(dst, src);
+              }
             else
               {
-                precondition->vmult(dst, src);
+                AssertThrow(false, ExcNotImplemented());
               }
           }
         else if (constness == "n")
