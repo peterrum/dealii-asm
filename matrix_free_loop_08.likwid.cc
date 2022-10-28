@@ -100,6 +100,42 @@ split_string(const std::string  text,
   return substring_list;
 }
 
+void
+process_fdm_parameters(const std::vector<std::string> &props,
+                       boost::property_tree::ptree &   params,
+                       std::string &                   constness)
+{
+  const auto type               = props[0];
+  const auto n_overlap          = props[1];
+  const auto weighting_sequence = props[2];
+
+  const bool overlap_pre_post =
+    (weighting_sequence == "g") ? (props[3] == "p") : true;
+  constness = (weighting_sequence == "g") ? (props[4]) : std::string("c");
+
+  // configure preconditioner
+  params.put("weighting type", (type == "add") ? "none" : type);
+
+  if (n_overlap == "v")
+    {
+      params.put("element centric", false);
+    }
+  else
+    {
+      params.put("n overlap", n_overlap);
+      params.put("element centric", true);
+    }
+
+  params.put("weight sequence",
+             weighting_sequence == "g" ?
+               "global" :
+               (weighting_sequence == "l" ?
+                  "local" :
+                  (weighting_sequence == "dg" ? "DG" : "compressed")));
+
+  params.put("overlap pre post", overlap_pre_post);
+}
+
 template <int dim, typename Number>
 void
 test(const Parameters params_in)
@@ -166,9 +202,9 @@ test(const Parameters params_in)
   for (const auto label : labels)
     {
       // extract properties
-      const auto  props     = split_string(label, '-', 5);
+      const auto  props     = split_string(label, '-', 10);
       const auto  type      = props[0];
-      std::string constness = "";
+      std::string constness = "c";
 
       // create preconditioner
       LaplaceOperatorMatrixFree<dim, Number> op(matrix_free, ad_operator);
@@ -191,38 +227,8 @@ test(const Parameters params_in)
             }
           else
             {
-              const auto n_overlap          = props[1];
-              const auto weighting_sequence = props[2];
-
-              const bool overlap_pre_post =
-                (weighting_sequence == "g") ? (props[3] == "p") : true;
-              constness =
-                (weighting_sequence == "g") ? (props[4]) : std::string("c");
-
-              // configure preconditioner
               boost::property_tree::ptree params;
-              params.put("weighting type", (type == "add") ? "none" : type);
-
-              if (n_overlap == "v")
-                {
-                  params.put("element centric", false);
-                }
-              else
-                {
-                  params.put("n overlap", n_overlap);
-                  params.put("element centric", true);
-                }
-
-              params.put("weight sequence",
-                         weighting_sequence == "g" ?
-                           "global" :
-                           (weighting_sequence == "l" ?
-                              "local" :
-                              (weighting_sequence == "dg" ? "DG" :
-                                                            "compressed")));
-
-              params.put("overlap pre post", overlap_pre_post);
-
+              process_fdm_parameters(props, params, constness);
               precondition_fdm = create_fdm_preconditioner(op, params);
             }
         }
