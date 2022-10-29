@@ -181,8 +181,8 @@ compress_indices(const std::vector<types::global_dof_index> &dofs,
       dpo.emplace_back(1, (degree - 1) * (degree - 1) * (degree - 1));
     }
 
-  std::vector<unsigned int> obj_orientations;
-  std::vector<unsigned int> obj_start_indices;
+  std::vector<unsigned int>            obj_orientations;
+  std::vector<types::global_dof_index> obj_start_indices;
 
   // loop over all dimension
   for (unsigned int d = 0, dof_counter = 0; d <= dim; ++d)
@@ -202,7 +202,7 @@ compress_indices(const std::vector<types::global_dof_index> &dofs,
           const unsigned int n_constrained_dofs =
             std::count(dofs_of_object.begin(),
                        dofs_of_object.end(),
-                       numbers::invalid_unsigned_int);
+                       numbers::invalid_dof_index);
 
           if (0 < n_constrained_dofs &&
               n_constrained_dofs < dofs_of_object.size())
@@ -214,7 +214,7 @@ compress_indices(const std::vector<types::global_dof_index> &dofs,
           if (n_constrained_dofs == dofs_of_object.size())
             {
               // all dofs of object are constrained
-              obj_start_indices.emplace_back(numbers::invalid_unsigned_int);
+              obj_start_indices.emplace_back(numbers::invalid_dof_index);
 
               if ((dim >= 2 && d == 1) || (dim == 3 && d == 2))
                 obj_orientations.emplace_back(0);
@@ -269,7 +269,7 @@ compress_indices(const std::vector<types::global_dof_index> &dofs,
 
           // no compression is possible
           if ((obj_orientations.empty() == false) &&
-              obj_orientations.back() == numbers::invalid_unsigned_int)
+              obj_orientations.back() == numbers::invalid_dof_index)
             return {numbers::invalid_unsigned_int, {}};
         }
     }
@@ -281,8 +281,6 @@ compress_indices(const std::vector<types::global_dof_index> &dofs,
   // return orientation and start indices
   return {orientation_compressed, obj_start_indices};
 }
-
-
 
 template <typename Number>
 void
@@ -524,8 +522,6 @@ gather(const std::vector<Number> &      global_vector,
         }
     }
 }
-
-
 
 template <typename Number, int dim_template = -1, int degree_template = -1>
 void

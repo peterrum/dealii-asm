@@ -163,7 +163,7 @@ public:
 
                 for (const auto &i : local_dofs)
                   if ((locally_owned_dofs.is_element(i) == false) &&
-                      (i != numbers::invalid_unsigned_int))
+                      (i != numbers::invalid_dof_index))
                     ghost_indices.push_back(i);
               }
           }
@@ -180,7 +180,6 @@ public:
         partitioner_fdm = std::make_shared<Utilities::MPI::Partitioner>(
           locally_owned_dofs, is_ghost_indices, dof_handler.get_communicator());
       }
-
 
     pcout << "    - compress indices:       "
           << ((this->compressed_rw != nullptr) ? "true" : "false") << std::endl;
@@ -258,7 +257,7 @@ public:
                   resolve_constraint(i);
 
                 for (const auto &i : local_dofs)
-                  if (i != numbers::invalid_unsigned_int)
+                  if (i != numbers::invalid_dof_index)
                     {
                       const unsigned int myindex =
                         partitioner_fdm->global_to_local(i) /
@@ -523,8 +522,6 @@ public:
       weights.update_ghost_values();
     }
 
-
-
     if (element_centric && (n_overlap == 1))
       {
         const bool actually_use_compression =
@@ -755,7 +752,6 @@ public:
   {
     return fdm.storage_size();
   }
-
 
 private:
   void
@@ -1031,18 +1027,20 @@ private:
 
             for (unsigned int i = 0; i < src.locally_owned_size();
                  i += chunk_size_zero_vector)
-              pre_operation_with_weighting(i,
-                                           std::min(i + chunk_size_zero_vector,
-                                                    src.locally_owned_size()));
+              pre_operation_with_weighting(
+                i,
+                std::min<unsigned int>(i + chunk_size_zero_vector,
+                                       src.locally_owned_size()));
 
             matrix_free.template cell_loop<VectorType, VectorType>(
               cell_operation_normal, dst, src_scratch);
 
             for (unsigned int i = 0; i < src.locally_owned_size();
                  i += chunk_size_zero_vector)
-              post_operation_with_weighting(i,
-                                            std::min(i + chunk_size_zero_vector,
-                                                     src.locally_owned_size()));
+              post_operation_with_weighting(
+                i,
+                std::min<unsigned int>(i + chunk_size_zero_vector,
+                                       src.locally_owned_size()));
           }
       }
     else if (partitioner_fdm.get() == src.get_partitioner().get())
@@ -1250,7 +1248,6 @@ private:
     return patch_extend;
   }
 
-
   const MatrixFree<dim, Number, VectorizedArrayType> &matrix_free;
   const unsigned int                                  fe_degree;
   const unsigned int                                  n_overlap;
@@ -1293,8 +1290,6 @@ private:
   std::vector<unsigned int>  compressed_dof_indices_vertex_patch;
   std::vector<unsigned char> all_indices_uniform_vertex_patch;
 };
-
-
 
 template <int dim, typename Number, typename VectorizedArrayType>
 class PoissonOperator : public Subscriptor
@@ -1340,7 +1335,6 @@ public:
       true);
   }
 
-
   void
   do_cell_integral_local(FECellIntegrator &integrator) const
   {
@@ -1351,7 +1345,6 @@ public:
 
     integrator.integrate(EvaluationFlags::gradients);
   }
-
 
   void
   do_cell_integral_global(FECellIntegrator &integrator,
@@ -1365,7 +1358,6 @@ public:
 
     integrator.integrate_scatter(EvaluationFlags::gradients, dst);
   }
-
 
   void
   vmult(VectorType &dst, const VectorType &src) const
@@ -1384,7 +1376,6 @@ public:
       src,
       true);
   }
-
 
   void
   vmult(VectorType &      dst,
@@ -1410,7 +1401,6 @@ public:
       post_operation);
   }
 
-
   void
   compute_inverse_diagonal(VectorType &diagonal) const
   {
@@ -1424,13 +1414,11 @@ public:
       i = (std::abs(i) > 1.0e-10) ? (1.0 / i) : 1.0;
   }
 
-
   types::global_dof_index
   m() const
   {
     return matrix_free.get_dof_handler().n_dofs();
   }
-
 
   Number
   el(unsigned int, unsigned int) const
@@ -1438,7 +1426,6 @@ public:
     AssertThrow(false, ExcNotImplemented());
     return 0;
   }
-
 
 private:
   const MatrixFree<dim, Number, VectorizedArrayType> &matrix_free;

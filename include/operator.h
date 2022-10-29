@@ -52,8 +52,6 @@ public:
 private:
 };
 
-
-
 /**
  * Matrix-based implementation of the Laplace operator.
  */
@@ -245,8 +243,6 @@ private:
 
   std::shared_ptr<const Utilities::MPI::Partitioner> partitioner;
 };
-
-
 
 /**
  * Matrix-free implementation of the Laplace operator.
@@ -486,7 +482,6 @@ public:
         pcout << "  - compress indices: " << (flag ? "success" : "failure")
               << std::endl;
       }
-
 
     if (mapping_type == "")
       {
@@ -794,10 +789,10 @@ public:
               get_dof_handler(), cells, 1, false);
 
             for (auto &dof : dofs)
-              if (dof != numbers::invalid_unsigned_int)
+              if (dof != numbers::invalid_dof_index)
                 {
                   if (get_constraints().is_constrained(dof))
-                    dof = numbers::invalid_unsigned_int;
+                    dof = numbers::invalid_dof_index;
                   else if (locally_owned_indices.is_element(dof) == false)
                     relevant_dofs.push_back(dof);
                 }
@@ -1216,7 +1211,6 @@ public:
 
     const auto &quad_1d = matrix_free.get_quadrature().get_tensor_basis()[0];
     const unsigned int n_q_points_1d = quad_1d.size();
-
 
     AlignedVector<VectorizedArrayType> jacobians_x(dim * n_q_points_1d); // TODO
     AlignedVector<VectorizedArrayType> jacobians_y(dim * n_q_points_1d *
