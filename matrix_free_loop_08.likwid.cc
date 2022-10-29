@@ -101,17 +101,19 @@ split_string(const std::string  text,
 }
 
 void
-process_fdm_parameters(const std::vector<std::string> &props,
+process_fdm_parameters(const unsigned int              offset,
+                       const std::vector<std::string> &props,
                        boost::property_tree::ptree &   params,
                        std::string &                   constness)
 {
-  const auto type               = props[0];
-  const auto n_overlap          = props[1];
-  const auto weighting_sequence = props[2];
+  const auto type               = props[offset + 0];
+  const auto n_overlap          = props[offset + 1];
+  const auto weighting_sequence = props[offset + 2];
 
   const bool overlap_pre_post =
-    (weighting_sequence == "g") ? (props[3] == "p") : true;
-  constness = (weighting_sequence == "g") ? (props[4]) : std::string("c");
+    (weighting_sequence == "g") ? (props[offset + 3] == "p") : true;
+  constness =
+    (weighting_sequence == "g") ? (props[offset + 4]) : std::string("c");
 
   // configure preconditioner
   params.put("weighting type", (type == "add") ? "none" : type);
@@ -171,6 +173,7 @@ test(const Parameters params_in)
   dof_handler.distribute_dofs(fe);
 
   pcout << "Info" << std::endl;
+  pcout << " - degree: " << params_in.fe_degree << std::endl;
   pcout << " - n dofs: " << dof_handler.n_dofs() << std::endl;
   pcout << std::endl << std::endl;
 
@@ -202,9 +205,10 @@ test(const Parameters params_in)
   for (const auto label : labels)
     {
       // extract properties
-      const auto  props     = split_string(label, '-', 10);
-      const auto  type      = props[0];
-      std::string constness = "c";
+      const auto   props     = split_string(label, '-', 10);
+      const auto   type      = props[0];
+      std::string  constness = "c";
+      unsigned int factor    = 1;
 
       // create preconditioner
       LaplaceOperatorMatrixFree<dim, Number> op(matrix_free, ad_operator);
@@ -219,16 +223,35 @@ test(const Parameters params_in)
         {
           if (type == "cheby")
             {
-              AssertThrow(false, ExcNotImplemented());
-
               boost::property_tree::ptree params;
+
+              boost::property_tree::ptree params_fdm;
+
+              if (props[3] == "diag")
+                {
+                  params_fdm.put("type", "Diagonal");
+                }
+              else
+                {
+                  std::string constness;
+                  process_fdm_parameters(3, props, params_fdm, constness);
+                  params_fdm.put("type", "FDM");
+                }
+
+              params.add_child("preconditioner", params_fdm);
+
+              params.put("type", "Chebyshev");
+              params.put("degree", std::atoi(props[1].c_str()));
+              params.put("optimize", std::atoi(props[2].c_str()));
+
+              factor = std::atoi(props[1].c_str());
 
               precondition = create_system_preconditioner(op, params);
             }
           else
             {
               boost::property_tree::ptree params;
-              process_fdm_parameters(props, params, constness);
+              process_fdm_parameters(0, props, params, constness);
               precondition_fdm = create_fdm_preconditioner(op, params);
             }
         }
@@ -318,8 +341,8 @@ test(const Parameters params_in)
                           1e9;
 
       pcout << ">> " << label << " " << std::to_string(dof_handler.n_dofs())
-            << " " << std::to_string(params_in.n_repetitions) << " " << time
-            << " " << std::to_string(sizeof(Number)) << " "
+            << " " << std::to_string(params_in.n_repetitions * factor) << " "
+            << time << " " << std::to_string(sizeof(Number)) << " "
             << std::to_string(params_in.fe_degree) << " " << std::endl;
     }
 }
