@@ -38,20 +38,23 @@ GET_FILENAME_COMPONENT(file_name ${file} NAME)
 
   STRING( REPLACE ".cc" "" app ${file_name} )
 
-  ADD_EXECUTABLE(${app} ${file})
-  TARGET_COMPILE_DEFINITIONS(${app} PRIVATE SOURCE_DIR="${CMAKE_CURRENT_SOURCE_DIR}")
-  DEAL_II_SETUP_TARGET(${app})
-
-  target_include_directories(${app} PUBLIC "include/")
-
-  IF(${LIKWID_TO_BE_USED})
+  IF(${LIKWID_TO_BE_USED} GREATER -1)
     FIND_LIBRARY(LIKWID likwid HINTS $ENV{LIKWID_LIB})
     
     IF(LIKWID)
+      ADD_EXECUTABLE(${app} ${file})
+      TARGET_COMPILE_DEFINITIONS(${app} PRIVATE SOURCE_DIR="${CMAKE_CURRENT_SOURCE_DIR}")
+      DEAL_II_SETUP_TARGET(${app})
+      target_include_directories(${app} PUBLIC "include/")	    
       TARGET_COMPILE_DEFINITIONS(${app} PUBLIC LIKWID_PERFMON)
       TARGET_INCLUDE_DIRECTORIES(${app} PUBLIC $ENV{LIKWID_INCLUDE})
       TARGET_LINK_LIBRARIES(${app} ${LIKWID})
     ENDIF()
+  ELSE()
+    ADD_EXECUTABLE(${app} ${file})
+    TARGET_COMPILE_DEFINITIONS(${app} PRIVATE SOURCE_DIR="${CMAKE_CURRENT_SOURCE_DIR}")
+    DEAL_II_SETUP_TARGET(${app})
+    target_include_directories(${app} PUBLIC "include/")
   ENDIF()
 
 endforeach()
