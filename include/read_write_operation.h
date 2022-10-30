@@ -154,7 +154,7 @@ read_write_operation_setup(
                     dealii::numbers::invalid_unsigned_int);
 
   const auto global_to_local = [&](const auto index) -> unsigned int {
-    if (index == dealii::numbers::invalid_unsigned_int)
+    if (index == dealii::numbers::invalid_dof_index)
       return dealii::numbers::invalid_unsigned_int;
     else if (partitioner)
       return partitioner->global_to_local(index);
@@ -173,7 +173,7 @@ read_write_operation_setup(
         return true;
       }
     else if ((compressed_index == dealii::numbers::invalid_unsigned_int) &&
-             (index == dealii::numbers::invalid_unsigned_int))
+             (index == dealii::numbers::invalid_dof_index))
       {
         return true;
       }

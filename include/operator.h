@@ -394,6 +394,9 @@ public:
 
     const auto setup_constraints = [&]() {
       constraints_internal.clear();
+      constraints_internal.reinit(
+        DoFTools::extract_locally_relevant_dofs(dof_handler_internal));
+
       if (dbc_func)
         VectorTools::interpolate_boundary_values(
           mapping, dof_handler_internal, 1, *dbc_func, constraints_internal);
@@ -478,6 +481,8 @@ public:
 
         if (flag)
           this->compressed_rw = compressed_rw;
+
+        MPI_Barrier(MPI_COMM_WORLD);
 
         pcout << "  - compress indices: " << (flag ? "success" : "failure")
               << std::endl;

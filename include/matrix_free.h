@@ -82,6 +82,9 @@ public:
     partitioner_fdm = matrix_free.get_vector_partitioner();
 
     const auto resolve_constraint = [&](auto &i) {
+      if (i == numbers::invalid_dof_index)
+        return;
+
       const auto *entries_ptr = constraints.get_constraint_entries(i);
 
       if (entries_ptr != nullptr)
