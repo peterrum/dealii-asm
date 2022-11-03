@@ -74,7 +74,8 @@ namespace Restrictors
                     dof_handler, cells, additional_data.n_overlap);
               }
         }
-      else if (additional_data.type == "vertex")
+      else if (additional_data.type == "vertex" ||
+               additional_data.type == "vertex_all")
         {
           this->indices.clear();
 
@@ -129,9 +130,10 @@ namespace Restrictors
               if (vertex_to_entities[dim - 1].size() == 0)
                 continue; // vertex is not associated to a patch
 
-              if (vertex_to_entities[dim - 1].size() !=
-                  dealii::Utilities::pow(2, dim))
-                continue; // patch is not complete
+              if (additional_data.type == "vertex")
+                if (vertex_to_entities[dim - 1].size() !=
+                    dealii::Utilities::pow(2, dim))
+                  continue; // patch is not complete
 
               std::set<unsigned int> ranks;
 

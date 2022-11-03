@@ -16,6 +16,7 @@
 #include "include/dof_tools.h"
 #include "include/grid_tools.h"
 #include "include/kershaw.h"
+#include "include/restrictors.h"
 
 using namespace dealii;
 
@@ -135,29 +136,58 @@ main()
     std::ofstream file(std::get<0>(file_names));
     data_out.write_vtu(file);
 
-    std::vector<Point<dim>> support_points;
+    std::vector<Point<dim>>           support_points;
+    std::set<types::global_dof_index> dof_set;
 
-    auto cell = tria.begin_active();
+    if (i <= 2)
+      {
+        auto cell = tria.begin_active();
 
-    if (shift != 0)
-      for (unsigned int i = 0; i < shift; ++i)
-        cell++;
+        if (shift != 0)
+          for (unsigned int i = 0; i < shift; ++i)
+            cell++;
 
-    const auto cells =
-      GridTools::extract_all_surrounding_cells_cartesian<dim>(cell, i);
+        const auto cells =
+          GridTools::extract_all_surrounding_cells_cartesian<dim>(cell, i);
 
-    const auto dofs =
-      DoFTools::get_dof_indices_cell_with_overlap(dof_handler, cells, 3, true);
+        const auto dofs = DoFTools::get_dof_indices_cell_with_overlap(
+          dof_handler, cells, 3, true);
 
-    const std::set<types::global_dof_index> dof_set(dofs.begin(), dofs.end());
+        dof_set.insert(dofs.begin(), dofs.end());
+      }
+    else if (i == 3)
+      {
+        auto cell = tria.begin_active();
+
+        if (shift != 0)
+          for (unsigned int i = 0; i < shift; ++i)
+            cell++;
+
+        const auto cells =
+          GridTools::extract_all_surrounding_cells_cartesian<dim>(cell, 0);
+
+        const auto dofs = DoFTools::get_dof_indices_cell_with_overlap(
+          dof_handler, cells, 3, true);
+
+        dof_set.insert(dofs.begin(), dofs.end());
+      }
+    else if (i == 4)
+      {
+        typename Restrictors::ElementCenteredRestrictor<
+          Vector<double>>::AdditionalData ad;
+        ad.type = "vertex_all";
+
+        Restrictors::ElementCenteredRestrictor<Vector<double>> restrictor(
+          dof_handler, ad);
+
+        const auto dofs = restrictor.get_indices()[shift];
+        dof_set.insert(dofs.begin(), dofs.end());
+      }
 
     std::vector<types::global_dof_index> dof_indices(fe.n_dofs_per_cell());
 
-    for (const auto cell : cells)
+    for (const auto &cell : tria.active_cell_iterators())
       {
-        if (cell.state() != IteratorState::valid)
-          continue;
-
         const auto cell_dof = cell->as_dof_handler_iterator(dof_handler);
 
         auto points = fe.get_unit_support_points();
@@ -262,8 +292,10 @@ main()
     }
   };
 
-  for (unsigned int i = 0; i < 3; ++i)
+  for (unsigned int i = 0; i <= 4; ++i)
     {
+      std::cout << i << std::endl;
+
       Triangulation<dim> tria;
       GridGenerator::subdivided_hyper_cube(tria, 3);
 
@@ -285,10 +317,11 @@ main()
         },
         true);
 
-      run(tria, mapping, i, 4);
+      if (i != 3)
+        run(tria, mapping, i, i == 4 ? 6 : 4);
     }
 
-  for (unsigned int i = 0; i < 2; ++i)
+  for (const auto i : {0, 1, 3, 4})
     {
       Triangulation<dim> tria;
       GridGenerator::my_quarter_hyper_ball(tria);
@@ -297,6 +330,6 @@ main()
 
       MappingQ<dim> mapping(3);
 
-      run(tria, mapping, i, 3);
+      run(tria, mapping, i, i == 4 ? 4 : 3);
     }
 }
