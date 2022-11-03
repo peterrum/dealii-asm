@@ -66,7 +66,7 @@ private:
 
     prm.add_parameter("n repetitions", n_repetitions);
     prm.add_parameter("dof renumbering", dof_renumbering);
-    prm.add_parameter("use cartesian mesh", dof_renumbering);
+    prm.add_parameter("use cartesian mesh", use_cartesian_mesh);
   }
 };
 
