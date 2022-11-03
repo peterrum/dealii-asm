@@ -66,3 +66,13 @@ likwid-mpirun -np 40 -f -g CACHES -m -O ../matrix_free_loop_08 "${array[@]}"   |
 likwid-mpirun -np 40 -f -g FLOPS_SP -m -O ../matrix_free_loop_08 "${array[@]}" | tee result_flops.out
 
 ```
+
+```
+mkdir experiment-patch-cheby-degree
+cd experiment-patch-cheby-degree
+python ../../experiments/matrix_free_loop_08_cheby_degree.py
+array=($(ls *.json))
+mpirun -np 40 ../matrix_free_loop_08 ./input_0000.json | tee result_cartesian.output
+mpirun -np 40 ../matrix_free_loop_08 ./input_0001.json | tee result_general.output
+
+```

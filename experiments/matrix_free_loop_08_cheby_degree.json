@@ -1,0 +1,8 @@
+{
+  "dim" : 3,
+  "number type" : "float",
+  "fe degree" : 3,
+  "n subdivisions" : 37,
+  "preconditioner types" : "cheby-3-3-diag cheby-3-2-symm-1-c cheby-3-2-symm-2-g-p-n cheby-3-2-symm-v-c",
+  "use cartesian mesh" : true
+}

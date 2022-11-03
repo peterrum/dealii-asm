@@ -6,6 +6,7 @@
 #include <deal.II/dofs/dof_renumbering.h>
 
 #include <deal.II/fe/fe_q.h>
+#include <deal.II/fe/mapping_q_cache.h>
 
 #include <deal.II/grid/grid_tools.h>
 
@@ -33,8 +34,9 @@ struct Parameters
 
   std::string preconditioner_types = "post-1-c";
 
-  bool dof_renumbering  = true;
-  bool compress_indices = true;
+  bool dof_renumbering    = true;
+  bool compress_indices   = true;
+  bool use_cartesian_mesh = true;
 
   unsigned int n_repetitions = 10;
 
@@ -64,6 +66,7 @@ private:
 
     prm.add_parameter("n repetitions", n_repetitions);
     prm.add_parameter("dof renumbering", dof_renumbering);
+    prm.add_parameter("use cartesian mesh", dof_renumbering);
   }
 };
 
@@ -149,9 +152,8 @@ test(const Parameters params_in)
                            Utilities::MPI::this_mpi_process(MPI_COMM_WORLD) ==
                              0);
 
-  FE_Q<dim>      fe(params_in.fe_degree);
-  QGauss<dim>    quadrature(params_in.fe_degree + 1);
-  MappingQ1<dim> mapping;
+  FE_Q<dim>   fe(params_in.fe_degree);
+  QGauss<dim> quadrature(params_in.fe_degree + 1);
 
   parallel::distributed::Triangulation<dim> tria(MPI_COMM_WORLD);
   const unsigned int                        n_global_refinements =
@@ -168,6 +170,30 @@ test(const Parameters params_in)
   tria.add_periodicity(periodic_faces);
 
   tria.refine_global(n_global_refinements);
+
+  MappingQ1<dim> mapping;
+
+  const bool use_cartesian_mesh = params_in.use_cartesian_mesh;
+
+  const unsigned int mapping_degree = 2;
+  MappingQCache<dim> mapping_q_cache(mapping_degree);
+  mapping_q_cache.initialize(
+    mapping,
+    tria,
+    [use_cartesian_mesh](const auto &, const auto &point) {
+      Point<dim> result;
+
+      if (use_cartesian_mesh)
+        return result;
+
+      for (unsigned int d = 0; d < dim; ++d)
+        result[d] = std::sin(2 * numbers::PI * point[(d + 1) % dim]) *
+                    std::sin(numbers::PI * point[d]) * 0.1;
+
+      return result;
+    },
+    true);
+
 
   DoFHandler<dim> dof_handler(tria);
   dof_handler.distribute_dofs(fe);
@@ -193,12 +219,16 @@ test(const Parameters params_in)
 
   MatrixFree<dim, Number, VectorizedArrayType> matrix_free;
   matrix_free.reinit(
-    mapping, dof_handler, constraints, quadrature, additional_data);
+    mapping_q_cache, dof_handler, constraints, quadrature, additional_data);
 
   // create linear operator
   typename LaplaceOperatorMatrixFree<dim, Number>::AdditionalData ad_operator;
   ad_operator.compress_indices = params_in.compress_indices;
-  ad_operator.mapping_type     = "";
+
+  if (use_cartesian_mesh)
+    ad_operator.mapping_type = "";
+  else
+    ad_operator.mapping_type = "quadratic geometry";
 
   const auto labels = split_string(params_in.preconditioner_types, ' ');
 
