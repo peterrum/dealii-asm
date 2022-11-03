@@ -98,9 +98,11 @@ main()
   const auto generate_file_name = []() {
     static unsigned int counter = 0;
 
-    std::pair<std::string, std::string> names = {
+    std::tuple<std::string, std::string, std::string, std::string> names = {
       "mesh_types_types_mesh_02." + std::to_string(counter) + ".vtu",
-      "mesh_types_types_points_02." + std::to_string(counter) + ".vtu"};
+      "mesh_types_types_points_02." + std::to_string(counter) + ".vtu",
+      "mesh_types_types_02." + std::to_string(counter) + ".0.tex",
+      "mesh_types_types_02." + std::to_string(counter) + ".1.tex"};
 
     counter++;
 
@@ -130,7 +132,7 @@ main()
                            3,
                            DataOut<dim>::CurvedCellRegion::curved_inner_cells);
 
-    std::ofstream file(file_names.first);
+    std::ofstream file(std::get<0>(file_names));
     data_out.write_vtu(file);
 
     std::vector<Point<dim>> support_points;
@@ -185,8 +187,81 @@ main()
 
     Particles::DataOut<dim> data_out_particles;
     data_out_particles.build_patches(particle_handler);
-    std::ofstream file_particles(file_names.second);
+    std::ofstream file_particles(std::get<1>(file_names));
     data_out_particles.write_vtu(file_particles);
+
+    {
+      std::ofstream file(std::get<3>(file_names));
+
+    for(unsigned int p = 0; p < support_points.size(); ++p)
+    {
+      const auto point = support_points[p];
+
+      file << "(";
+      file << point[0];
+      file << ",";
+      file << point[1];
+      file << ")";
+      
+      if(p + 1 != support_points.size())
+        file << ",";
+    }
+    }
+
+    {
+      std::ofstream file(std::get<2>(file_names));
+
+    for (const auto & cell : tria.active_cell_iterators())
+      {
+        const unsigned int n_subdivisions = 3;
+
+        std::vector<Point<dim>> points;
+
+        for(unsigned int i = 0; i <= n_subdivisions; ++i)
+          points.emplace_back(1.0/n_subdivisions * i, 0.0);
+
+        for(unsigned int i = 0; i <= n_subdivisions; ++i)
+          points.emplace_back(1.0/n_subdivisions * i, 1.0);
+
+        for(unsigned int i = 0; i <= n_subdivisions; ++i)
+          points.emplace_back(0.0, 1.0/n_subdivisions * i);
+
+        for(unsigned int i = 0; i <= n_subdivisions; ++i)
+          points.emplace_back(1.0, 1.0/n_subdivisions * i);
+      
+        Quadrature<dim> quadrature(points);
+
+        FEValues<dim> fe_values(mapping,
+                                fe,
+                                quadrature,
+                                update_quadrature_points);
+
+        fe_values.reinit(cell);
+
+        for(unsigned int q = 0; q < points.size();)
+        {
+          file << "\\draw [black] plot [smooth] coordinates {";
+          for(unsigned int i = 0; i <= n_subdivisions; ++i, ++q)
+            {
+              const auto point = fe_values.quadrature_point(q);
+
+              file << "(";
+              file << point[0];
+              file << ",";
+              file << point[1];
+              file << ")";
+
+            }
+            file << "};" << std::endl;
+         
+        }
+
+        file << std::endl;
+
+        //for (const auto q : fe_values.quadrature_point_indices())
+        //  std::cout << fe_values.quadrature_point(q) << std::endl;
+      }
+    }
   };
 
   for (unsigned int i = 0; i < 3; ++i)
@@ -220,13 +295,13 @@ main()
       Triangulation<dim> tria;
       GridGenerator::my_quarter_hyper_ball(tria);
 
-      for (const auto cell : tria.active_cell_iterators())
-        {
-          for (const auto v : cell->vertex_indices())
-            std::cout << cell->vertex(v) << std::endl;
-
-          std::cout << std::endl;
-        }
+      //for (const auto cell : tria.active_cell_iterators())
+      //  {
+      //    for (const auto v : cell->vertex_indices())
+      //      std::cout << cell->vertex(v) << std::endl;
+      //
+      //    std::cout << std::endl;
+      //  }
 
 
       tria.refine_global(1);
