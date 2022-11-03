@@ -116,7 +116,8 @@ main()
                        const unsigned int shift) {
     DoFHandler<dim> dof_handler(tria);
 
-    FE_Q<dim> fe(4);
+    const unsigned int n_points = 5;
+    FE_Q<dim>          fe(n_points - 1);
 
     dof_handler.distribute_dofs(fe);
 
@@ -167,9 +168,42 @@ main()
           GridTools::extract_all_surrounding_cells_cartesian<dim>(cell, 0);
 
         const auto dofs = DoFTools::get_dof_indices_cell_with_overlap(
-          dof_handler, cells, 3, true);
+          dof_handler, cells, 1, true);
 
         dof_set.insert(dofs.begin(), dofs.end());
+
+        // for(int o = 1; o < 3; ++o)
+        {
+          std::set<types::global_dof_index> dof_set_new = dof_set;
+
+          for (const auto &cell : dof_handler.active_cell_iterators())
+            {
+              const auto cells =
+                GridTools::extract_all_surrounding_cells_cartesian<dim>(cell,
+                                                                        0);
+
+              const auto dofs = DoFTools::get_dof_indices_cell_with_overlap(
+                dof_handler, cells, 1, true);
+
+              for (unsigned int i = 0; i < n_points; ++i)
+                for (unsigned int j = 0; j < n_points; ++j)
+                  for (int ii = -2; ii <= 2; ++ii)
+                    for (int jj = -2; jj <= 2; ++jj)
+                      if (dof_set.find(
+                            dofs[std::min<int>(std::max<int>(0, i + ii),
+                                               n_points - 1) +
+                                 std::min<int>(std::max<int>(0, j + jj),
+                                               n_points - 1) *
+                                   n_points]) != dof_set.end())
+                        dof_set_new.insert(dofs[i + j * n_points]);
+
+
+              std::cout << dof_set_new.size() << std::endl;
+            }
+
+          dof_set = dof_set_new;
+          std::cout << std::endl;
+        }
       }
     else if (i == 4)
       {
@@ -186,10 +220,8 @@ main()
 
     std::vector<types::global_dof_index> dof_indices(fe.n_dofs_per_cell());
 
-    for (const auto &cell : tria.active_cell_iterators())
+    for (const auto &cell : dof_handler.active_cell_iterators())
       {
-        const auto cell_dof = cell->as_dof_handler_iterator(dof_handler);
-
         auto points = fe.get_unit_support_points();
 
         for (auto &point : points)
@@ -203,9 +235,9 @@ main()
                                 quadrature,
                                 update_quadrature_points);
 
-        fe_values.reinit(cell_dof);
+        fe_values.reinit(cell);
 
-        cell_dof->get_dof_indices(dof_indices);
+        cell->get_dof_indices(dof_indices);
 
         for (const auto q : fe_values.quadrature_point_indices())
           if (dof_set.find(dof_indices[q]) != dof_set.end())
@@ -294,8 +326,6 @@ main()
 
   for (unsigned int i = 0; i <= 4; ++i)
     {
-      std::cout << i << std::endl;
-
       Triangulation<dim> tria;
       GridGenerator::subdivided_hyper_cube(tria, 3);
 
