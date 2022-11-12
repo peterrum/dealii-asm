@@ -80,7 +80,7 @@ private:
 
 
 template <typename MatrixType, typename PreconditionerType, typename VectorType>
-std::shared_ptr<ReductionControl>
+void
 solve(const MatrixType &                              A,
       VectorType &                                    x,
       const VectorType &                              b,
@@ -92,6 +92,8 @@ solve(const MatrixType &                              A,
   const auto abs_tolerance  = params.get<double>("abs tolerance", 1e-10);
   const auto rel_tolerance  = params.get<double>("rel tolerance", 1e-2);
   const auto type           = params.get<std::string>("type", "");
+  const auto control_type =
+    params.get<std::string>("control type", "ReductionControl");
 
   ConditionalOStream pcout(std::cout,
                            Utilities::MPI::this_mpi_process(MPI_COMM_WORLD) ==
@@ -102,9 +104,23 @@ solve(const MatrixType &                              A,
   pcout << "   - abs tolerance:  " << abs_tolerance << std::endl;
   pcout << "   - rel tolrance:   " << rel_tolerance << std::endl;
 
-  auto reduction_control = std::make_shared<ReductionControl>(max_iterations,
-                                                              abs_tolerance,
-                                                              rel_tolerance);
+  std::shared_ptr<SolverControl> solver_control;
+
+  if (control_type == "ReductionControl")
+    {
+      solver_control = std::make_shared<ReductionControl>(max_iterations,
+                                                          abs_tolerance,
+                                                          rel_tolerance);
+    }
+  else if (control_type == "IterationNumberControl")
+    {
+      solver_control =
+        std::make_shared<IterationNumberControl>(max_iterations, abs_tolerance);
+    }
+  else
+    {
+      AssertThrow(false, ExcNotImplemented());
+    }
 
   const auto dispatch = [&]() {
     x = 0;
@@ -113,12 +129,12 @@ solve(const MatrixType &                              A,
       {
         if (type == "CG")
           {
-            SolverCG<VectorType> solver(*reduction_control);
+            SolverCG<VectorType> solver(*solver_control);
             solver.solve(A, x, b, *preconditioner);
           }
         else if (type == "FCG")
           {
-            SolverFlexibleCG<VectorType> solver(*reduction_control);
+            SolverFlexibleCG<VectorType> solver(*solver_control);
             solver.solve(A, x, b, *preconditioner);
           }
         else if (type == "GMRES")
@@ -134,12 +150,12 @@ solve(const MatrixType &                              A,
             if (max_n_tmp_vectors > 0)
               additional_data.max_n_tmp_vectors = max_n_tmp_vectors;
 
-            SolverGMRES<VectorType> solver(*reduction_control, additional_data);
+            SolverGMRES<VectorType> solver(*solver_control, additional_data);
             solver.solve(A, x, b, *preconditioner);
           }
         else if (type == "FGMRES")
           {
-            SolverFGMRES<VectorType> solver(*reduction_control);
+            SolverFGMRES<VectorType> solver(*solver_control);
             solver.solve(A, x, b, *preconditioner);
           }
         else
@@ -172,7 +188,7 @@ solve(const MatrixType &                              A,
                .count() /
              1e9;
 
-      pcout << "   - n iterations:   " << reduction_control->last_step()
+      pcout << "   - n iterations:   " << solver_control->last_step()
             << std::endl;
       pcout << "   - time:           " << time << " #" << std::endl;
       pcout << std::endl;
@@ -185,7 +201,7 @@ solve(const MatrixType &                              A,
 
 
   if (converged)
-    table.add_value("it", reduction_control->last_step());
+    table.add_value("it", solver_control->last_step());
   else
     table.add_value("it", 999);
 
@@ -196,8 +212,6 @@ solve(const MatrixType &                              A,
       if constexpr (has_timing_functionality<PreconditionerType>)
         preconditioner->print_timings();
     }
-
-  return reduction_control;
 }
 
 
@@ -400,8 +414,6 @@ test(const boost::property_tree::ptree params, ConvergenceTable &table)
   op.rhs(rhs, rhs_func);
   rhs.zero_out_ghost_values();
 
-  std::shared_ptr<ReductionControl> reduction_control;
-
   // ASM on cell level
   if (preconditioner_type == "Identity")
     {
@@ -414,8 +426,7 @@ test(const boost::property_tree::ptree params, ConvergenceTable &table)
       const auto preconditioner =
         std::make_shared<const PreconditionIdentity>();
 
-      reduction_control =
-        solve(op, solution, rhs, preconditioner, solver_parameters, table);
+      solve(op, solution, rhs, preconditioner, solver_parameters, table);
     }
   else if (preconditioner_type == "Diagonal")
     {
@@ -428,14 +439,13 @@ test(const boost::property_tree::ptree params, ConvergenceTable &table)
       auto preconditioner = std::make_shared<DiagonalMatrix<VectorType>>();
       op.compute_inverse_diagonal(preconditioner->get_vector());
 
-      reduction_control =
-        solve(op,
-              solution,
-              rhs,
-              std::const_pointer_cast<const DiagonalMatrix<VectorType>>(
-                preconditioner),
-              solver_parameters,
-              table);
+      solve(op,
+            solution,
+            rhs,
+            std::const_pointer_cast<const DiagonalMatrix<VectorType>>(
+              preconditioner),
+            solver_parameters,
+            table);
     }
   else if (preconditioner_type == "Multigrid")
     {
@@ -584,8 +594,7 @@ test(const boost::property_tree::ptree params, ConvergenceTable &table)
         mg_constraints,
         mg_operators);
 
-      reduction_control =
-        solve(op, solution, rhs, preconditioner, solver_parameters, table);
+      solve(op, solution, rhs, preconditioner, solver_parameters, table);
     }
   else
     {
@@ -594,8 +603,7 @@ test(const boost::property_tree::ptree params, ConvergenceTable &table)
       const auto preconditioner =
         create_system_preconditioner(op, preconditioner_parameters);
 
-      reduction_control =
-        solve(op, solution, rhs, preconditioner, solver_parameters, table);
+      solve(op, solution, rhs, preconditioner, solver_parameters, table);
     }
 
 
