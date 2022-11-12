@@ -35,7 +35,7 @@ def run_instance(counter, d, l, k, sweep, solver, preconditioner, sequence, s, e
         datastore["preconditioner"]["mg smoother"]["preconditioner"]["weighting type"] = props[1]
         datastore["preconditioner"]["mg smoother"]["preconditioner"]["n overlap"] = props[2]
 
-        if False and props[1] == "post": # TODO
+        if props[1] == "post":
             datastore["preconditioner"]["mg smoother"]["degree"] = 2 * s
             datastore["preconditioner"]["one-sided v-cycle"] = True
 
@@ -48,37 +48,21 @@ def run_instance(counter, d, l, k, sweep, solver, preconditioner, sequence, s, e
     with open("./input_%s.json" % (str(counter).zfill(4)), 'w') as f:
         json.dump(datastore, f, indent=4, separators=(',', ': '))
 
-def parseArguments():
-    parser = ArgumentParser(description="Submit a simulation as a batch job")
-
-    parser.add_argument('d', type=int)
-    parser.add_argument('l', type=int)
-    parser.add_argument('k', type=int)
-    
-    arguments = parser.parse_args()
-    return arguments
-
 def main():
-    options = parseArguments()
 
-    d = options.d
-    l = options.l
-    k = options.k
+    d = 3
+    l = 6
+    k = 4
     
     counter = 0
 
-    preconditioners = ["diagonal"]
+    preconditioners = []
 
-    for a in ["post", "symm"]:
-    #for a in ["post"]:
-        for o in range(1, 3):
+    for a in ["symm"]:
+        for o in range(1, 2):
             preconditioners.append("fdm-%s-%d-f" % (a, o));
 
-        #for o in range(1, 2):
-        #    preconditioners.append("fdm-%d-r" % o);
-
-    #for eps in [1.0, 2.0, 5.0, 10.0, 20.0, 50.0]:
-    for eps in [1.0, 50.0]:
+    for eps in [50.0]:
         for solver in ["CG", "GMRES"]:
             preconditioners_to_be_used = preconditioners
 
@@ -89,8 +73,8 @@ def main():
 
             for sweep in ["Chebyshev"]:
                 for preconditioner in preconditioners_to_be_used:
-                    for sequence in ["bisect", "go to one", "decrease by one"]:
-                        for s in range(1, 6):
+                    for s in range(1, 6):
+                        for sequence in ["bisect", "go to one", "decrease by one"]:
                             run_instance(counter, d, l, k, sweep, solver, preconditioner, sequence, s, eps)
                             counter = counter + 1;
 

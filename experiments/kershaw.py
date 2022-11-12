@@ -71,7 +71,8 @@ def main():
         #for o in range(1, 2):
         #    preconditioners.append("fdm-%s-%d-r" %  (a, o));
 
-    for eps in [1.0, 0.99, 0.9, 0.7, 0.5, 0.3]:
+    #for eps in [1.0, 0.99, 0.9, 0.7, 0.5, 0.3]:
+    for eps in [1.0, 0.3]:
         for solver in ["CG", "GMRES"]:
             preconditioners_to_be_used = []
 

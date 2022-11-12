@@ -1,0 +1,38 @@
+{
+    "print timing": true,
+    "name": "fdm-1-r",
+    "degree": 4,
+    "dim": 3,
+    "solver": {
+        "type": "CG",
+        "rel tolerance": 1e-05,
+        "max iterations" : 30,
+        "control type" : "IterationNumberControl"
+    },
+    "preconditioner": {
+        "mg smoother": {
+            "preconditioner": {
+                "n overlap": "1",
+                "type": "FDM",
+                "sub mesh approximation": 3,
+                "weighting type": "symm",
+                "reuse partitioner" : "true"
+            },
+            "type": "Chebyshev",
+            "degree": 2
+        },
+        "mg p sequence": "bisect",
+        "mg coarse grid solver": {
+            "type": "AMG"
+        },
+        "type": "Multigrid",
+        "mg type": "p"
+    },
+    "mesh": {
+        "stratch": 50.0,
+        "name": "anisotropy",
+        "eps": 0.2
+    },
+    "n refinements": 6,
+    "type": "matrixfree"
+}

@@ -76,3 +76,12 @@ mpirun -np 40 ../matrix_free_loop_08 ./input_0000.json | tee result_cartesian.ou
 mpirun -np 40 ../matrix_free_loop_08 ./input_0001.json | tee result_general.output
 
 ```
+
+```
+mkdir -p experiment-multigrid_cheby_degree
+cd experiment-multigrid_cheby_degree
+python ../../experiments/multigrid_cheby_degree.py
+array=($(ls *.json))
+mpirun -np 40 ../element_centered_preconditioners_01 "${array[@]}" | tee output.out
+cd ..
+```
