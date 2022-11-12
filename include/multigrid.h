@@ -157,6 +157,9 @@ public:
 
     if (Utilities::MPI::this_mpi_process(MPI_COMM_WORLD) == 0)
       {
+        std::cout << " - #N of calls of multigrid: " << all_mg_counter
+                  << std::endl
+                  << std::endl;
         std::cout << " - Times of multigrid (levels):" << std::endl;
 
         const auto print_line = [](const auto &vector) {
@@ -213,6 +216,8 @@ public:
 
     for (auto &i : all_mg_precon_timers)
       i.first = 0.0;
+
+    all_mg_counter = 0;
   }
 
   void
@@ -338,6 +343,8 @@ public:
   virtual void
   vmult(VectorTypeOuter &dst, const VectorTypeOuter &src) const
   {
+    all_mg_counter++;
+
     preconditioner->vmult(dst, src);
   }
 
@@ -374,6 +381,8 @@ protected:
   mutable std::unique_ptr<Multigrid<VectorType>>  mg;
   mutable std::unique_ptr<PreconditionMG<dim, VectorType, MGTransferType>>
     preconditioner;
+
+  mutable unsigned int all_mg_counter = 0;
 
   mutable std::vector<std::vector<
     std::pair<double, std::chrono::time_point<std::chrono::system_clock>>>>
