@@ -14,6 +14,10 @@ def run_instance(counter, d, l, k, solver, preconditioner, sequence, s, eps):
     datastore["n refinements"] = l
     datastore["degree"]        = k
 
+    if eps != 1.0:
+        datastore["operator mapping type"] = "quadratic geometry"
+        datastore["mapping degree"]        = 2
+
     # ... solver
     datastore["solver"]["type"] = solver
 
