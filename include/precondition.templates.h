@@ -129,6 +129,25 @@ create_chebyshev_preconditioner(
                              "> is not known!"))
     }
 
+  const auto poly_type = params.get<std::string>("polynomial type", "1st kind");
+
+  if (poly_type == "1st kind")
+    {
+      chebyshev_additional_data.polynomial_type =
+        ChebyshevPreconditionerType::AdditionalData::PolynomialType::first_kind;
+    }
+  else if (poly_type == "4th kind")
+    {
+      chebyshev_additional_data.polynomial_type = ChebyshevPreconditionerType::
+        AdditionalData::PolynomialType::fourth_kind;
+    }
+  else
+    {
+      AssertThrow(false,
+                  ExcMessage("Polynomial type <" + ev_algorithm +
+                             "> is not known!"))
+    }
+
   auto chebyshev = std::make_shared<ChebyshevPreconditionerType>();
   chebyshev->initialize(op, chebyshev_additional_data);
 
