@@ -6,7 +6,8 @@
     "print timing" : true,
     "solver" : {
         "type" : "GMRES",
-        "rel tolerance" : 1e-5
+        "rel tolerance" : 1e-5,
+        "max n tmp vectors" : 15
     },
     "mesh": {"name" : "kershaw", "eps" : 0.2 , "stratch" : 1.0},
     "preconditioner" : {
@@ -17,6 +18,7 @@
             "type" : "Chebyshev",
             "weighting type" : "post",
             "degree" : 1,
+            "polynomial type" : "1st kind",
             "preconditioner" : {
                 "type" : "FDM",
                 "n overlap" : 1,
