@@ -1,7 +1,7 @@
 {
     "print timing": true,
     "name": "fdm-1-r",
-    "degree": 7,
+    "degree": 4,
     "dim": 3,
     "operator compress indices" : true, 
     "solver": {
@@ -28,11 +28,11 @@
             "type": "AMG"
         },
         "type": "Multigrid",
-        "mg type": "h"
+        "mg type": "hp"
     },
     "mesh": {
         "stratch": 50.0,
-        "name": "anisotropy",
+        "name": "kershaw",
         "eps": 0.3,
         "n initial refinements" : 0,
         "n subdivisions" : 9
