@@ -560,11 +560,11 @@ test(const boost::property_tree::ptree params, ConvergenceTable &table)
 
           if (transformation_function)
             mg_mapping[l]->initialize(mapping_q1,
-                                      tria,
+                                      mg_tria,
                                       transformation_function,
                                       false);
           else
-            mg_mapping[l]->initialize(mapping_q1, tria);
+            mg_mapping[l]->initialize(mapping_q1, mg_tria);
 
           mg_operators[l] = std::make_shared<LevelOperatorType>(
             *mg_mapping[l],

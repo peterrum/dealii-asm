@@ -28,7 +28,7 @@
             "type": "AMG"
         },
         "type": "Multigrid",
-        "mg type": "hp"
+        "mg type": "ph"
     },
     "mesh": {
         "stratch": 50.0,
