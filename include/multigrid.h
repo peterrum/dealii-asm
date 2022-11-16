@@ -1,5 +1,7 @@
 #pragma once
 
+#include <deal.II/lac/solver_relaxation.h>
+
 #include <deal.II/multigrid/mg_coarse.h>
 #include <deal.II/multigrid/mg_matrix.h>
 #include <deal.II/multigrid/mg_smoother.h>
@@ -224,12 +226,36 @@ public:
   do_update()
   {
     // setup coarse-grid solver
-    coarse_grid_solver =
+    coarse_grid_preconditioner =
       this->create_mg_coarse_grid_solver(min_level, *mg_operators[min_level]);
 
-    mg_coarse = std::make_unique<
-      MGCoarseGridApplyPreconditioner<VectorType, SmootherType>>(
-      coarse_grid_solver);
+    if (false)
+      {
+        // single coarse solve
+        mg_coarse = std::make_unique<
+          MGCoarseGridApplyPreconditioner<VectorType, SmootherType>>(
+          coarse_grid_preconditioner);
+      }
+    else
+      {
+        // multiple cycles
+        const unsigned int n_cycles = 10; // TODO
+
+        mg_coarse_relaxation_solver_control =
+          std::make_unique<IterationNumberControl>(n_cycles, 1e-20);
+
+        mg_coarse_relaxation = std::make_unique<SolverRelaxation<VectorType>>(
+          *mg_coarse_relaxation_solver_control);
+
+        mg_coarse = std::make_unique<
+          MGCoarseGridIterativeSolver<VectorType,
+                                      SolverRelaxation<VectorType>,
+                                      LevelMatrixType,
+                                      SmootherType>>(
+          *mg_coarse_relaxation,
+          *mg_operators[min_level],
+          coarse_grid_preconditioner);
+      }
 
     // setup smoothers on each level
     mg_smoother.smoothers.resize(min_level, max_level);
@@ -367,7 +393,11 @@ protected:
   std::shared_ptr<MGTransferType>                    transfer;
 
   // coarse-grid solver
-  mutable SmootherType                                  coarse_grid_solver;
+  mutable SmootherType coarse_grid_preconditioner;
+
+  mutable std::unique_ptr<SolverControl> mg_coarse_relaxation_solver_control;
+  mutable std::unique_ptr<SolverRelaxation<VectorType>> mg_coarse_relaxation;
+
   mutable std::unique_ptr<MGCoarseGridBase<VectorType>> mg_coarse;
 
   // smoothers
