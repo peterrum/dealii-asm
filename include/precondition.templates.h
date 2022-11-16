@@ -585,6 +585,7 @@ create_system_preconditioner(const OperatorType &              op,
       using PreconditionerType = TrilinosWrappers::PreconditionAMG;
 
       typename PreconditionerType::AdditionalData additional_data;
+      additional_data.n_cycles = 1;
 
       const auto preconitioner = std::make_shared<PreconditionerType>();
 
