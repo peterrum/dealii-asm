@@ -173,6 +173,11 @@ public:
                            const LevelMatrixType &level_matrix) = 0;
 
   virtual SmootherType
+  create_mg_intermediate_level_smoother(
+    unsigned int           level,
+    const LevelMatrixType &level_matrix) = 0;
+
+  virtual SmootherType
   create_mg_coarse_grid_solver(unsigned int           level,
                                const LevelMatrixType &level_matrix) = 0;
 
@@ -262,7 +267,8 @@ public:
         for (unsigned int level = min_level + 1; level <= intermediate_level;
              ++level)
           mg_intermediate_smoother.smoothers[level] =
-            this->create_mg_level_smoother(level, *mg_operators[level]);
+            this->create_mg_intermediate_level_smoother(level,
+                                                        *mg_operators[level]);
       }
 
     mg_fine_smoother.smoothers.resize(intermediate_level, max_level);

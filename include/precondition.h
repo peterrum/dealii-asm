@@ -139,6 +139,22 @@ public:
   }
 
   SmootherType
+  create_mg_intermediate_level_smoother(
+    unsigned int           level,
+    const LevelMatrixType &level_matrix) final
+  {
+    pcout << "- Setting up smoother on inermediate level " << level << ""
+          << std::endl
+          << std::endl;
+
+    (void)level;
+
+    return WrapperForGMG<VectorType>(
+      create_system_preconditioner<LevelMatrixType>(
+        level_matrix, try_get_child(params, "mg smoother")));
+  }
+
+  SmootherType
   create_mg_coarse_grid_solver(unsigned int           level,
                                const LevelMatrixType &level_matrix) final
   {
