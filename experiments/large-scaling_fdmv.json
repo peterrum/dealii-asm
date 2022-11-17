@@ -23,12 +23,21 @@
             "degree": 2,
             "optimize" : 2
         },
+        "mg intermediate smoother": {
+            "preconditioner": {
+                "type": "Diagonal"
+            },
+            "type": "Chebyshev",
+            "degree": 4,
+            "optimize" : 3
+        },
         "mg p sequence": "bisect",
         "mg coarse grid solver": {
             "type": "AMG"
         },
         "type": "Multigrid",
-        "mg type": "hp"
+        "mg type": "ph",
+        "n coarse cycles": "1"
     },
     "mesh": {
         "stratch": 50.0,
