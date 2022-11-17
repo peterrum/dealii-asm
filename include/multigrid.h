@@ -158,7 +158,15 @@ public:
     , min_level(mg_dof_handlers.min_level())
     , intermediate_level(intermediate_level)
     , max_level(mg_dof_handlers.max_level())
-  {}
+  {
+    mg_intermediate_operators.resize(min_level, intermediate_level);
+    for (auto l = min_level; l <= intermediate_level; ++l)
+      mg_intermediate_operators[l] = mg_operators[l];
+
+    mg_fine_operators.resize(intermediate_level, max_level);
+    for (auto l = intermediate_level; l <= max_level; ++l)
+      mg_fine_operators[l] = mg_operators[l];
+  }
 
   virtual SmootherType
   create_mg_level_smoother(unsigned int           level,
@@ -264,7 +272,7 @@ public:
             this->create_mg_level_smoother(level, *mg_operators[level]);
 
         mg_intermediate_matrix =
-          std::make_unique<mg::Matrix<VectorType>>(mg_operators);
+          std::make_unique<mg::Matrix<VectorType>>(mg_intermediate_operators);
 
         mg_intermediate_transfers.resize(min_level, intermediate_level);
         for (auto l = min_level; l < intermediate_level; ++l)
@@ -308,7 +316,8 @@ public:
       }
 
     // wrap level operators
-    mg_fine_matrix = std::make_unique<mg::Matrix<VectorType>>(mg_operators);
+    mg_fine_matrix =
+      std::make_unique<mg::Matrix<VectorType>>(mg_fine_operators);
 
     // setup transfer operators (note: we do it here, since the smoothers
     // might change the ghosting of the level operators)
@@ -460,6 +469,9 @@ protected:
     std::shared_ptr<const AffineConstraints<typename VectorType::value_type>>>
                                                         mg_constraints;
   const MGLevelObject<std::shared_ptr<LevelMatrixType>> mg_operators;
+
+  MGLevelObject<std::shared_ptr<LevelMatrixType>> mg_intermediate_operators;
+  MGLevelObject<std::shared_ptr<LevelMatrixType>> mg_fine_operators;
 
   // settings
   const bool         use_one_sided_v_cycle;
