@@ -225,22 +225,34 @@ public:
   void
   do_update()
   {
+    const unsigned int intermediate_level = min_level;
+
     // setup operators on levels
     mg_coarse_preconditioner =
-      this->create_mg_coarse_grid_solver(min_level, *mg_operators[min_level]);
+      this->create_mg_coarse_grid_solver(intermediate_level,
+                                         *mg_operators[min_level]);
 
-    mg_fine_smoother.smoothers.resize(min_level, max_level);
-
-    for (unsigned int level = min_level + 1; level <= max_level; ++level)
+    mg_fine_smoother.smoothers.resize(intermediate_level, max_level);
+    for (unsigned int level = intermediate_level; level <= max_level; ++level)
       mg_fine_smoother.smoothers[level] =
         this->create_mg_level_smoother(level, *mg_operators[level]);
+
+    if (intermediate_level != min_level)
+      {
+        mg_intermediate_smoother.smoothers.resize(min_level,
+                                                  intermediate_level);
+        for (unsigned int level = min_level; level <= intermediate_level;
+             ++level)
+          mg_intermediate_smoother.smoothers[level] =
+            this->create_mg_level_smoother(level, *mg_operators[level]);
+      }
 
     // wrap level operators
     mg_fine_matrix = std::make_unique<mg::Matrix<VectorType>>(mg_operators);
 
     // setup transfer operators (note: we do it here, since the smoothers
     // might change the ghosting of the level operators)
-    for (auto l = min_level; l < max_level; ++l)
+    for (auto l = intermediate_level; l < max_level; ++l)
       mg_fine_transfers[l + 1].reinit(*mg_dof_handlers[l + 1],
                                       *mg_dof_handlers[l],
                                       *mg_constraints[l + 1],
@@ -274,9 +286,10 @@ public:
           MGCoarseGridIterativeSolver<VectorType,
                                       SolverRelaxation<VectorType>,
                                       LevelMatrixType,
-                                      SmootherType>>(*mg_coarse_relaxation,
-                                                     *mg_operators[min_level],
-                                                     mg_coarse_preconditioner);
+                                      SmootherType>>(
+          *mg_coarse_relaxation,
+          *mg_operators[intermediate_level],
+          mg_coarse_preconditioner);
       }
 
     // create multigrid algorithm (put level operators, smoothers, transfer
@@ -287,7 +300,7 @@ public:
                                                         *mg_fine_transfer,
                                                         mg_fine_smoother,
                                                         mg_smoother_identity,
-                                                        min_level,
+                                                        intermediate_level,
                                                         max_level);
     else
       mg_fine = std::make_unique<Multigrid<VectorType>>(*mg_fine_matrix,
@@ -295,7 +308,7 @@ public:
                                                         *mg_fine_transfer,
                                                         mg_fine_smoother,
                                                         mg_fine_smoother,
-                                                        min_level,
+                                                        intermediate_level,
                                                         max_level);
 
     // convert multigrid algorithm to preconditioner
@@ -306,25 +319,28 @@ public:
     // timers
     if (true)
       {
-        all_mg_timers.resize((max_level - min_level + 1));
+        all_mg_timers.resize((max_level - intermediate_level + 1));
         for (unsigned int i = 0; i < all_mg_timers.size(); ++i)
           all_mg_timers[i].resize(7);
 
         const auto create_mg_timer_function = [&](const unsigned int i,
                                                   const std::string &label) {
-          return [i, label, this](const bool flag, const unsigned int level) {
-            if (false && flag)
-              std::cout << label << " " << level << std::endl;
-            if (flag)
-              all_mg_timers[level][i].second = std::chrono::system_clock::now();
-            else
-              all_mg_timers[level][i].first +=
-                std::chrono::duration_cast<std::chrono::nanoseconds>(
-                  std::chrono::system_clock::now() -
-                  all_mg_timers[level][i].second)
-                  .count() /
-                1e9;
-          };
+          return
+            [i, label, intermediate_level, this](const bool         flag,
+                                                 const unsigned int level) {
+              if (false && flag)
+                std::cout << label << " " << level << std::endl;
+              if (flag)
+                all_mg_timers[level - intermediate_level][i].second =
+                  std::chrono::system_clock::now();
+              else
+                all_mg_timers[level - intermediate_level][i].first +=
+                  std::chrono::duration_cast<std::chrono::nanoseconds>(
+                    std::chrono::system_clock::now() -
+                    all_mg_timers[level - intermediate_level][i].second)
+                    .count() /
+                  1e9;
+            };
         };
 
         {
@@ -399,6 +415,10 @@ protected:
   mutable std::unique_ptr<SolverControl> mg_coarse_relaxation_solver_control;
   mutable std::unique_ptr<SolverRelaxation<VectorType>> mg_coarse_relaxation;
   mutable std::unique_ptr<MGCoarseGridBase<VectorType>> mg_coarse;
+
+  // intermediate
+  mutable MGSmootherRelaxation<LevelMatrixType, SmootherType, VectorType>
+    mg_intermediate_smoother;
 
   // smoothers
   mutable MGSmootherRelaxation<LevelMatrixType, SmootherType, VectorType>
