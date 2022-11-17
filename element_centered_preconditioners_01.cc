@@ -543,6 +543,15 @@ test(const boost::property_tree::ptree params, ConvergenceTable &table)
       const unsigned int min_level = 0;
       const unsigned int max_level = levels.size() - 1;
 
+      auto result = std::find_if(levels.rbegin(),
+                                 levels.rend(),
+                                 [](const auto &i) { return i.first == 1; });
+
+      const unsigned int intermediate_level =
+        ((result != levels.rend()) ? std::distance(result, levels.rend()) : 0) +
+        min_level;
+
+
       mg_dof_handlers.resize(min_level, max_level);
       mg_constraints.resize(min_level, max_level);
       mg_operators.resize(min_level, max_level);
@@ -592,7 +601,8 @@ test(const boost::property_tree::ptree params, ConvergenceTable &table)
         op.get_dof_handler(),
         mg_dof_handlers,
         mg_constraints,
-        mg_operators);
+        mg_operators,
+        intermediate_level);
 
       solve(op, solution, rhs, preconditioner, solver_parameters, table);
     }

@@ -105,7 +105,8 @@ public:
     const MGLevelObject<
       std::shared_ptr<const AffineConstraints<typename VectorType::value_type>>>
       &                                                    mg_constraints,
-    const MGLevelObject<std::shared_ptr<LevelMatrixType>> &mg_operators)
+    const MGLevelObject<std::shared_ptr<LevelMatrixType>> &mg_operators,
+    const unsigned int                                     intermediate_level)
     : PreconditionerGMG<dim,
                         LevelMatrixType_,
                         WrapperForGMG<VectorType>,
@@ -115,7 +116,8 @@ public:
                                          mg_constraints,
                                          mg_operators,
                                          params.get<bool>("one-sided v-cycle",
-                                                          false))
+                                                          false),
+                                         intermediate_level)
     , params(params)
     , pcout(std::cout, Utilities::MPI::this_mpi_process(MPI_COMM_WORLD) == 0)
   {

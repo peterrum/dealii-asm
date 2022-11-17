@@ -253,14 +253,7 @@ public:
   {
     // setup operators on levels
     mg_coarse_preconditioner =
-      this->create_mg_coarse_grid_solver(intermediate_level,
-                                         *mg_operators[min_level]);
-
-    mg_fine_smoother.smoothers.resize(intermediate_level, max_level);
-    for (unsigned int level = intermediate_level + 1; level <= max_level;
-         ++level)
-      mg_fine_smoother.smoothers[level] =
-        this->create_mg_level_smoother(level, *mg_operators[level]);
+      this->create_mg_coarse_grid_solver(min_level, *mg_operators[min_level]);
 
     if (intermediate_level != min_level)
       {
@@ -270,7 +263,16 @@ public:
              ++level)
           mg_intermediate_smoother.smoothers[level] =
             this->create_mg_level_smoother(level, *mg_operators[level]);
+      }
 
+    mg_fine_smoother.smoothers.resize(intermediate_level, max_level);
+    for (unsigned int level = intermediate_level + 1; level <= max_level;
+         ++level)
+      mg_fine_smoother.smoothers[level] =
+        this->create_mg_level_smoother(level, *mg_operators[level]);
+
+    if (intermediate_level != min_level)
+      {
         mg_intermediate_matrix =
           std::make_unique<mg::Matrix<VectorType>>(mg_intermediate_operators);
 
