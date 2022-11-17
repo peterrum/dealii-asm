@@ -132,14 +132,32 @@ public:
       &                                                    mg_constraints,
     const MGLevelObject<std::shared_ptr<LevelMatrixType>> &mg_operators,
     const bool use_one_sided_v_cycle)
+    : PreconditionerGMG(dof_handler,
+                        mg_dof_handlers,
+                        mg_constraints,
+                        mg_operators,
+                        use_one_sided_v_cycle,
+                        mg_dof_handlers.min_level())
+  {}
+
+  PreconditionerGMG(
+    const DoFHandler<dim> &dof_handler,
+    const MGLevelObject<std::shared_ptr<const DoFHandler<dim>>>
+      &mg_dof_handlers,
+    const MGLevelObject<std::shared_ptr<
+      const AffineConstraints<typename VectorType_::value_type>>>
+      &                                                    mg_constraints,
+    const MGLevelObject<std::shared_ptr<LevelMatrixType>> &mg_operators,
+    const bool         use_one_sided_v_cycle,
+    const unsigned int intermediate_level)
     : dof_handler(dof_handler)
     , mg_dof_handlers(mg_dof_handlers)
     , mg_constraints(mg_constraints)
     , mg_operators(mg_operators)
     , use_one_sided_v_cycle(use_one_sided_v_cycle)
     , min_level(mg_dof_handlers.min_level())
+    , intermediate_level(intermediate_level)
     , max_level(mg_dof_handlers.max_level())
-    , mg_fine_transfers(min_level, max_level)
   {}
 
   virtual SmootherType
@@ -225,8 +243,6 @@ public:
   void
   do_update()
   {
-    const unsigned int intermediate_level = min_level;
-
     // setup operators on levels
     mg_coarse_preconditioner =
       this->create_mg_coarse_grid_solver(intermediate_level,
@@ -295,6 +311,7 @@ public:
 
     // setup transfer operators (note: we do it here, since the smoothers
     // might change the ghosting of the level operators)
+    mg_fine_transfers.resize(intermediate_level, max_level);
     for (auto l = intermediate_level; l < max_level; ++l)
       mg_fine_transfers[l + 1].reinit(*mg_dof_handlers[l + 1],
                                       *mg_dof_handlers[l],
@@ -369,22 +386,20 @@ public:
 
         const auto create_mg_timer_function = [&](const unsigned int i,
                                                   const std::string &label) {
-          return
-            [i, label, intermediate_level, this](const bool         flag,
-                                                 const unsigned int level) {
-              if (false && flag)
-                std::cout << label << " " << level << std::endl;
-              if (flag)
-                all_mg_timers[level - intermediate_level][i].second =
-                  std::chrono::system_clock::now();
-              else
-                all_mg_timers[level - intermediate_level][i].first +=
-                  std::chrono::duration_cast<std::chrono::nanoseconds>(
-                    std::chrono::system_clock::now() -
-                    all_mg_timers[level - intermediate_level][i].second)
-                    .count() /
-                  1e9;
-            };
+          return [i, label, this](const bool flag, const unsigned int level) {
+            if (false && flag)
+              std::cout << label << " " << level << std::endl;
+            if (flag)
+              all_mg_timers[level - intermediate_level][i].second =
+                std::chrono::system_clock::now();
+            else
+              all_mg_timers[level - intermediate_level][i].first +=
+                std::chrono::duration_cast<std::chrono::nanoseconds>(
+                  std::chrono::system_clock::now() -
+                  all_mg_timers[level - intermediate_level][i].second)
+                  .count() /
+                1e9;
+          };
         };
 
         {
@@ -448,6 +463,7 @@ protected:
   // settings
   const bool         use_one_sided_v_cycle;
   const unsigned int min_level;
+  const unsigned int intermediate_level;
   const unsigned int max_level;
 
   // transfer
