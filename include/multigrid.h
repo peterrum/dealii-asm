@@ -249,7 +249,8 @@ public:
                                          *mg_operators[min_level]);
 
     mg_fine_smoother.smoothers.resize(intermediate_level, max_level);
-    for (unsigned int level = intermediate_level; level <= max_level; ++level)
+    for (unsigned int level = intermediate_level + 1; level <= max_level;
+         ++level)
       mg_fine_smoother.smoothers[level] =
         this->create_mg_level_smoother(level, *mg_operators[level]);
 
@@ -257,7 +258,7 @@ public:
       {
         mg_intermediate_smoother.smoothers.resize(min_level,
                                                   intermediate_level);
-        for (unsigned int level = min_level; level <= intermediate_level;
+        for (unsigned int level = min_level + 1; level <= intermediate_level;
              ++level)
           mg_intermediate_smoother.smoothers[level] =
             this->create_mg_level_smoother(level, *mg_operators[level]);
