@@ -131,12 +131,14 @@ public:
       const AffineConstraints<typename VectorType_::value_type>>>
       &                                                    mg_constraints,
     const MGLevelObject<std::shared_ptr<LevelMatrixType>> &mg_operators,
-    const bool use_one_sided_v_cycle)
+    const bool         use_one_sided_v_cycle,
+    const unsigned int n_coarse_cycles)
     : PreconditionerGMG(dof_handler,
                         mg_dof_handlers,
                         mg_constraints,
                         mg_operators,
                         use_one_sided_v_cycle,
+                        n_coarse_cycles,
                         mg_dof_handlers.min_level())
   {}
 
@@ -149,12 +151,14 @@ public:
       &                                                    mg_constraints,
     const MGLevelObject<std::shared_ptr<LevelMatrixType>> &mg_operators,
     const bool         use_one_sided_v_cycle,
+    const unsigned int n_coarse_cycles,
     const unsigned int intermediate_level)
     : dof_handler(dof_handler)
     , mg_dof_handlers(mg_dof_handlers)
     , mg_constraints(mg_constraints)
     , mg_operators(mg_operators)
     , use_one_sided_v_cycle(use_one_sided_v_cycle)
+    , n_coarse_cycles(n_coarse_cycles)
     , min_level(mg_dof_handlers.min_level())
     , intermediate_level(intermediate_level)
     , max_level(mg_dof_handlers.max_level())
@@ -341,10 +345,10 @@ public:
         this->mg_operators[l]->initialize_dof_vector(vec);
       });
 
-    // setup coarse-grid solver
-    if (true)
+    // setup coarse-grid solver ...
+    if (n_coarse_cycles == 1)
       {
-        // single coarse solve
+        // ... single coarse solve
         mg_coarse = std::make_unique<
           MGCoarseGridApplyPreconditioner<VectorType, SmootherType>>(
           mg_intermediate_preconditioner ? *mg_intermediate_preconditioner :
@@ -352,11 +356,9 @@ public:
       }
     else
       {
-        // multiple cycles
-        const unsigned int n_cycles = 10; // TODO
-
+        // ... multiple cycles
         mg_coarse_relaxation_solver_control =
-          std::make_unique<IterationNumberControl>(n_cycles, 1e-20);
+          std::make_unique<IterationNumberControl>(n_coarse_cycles, 1e-20);
 
         mg_coarse_relaxation = std::make_unique<SolverRelaxation<VectorType>>(
           *mg_coarse_relaxation_solver_control);
@@ -368,7 +370,8 @@ public:
                                       SmootherType>>(
           *mg_coarse_relaxation,
           *mg_operators[intermediate_level],
-          mg_coarse_preconditioner);
+          mg_intermediate_preconditioner ? *mg_intermediate_preconditioner :
+                                           mg_coarse_preconditioner);
       }
 
     // create multigrid algorithm (put level operators, smoothers, transfer
@@ -483,6 +486,7 @@ protected:
 
   // settings
   const bool         use_one_sided_v_cycle;
+  const unsigned int n_coarse_cycles;
   const unsigned int min_level;
   const unsigned int intermediate_level;
   const unsigned int max_level;

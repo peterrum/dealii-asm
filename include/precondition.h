@@ -111,13 +111,14 @@ public:
                         LevelMatrixType_,
                         WrapperForGMG<VectorType>,
                         VectorType,
-                        VectorTypeOuter>(dof_handler,
-                                         mg_dof_handlers,
-                                         mg_constraints,
-                                         mg_operators,
-                                         params.get<bool>("one-sided v-cycle",
-                                                          false),
-                                         intermediate_level)
+                        VectorTypeOuter>(
+        dof_handler,
+        mg_dof_handlers,
+        mg_constraints,
+        mg_operators,
+        params.get<bool>("one-sided v-cycle", false),
+        params.get<unsigned int>("n coarse cycles", 1),
+        intermediate_level)
     , params(params)
     , pcout(std::cout, Utilities::MPI::this_mpi_process(MPI_COMM_WORLD) == 0)
   {
