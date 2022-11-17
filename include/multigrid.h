@@ -225,10 +225,33 @@ public:
   void
   do_update()
   {
-    // setup coarse-grid solver
+    // setup operators on levels
     mg_coarse_preconditioner =
       this->create_mg_coarse_grid_solver(min_level, *mg_operators[min_level]);
 
+    mg_fine_smoother.smoothers.resize(min_level, max_level);
+
+    for (unsigned int level = min_level + 1; level <= max_level; ++level)
+      mg_fine_smoother.smoothers[level] =
+        this->create_mg_level_smoother(level, *mg_operators[level]);
+
+    // wrap level operators
+    mg_fine_matrix = std::make_unique<mg::Matrix<VectorType>>(mg_operators);
+
+    // setup transfer operators (note: we do it here, since the smoothers
+    // might change the ghosting of the level operators)
+    for (auto l = min_level; l < max_level; ++l)
+      mg_fine_transfers[l + 1].reinit(*mg_dof_handlers[l + 1],
+                                      *mg_dof_handlers[l],
+                                      *mg_constraints[l + 1],
+                                      *mg_constraints[l]);
+
+    mg_fine_transfer = std::make_shared<MGTransferType>(
+      mg_fine_transfers, [&](const auto l, auto &vec) {
+        this->mg_operators[l]->initialize_dof_vector(vec);
+      });
+
+    // setup coarse-grid solver
     if (true)
       {
         // single coarse solve
@@ -255,29 +278,6 @@ public:
                                                      *mg_operators[min_level],
                                                      mg_coarse_preconditioner);
       }
-
-    // setup smoothers on each level
-    mg_fine_smoother.smoothers.resize(min_level, max_level);
-
-    for (unsigned int level = min_level + 1; level <= max_level; ++level)
-      mg_fine_smoother.smoothers[level] =
-        this->create_mg_level_smoother(level, *mg_operators[level]);
-
-    // wrap level operators
-    mg_fine_matrix = std::make_unique<mg::Matrix<VectorType>>(mg_operators);
-
-    // setup transfer operators (note: we do it here, since the smoothers
-    // might change the ghosting of the level operators)
-    for (auto l = min_level; l < max_level; ++l)
-      mg_fine_transfers[l + 1].reinit(*mg_dof_handlers[l + 1],
-                                      *mg_dof_handlers[l],
-                                      *mg_constraints[l + 1],
-                                      *mg_constraints[l]);
-
-    mg_fine_transfer = std::make_shared<MGTransferType>(
-      mg_fine_transfers, [&](const auto l, auto &vec) {
-        this->mg_operators[l]->initialize_dof_vector(vec);
-      });
 
     // create multigrid algorithm (put level operators, smoothers, transfer
     // operators and smoothers together)
