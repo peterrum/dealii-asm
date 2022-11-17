@@ -328,8 +328,9 @@ test(const boost::property_tree::ptree params, ConvergenceTable &table)
       transformation_function = [epsy, epsz](const auto &,
                                              const auto &in_point) {
         Point<dim> out_point;
+        double     dummy = 0.0;
         // clang-format off
-        kershaw(epsy, epsz, in_point[0], in_point[1], in_point[2], out_point[0], out_point[1], out_point[2]);
+        kershaw(epsy, epsz, in_point[0], in_point[1], dim == 3 ? in_point[2] : dummy, out_point[0], out_point[1], dim == 3 ? out_point[2] : dummy);
         // clang-format on
 
         return out_point;

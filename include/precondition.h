@@ -149,9 +149,17 @@ public:
 
     (void)level;
 
-    return WrapperForGMG<VectorType>(
-      create_system_preconditioner<LevelMatrixType>(
-        level_matrix, try_get_child(params, "mg smoother")));
+    const auto params_intermediate =
+      try_get_child(params, "mg intermediate smoother");
+
+    if (params_intermediate.get<std::string>("type", "") != "")
+      return WrapperForGMG<VectorType>(
+        create_system_preconditioner<LevelMatrixType>(level_matrix,
+                                                      params_intermediate));
+    else
+      return WrapperForGMG<VectorType>(
+        create_system_preconditioner<LevelMatrixType>(
+          level_matrix, try_get_child(params, "mg smoother")));
   }
 
   SmootherType
