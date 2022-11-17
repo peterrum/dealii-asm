@@ -33,6 +33,11 @@ public:
     : base(base)
   {}
 
+  template <typename T>
+  WrapperForGMG(const std::shared_ptr<T> &base_in)
+    : base(std::make_shared<PreconditionerAdapter<VectorType, T>>(base_in))
+  {}
+
   void
   vmult(VectorType &dst, const VectorType &src) const
   {

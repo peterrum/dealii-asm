@@ -245,6 +245,49 @@ public:
              ++level)
           mg_intermediate_smoother.smoothers[level] =
             this->create_mg_level_smoother(level, *mg_operators[level]);
+
+        mg_intermediate_matrix =
+          std::make_unique<mg::Matrix<VectorType>>(mg_operators);
+
+        mg_intermediate_transfers.resize(min_level, intermediate_level);
+        for (auto l = min_level; l < intermediate_level; ++l)
+          mg_intermediate_transfers[l + 1].reinit(*mg_dof_handlers[l + 1],
+                                                  *mg_dof_handlers[l],
+                                                  *mg_constraints[l + 1],
+                                                  *mg_constraints[l]);
+
+        mg_intermediate_transfer = std::make_shared<MGTransferType>(
+          mg_intermediate_transfers, [&](const auto l, auto &vec) {
+            this->mg_operators[l]->initialize_dof_vector(vec);
+          });
+
+        mg_intermediate_coarse = std::make_unique<
+          MGCoarseGridApplyPreconditioner<VectorType, SmootherType>>(
+          mg_coarse_preconditioner);
+
+        if (use_one_sided_v_cycle)
+          mg_intermediate =
+            std::make_unique<Multigrid<VectorType>>(*mg_intermediate_matrix,
+                                                    *mg_intermediate_coarse,
+                                                    *mg_intermediate_transfer,
+                                                    mg_intermediate_smoother,
+                                                    mg_smoother_identity,
+                                                    min_level,
+                                                    intermediate_level);
+        else
+          mg_intermediate =
+            std::make_unique<Multigrid<VectorType>>(*mg_intermediate_matrix,
+                                                    *mg_intermediate_coarse,
+                                                    *mg_intermediate_transfer,
+                                                    mg_intermediate_smoother,
+                                                    mg_intermediate_smoother,
+                                                    min_level,
+                                                    intermediate_level);
+
+        // convert multigrid algorithm to preconditioner
+        mg_intermediate_preconditioner = std::make_unique<SmootherType>(
+          std::make_shared<PreconditionMG<dim, VectorType, MGTransferType>>(
+            dof_handler, *mg_intermediate, *mg_intermediate_transfer));
       }
 
     // wrap level operators
@@ -269,7 +312,8 @@ public:
         // single coarse solve
         mg_coarse = std::make_unique<
           MGCoarseGridApplyPreconditioner<VectorType, SmootherType>>(
-          mg_coarse_preconditioner);
+          mg_intermediate_preconditioner ? *mg_intermediate_preconditioner :
+                                           mg_coarse_preconditioner);
       }
     else
       {
@@ -419,6 +463,14 @@ protected:
   // intermediate
   mutable MGSmootherRelaxation<LevelMatrixType, SmootherType, VectorType>
     mg_intermediate_smoother;
+
+  mutable std::unique_ptr<mg::Matrix<VectorType>>    mg_intermediate_matrix;
+  MGLevelObject<MGTwoLevelTransfer<dim, VectorType>> mg_intermediate_transfers;
+  std::shared_ptr<MGTransferType>                    mg_intermediate_transfer;
+
+  mutable std::unique_ptr<MGCoarseGridBase<VectorType>> mg_intermediate_coarse;
+  mutable std::unique_ptr<Multigrid<VectorType>>        mg_intermediate;
+  mutable std::unique_ptr<SmootherType> mg_intermediate_preconditioner;
 
   // smoothers
   mutable MGSmootherRelaxation<LevelMatrixType, SmootherType, VectorType>
