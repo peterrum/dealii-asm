@@ -139,7 +139,7 @@ public:
     , use_one_sided_v_cycle(use_one_sided_v_cycle)
     , min_level(mg_dof_handlers.min_level())
     , max_level(mg_dof_handlers.max_level())
-    , transfers(min_level, max_level)
+    , mg_fine_transfers(min_level, max_level)
   {}
 
   virtual SmootherType
@@ -226,15 +226,15 @@ public:
   do_update()
   {
     // setup coarse-grid solver
-    coarse_grid_preconditioner =
+    mg_coarse_preconditioner =
       this->create_mg_coarse_grid_solver(min_level, *mg_operators[min_level]);
 
-    if (false)
+    if (true)
       {
         // single coarse solve
         mg_coarse = std::make_unique<
           MGCoarseGridApplyPreconditioner<VectorType, SmootherType>>(
-          coarse_grid_preconditioner);
+          mg_coarse_preconditioner);
       }
     else
       {
@@ -251,58 +251,57 @@ public:
           MGCoarseGridIterativeSolver<VectorType,
                                       SolverRelaxation<VectorType>,
                                       LevelMatrixType,
-                                      SmootherType>>(
-          *mg_coarse_relaxation,
-          *mg_operators[min_level],
-          coarse_grid_preconditioner);
+                                      SmootherType>>(*mg_coarse_relaxation,
+                                                     *mg_operators[min_level],
+                                                     mg_coarse_preconditioner);
       }
 
     // setup smoothers on each level
-    mg_smoother.smoothers.resize(min_level, max_level);
+    mg_fine_smoother.smoothers.resize(min_level, max_level);
 
     for (unsigned int level = min_level + 1; level <= max_level; ++level)
-      mg_smoother.smoothers[level] =
+      mg_fine_smoother.smoothers[level] =
         this->create_mg_level_smoother(level, *mg_operators[level]);
 
     // wrap level operators
-    mg_matrix = std::make_unique<mg::Matrix<VectorType>>(mg_operators);
+    mg_fine_matrix = std::make_unique<mg::Matrix<VectorType>>(mg_operators);
 
     // setup transfer operators (note: we do it here, since the smoothers
     // might change the ghosting of the level operators)
     for (auto l = min_level; l < max_level; ++l)
-      transfers[l + 1].reinit(*mg_dof_handlers[l + 1],
-                              *mg_dof_handlers[l],
-                              *mg_constraints[l + 1],
-                              *mg_constraints[l]);
+      mg_fine_transfers[l + 1].reinit(*mg_dof_handlers[l + 1],
+                                      *mg_dof_handlers[l],
+                                      *mg_constraints[l + 1],
+                                      *mg_constraints[l]);
 
-    transfer =
-      std::make_shared<MGTransferType>(transfers, [&](const auto l, auto &vec) {
+    mg_fine_transfer = std::make_shared<MGTransferType>(
+      mg_fine_transfers, [&](const auto l, auto &vec) {
         this->mg_operators[l]->initialize_dof_vector(vec);
       });
 
     // create multigrid algorithm (put level operators, smoothers, transfer
     // operators and smoothers together)
     if (use_one_sided_v_cycle)
-      mg = std::make_unique<Multigrid<VectorType>>(*mg_matrix,
-                                                   *mg_coarse,
-                                                   *transfer,
-                                                   mg_smoother,
-                                                   mg_smoother_identity,
-                                                   min_level,
-                                                   max_level);
+      mg_fine = std::make_unique<Multigrid<VectorType>>(*mg_fine_matrix,
+                                                        *mg_coarse,
+                                                        *mg_fine_transfer,
+                                                        mg_fine_smoother,
+                                                        mg_smoother_identity,
+                                                        min_level,
+                                                        max_level);
     else
-      mg = std::make_unique<Multigrid<VectorType>>(*mg_matrix,
-                                                   *mg_coarse,
-                                                   *transfer,
-                                                   mg_smoother,
-                                                   mg_smoother,
-                                                   min_level,
-                                                   max_level);
+      mg_fine = std::make_unique<Multigrid<VectorType>>(*mg_fine_matrix,
+                                                        *mg_coarse,
+                                                        *mg_fine_transfer,
+                                                        mg_fine_smoother,
+                                                        mg_fine_smoother,
+                                                        min_level,
+                                                        max_level);
 
     // convert multigrid algorithm to preconditioner
     preconditioner =
       std::make_unique<PreconditionMG<dim, VectorType, MGTransferType>>(
-        dof_handler, *mg, *transfer);
+        dof_handler, *mg_fine, *mg_fine_transfer);
 
     // timers
     if (true)
@@ -329,16 +328,19 @@ public:
         };
 
         {
-          mg->connect_pre_smoother_step(
+          mg_fine->connect_pre_smoother_step(
             create_mg_timer_function(0, "pre_smoother_step"));
-          mg->connect_residual_step(
+          mg_fine->connect_residual_step(
             create_mg_timer_function(1, "residual_step"));
-          mg->connect_restriction(create_mg_timer_function(2, "restriction"));
-          mg->connect_coarse_solve(create_mg_timer_function(3, "coarse_solve"));
-          mg->connect_prolongation(create_mg_timer_function(4, "prolongation"));
-          mg->connect_edge_prolongation(
+          mg_fine->connect_restriction(
+            create_mg_timer_function(2, "restriction"));
+          mg_fine->connect_coarse_solve(
+            create_mg_timer_function(3, "coarse_solve"));
+          mg_fine->connect_prolongation(
+            create_mg_timer_function(4, "prolongation"));
+          mg_fine->connect_edge_prolongation(
             create_mg_timer_function(5, "edge_prolongation"));
-          mg->connect_post_smoother_step(
+          mg_fine->connect_post_smoother_step(
             create_mg_timer_function(6, "post_smoother_step"));
         }
 
@@ -375,40 +377,38 @@ public:
   }
 
 protected:
-  const DoFHandler<dim> &dof_handler;
-
+  // level information
+  const DoFHandler<dim> &                                     dof_handler;
   const MGLevelObject<std::shared_ptr<const DoFHandler<dim>>> mg_dof_handlers;
   const MGLevelObject<
     std::shared_ptr<const AffineConstraints<typename VectorType::value_type>>>
                                                         mg_constraints;
   const MGLevelObject<std::shared_ptr<LevelMatrixType>> mg_operators;
 
-  const bool use_one_sided_v_cycle;
-
+  // settings
+  const bool         use_one_sided_v_cycle;
   const unsigned int min_level;
   const unsigned int max_level;
 
   // transfer
-  MGLevelObject<MGTwoLevelTransfer<dim, VectorType>> transfers;
-  std::shared_ptr<MGTransferType>                    transfer;
+  MGLevelObject<MGTwoLevelTransfer<dim, VectorType>> mg_fine_transfers;
+  std::shared_ptr<MGTransferType>                    mg_fine_transfer;
 
   // coarse-grid solver
-  mutable SmootherType coarse_grid_preconditioner;
-
+  mutable SmootherType                   mg_coarse_preconditioner;
   mutable std::unique_ptr<SolverControl> mg_coarse_relaxation_solver_control;
   mutable std::unique_ptr<SolverRelaxation<VectorType>> mg_coarse_relaxation;
-
   mutable std::unique_ptr<MGCoarseGridBase<VectorType>> mg_coarse;
 
   // smoothers
   mutable MGSmootherRelaxation<LevelMatrixType, SmootherType, VectorType>
-    mg_smoother;
+    mg_fine_smoother;
 
   mutable MGSmootherIdentity<VectorType> mg_smoother_identity;
 
   // multigrid
-  mutable std::unique_ptr<mg::Matrix<VectorType>> mg_matrix;
-  mutable std::unique_ptr<Multigrid<VectorType>>  mg;
+  mutable std::unique_ptr<mg::Matrix<VectorType>> mg_fine_matrix;
+  mutable std::unique_ptr<Multigrid<VectorType>>  mg_fine;
   mutable std::unique_ptr<PreconditionMG<dim, VectorType, MGTransferType>>
     preconditioner;
 
