@@ -545,10 +545,12 @@ test(const boost::property_tree::ptree params, ConvergenceTable &table)
 
       auto result = std::find_if(levels.rbegin(),
                                  levels.rend(),
-                                 [](const auto &i) { return i.first == 1; });
+                                 [](const auto &i) { return i.second == 1; });
 
       const unsigned int intermediate_level =
-        ((result != levels.rend()) ? std::distance(result, levels.rend()) : 0) +
+        ((result != levels.rend()) ?
+           (std::distance(result, levels.rend()) - 1) :
+           0) +
         min_level;
 
 
