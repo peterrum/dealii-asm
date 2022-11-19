@@ -525,47 +525,56 @@ public:
 
         dst_ = invalid_cell_id;
 
-        dst_.update_ghost_values();
+        auto norm_0 = dst_.l2_norm();
 
-        for (unsigned int cell = 0; cell < matrix_free.n_cell_batches(); ++cell)
+        do
           {
-            for (unsigned int v = 0;
-                 v < matrix_free.n_active_entries_per_cell_batch(cell);
-                 ++v)
+            norm_0 = dst_.l2_norm();
+            dst_.update_ghost_values();
+
+            for (unsigned int cell = 0; cell < matrix_free.n_cell_batches();
+                 ++cell)
               {
-                // gather
-                internal::VectorReader<Number, VectorizedArrayType> reader;
-                constraint_info.read_write_operation(reader,
-                                                     dst_,
-                                                     dst__.data(),
-                                                     cell_ptr[cell],
-                                                     cell_ptr[cell + 1] -
-                                                       cell_ptr[cell],
-                                                     dst__.size(),
-                                                     true);
+                for (unsigned int v = 0;
+                     v < matrix_free.n_active_entries_per_cell_batch(cell);
+                     ++v)
+                  {
+                    // gather
+                    internal::VectorReader<Number, VectorizedArrayType> reader;
+                    constraint_info.read_write_operation(reader,
+                                                         dst_,
+                                                         dst__.data(),
+                                                         cell_ptr[cell],
+                                                         cell_ptr[cell + 1] -
+                                                           cell_ptr[cell],
+                                                         dst__.size(),
+                                                         true);
 
-                for (unsigned int i = 0; i < patch_size; ++i)
-                  if (dst__[i][v] == invalid_cell_id)
-                    dst__[i][v] =
-                      std::min<double>(dst__[i][v],
-                                       (cell_batch_prefix + cell) *
-                                           VectorizedArrayType::size() +
-                                         v);
+                    for (unsigned int i = 0; i < patch_size; ++i)
+                      if (dst__[i][v] == invalid_cell_id)
+                        dst__[i][v] =
+                          std::min<double>(dst__[i][v],
+                                           (cell_batch_prefix + cell) *
+                                               VectorizedArrayType::size() +
+                                             v);
 
-                // scatter
-                internal::VectorSetter<Number, VectorizedArrayType> writer;
-                constraint_info.read_write_operation(writer,
-                                                     dst_,
-                                                     dst__.data(),
-                                                     cell_ptr[cell],
-                                                     cell_ptr[cell + 1] -
-                                                       cell_ptr[cell],
-                                                     dst__.size(),
-                                                     true);
+                    // scatter
+                    internal::VectorSetter<Number, VectorizedArrayType> writer;
+                    constraint_info.read_write_operation(writer,
+                                                         dst_,
+                                                         dst__.data(),
+                                                         cell_ptr[cell],
+                                                         cell_ptr[cell + 1] -
+                                                           cell_ptr[cell],
+                                                         dst__.size(),
+                                                         true);
+                  }
               }
-          }
 
-        dst_.compress(VectorOperation::min);
+            dst_.compress(VectorOperation::min);
+          }
+        while (norm_0 != dst_.l2_norm());
+
 
         weights.reinit(partitioner_fdm);
         weights.copy_locally_owned_data_from(dst_);
