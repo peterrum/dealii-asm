@@ -10,6 +10,7 @@ namespace Restrictors
     none,
     pre,
     post,
+    ras,
     symm
   };
 

@@ -18,6 +18,8 @@ get_weighting_type(const boost::property_tree::ptree params)
     return Restrictors::WeightingType::pre;
   else if (type == "post")
     return Restrictors::WeightingType::post;
+  else if (type == "ras")
+    return Restrictors::WeightingType::ras;
   else if (type == "none")
     return Restrictors::WeightingType::none;
 

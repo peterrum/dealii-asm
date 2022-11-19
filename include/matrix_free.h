@@ -487,43 +487,49 @@ public:
                                 vector_partitioner->locally_owned_size());
     }
 
-    {
-      AlignedVector<VectorizedArrayType> dst__(patch_size);
+    if (weight_type == Restrictors::WeightingType::ras)
+      {
+        AssertThrow(false, ExcNotImplemented());
+      }
+    else
+      {
+        AlignedVector<VectorizedArrayType> dst__(patch_size);
 
-      dst_ = 0.0;
+        dst_ = 0.0;
 
-      for (auto &i : dst__)
-        i = 1.0;
+        for (auto &i : dst__)
+          i = 1.0;
 
-      for (unsigned int cell = 0; cell < matrix_free.n_cell_batches(); ++cell)
-        {
-          internal::VectorDistributorLocalToGlobal<Number, VectorizedArrayType>
-            writer;
-          constraint_info.read_write_operation(writer,
-                                               dst_,
-                                               dst__.data(),
-                                               cell_ptr[cell],
-                                               cell_ptr[cell + 1] -
+        for (unsigned int cell = 0; cell < matrix_free.n_cell_batches(); ++cell)
+          {
+            internal::VectorDistributorLocalToGlobal<Number,
+                                                     VectorizedArrayType>
+              writer;
+            constraint_info.read_write_operation(writer,
+                                                 dst_,
+                                                 dst__.data(),
                                                  cell_ptr[cell],
-                                               dst__.size(),
-                                               true);
-        }
+                                                 cell_ptr[cell + 1] -
+                                                   cell_ptr[cell],
+                                                 dst__.size(),
+                                                 true);
+          }
 
-      dst_.compress(VectorOperation::add);
+        dst_.compress(VectorOperation::add);
 
-      weights.reinit(partitioner_fdm);
+        weights.reinit(partitioner_fdm);
 
-      weights.copy_locally_owned_data_from(dst_);
+        weights.copy_locally_owned_data_from(dst_);
 
-      for (auto &i : weights)
-        i = (i == 0.0) ?
-              1.0 :
-              (1.0 / ((weight_type == Restrictors::WeightingType::symm) ?
-                        std::sqrt(i) :
-                        i));
+        for (auto &i : weights)
+          i = (i == 0.0) ?
+                1.0 :
+                (1.0 / ((weight_type == Restrictors::WeightingType::symm) ?
+                          std::sqrt(i) :
+                          i));
 
-      weights.update_ghost_values();
-    }
+        weights.update_ghost_values();
+      }
 
     if (element_centric && (n_overlap == 1))
       {
@@ -547,6 +553,8 @@ public:
                 phi.reinit(cell);
                 phi.read_dof_values_plain(weights);
 
+                const auto weights_local = phi.begin_dof_values();
+
                 if (actually_use_compression)
                   {
                     const bool success =
@@ -554,17 +562,16 @@ public:
                         dim,
                         -1,
                         VectorizedArrayType>(
-                        phi.begin_dof_values(),
+                        weights_local,
                         1,
                         patch_size_1d,
                         weights_compressed_q2[cell].begin());
                     AssertThrow(success, ExcInternalError());
                   }
-
-                if (actually_use_dg)
+                else if (actually_use_dg)
                   {
                     for (unsigned int i = 0; i < patch_size; ++i)
-                      weights_dg[cell][i] = phi.begin_dof_values()[i];
+                      weights_dg[cell][i] = weights_local[i];
                   }
               }
           }
@@ -639,8 +646,7 @@ public:
                       }
                     AssertThrow(success, ExcInternalError());
                   }
-
-                if (actually_use_dg)
+                else if (actually_use_dg)
                   {
                     for (unsigned int i = 0; i < patch_size; ++i)
                       weights_dg[cell][i] = weights_local[i];
@@ -970,6 +976,7 @@ private:
                                                    const auto end) {
       if (do_weights_global &&
           (weight_type == Restrictors::WeightingType::post ||
+           weight_type == Restrictors::WeightingType::ras ||
            weight_type == Restrictors::WeightingType::symm))
         {
           const auto dst_ptr     = dst.begin();
@@ -993,6 +1000,7 @@ private:
 
       if (do_weights_global &&
           (weight_type == Restrictors::WeightingType::post ||
+           weight_type == Restrictors::WeightingType::ras ||
            weight_type == Restrictors::WeightingType::symm))
         {
           DEAL_II_OPENMP_SIMD_PRAGMA
@@ -1110,7 +1118,8 @@ private:
               weight_type == Restrictors::WeightingType::pre)) ||
             ((first_call == false) &&
              (weight_type == Restrictors::WeightingType::symm ||
-              weight_type == Restrictors::WeightingType::post)))
+              weight_type == Restrictors::WeightingType::post ||
+              weight_type == Restrictors::WeightingType::ras)))
           internal::weight_fe_q_dofs_by_entity<dim, -1, VectorizedArrayType>(
             &weights_compressed_q2[cell][0],
             1 /* TODO*/,
@@ -1124,7 +1133,8 @@ private:
               weight_type == Restrictors::WeightingType::pre)) ||
             ((first_call == false) &&
              (weight_type == Restrictors::WeightingType::symm ||
-              weight_type == Restrictors::WeightingType::post)))
+              weight_type == Restrictors::WeightingType::post ||
+              weight_type == Restrictors::WeightingType::ras)))
           {
             for (unsigned int i = 0; i < weights_dg.size(1); ++i)
               phi.begin_dof_values()[i] *= weights_dg[cell][i];
@@ -1144,7 +1154,8 @@ private:
               weight_type == Restrictors::WeightingType::pre)) ||
             ((first_call == false) &&
              (weight_type == Restrictors::WeightingType::symm ||
-              weight_type == Restrictors::WeightingType::post)))
+              weight_type == Restrictors::WeightingType::post ||
+              weight_type == Restrictors::WeightingType::ras)))
           {
             for (unsigned int i = 0; i < phi_weights.dofs_per_cell; ++i)
               phi.begin_dof_values()[i] *= phi_weights.begin_dof_values()[i];
@@ -1165,7 +1176,8 @@ private:
               weight_type == Restrictors::WeightingType::pre)) ||
             ((first_call == false) &&
              (weight_type == Restrictors::WeightingType::symm ||
-              weight_type == Restrictors::WeightingType::post)))
+              weight_type == Restrictors::WeightingType::post ||
+              weight_type == Restrictors::WeightingType::ras)))
           internal::
             weight_fe_q_dofs_by_entity_shifted<dim, -1, VectorizedArrayType>(
               &weights_compressed_q2[cell][0],
@@ -1180,7 +1192,8 @@ private:
               weight_type == Restrictors::WeightingType::pre)) ||
             ((first_call == false) &&
              (weight_type == Restrictors::WeightingType::symm ||
-              weight_type == Restrictors::WeightingType::post)))
+              weight_type == Restrictors::WeightingType::post ||
+              weight_type == Restrictors::WeightingType::ras)))
           {
             for (unsigned int i = 0; i < weights_dg.size(1); ++i)
               data[i] *= weights_dg[cell][i];
