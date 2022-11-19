@@ -552,50 +552,40 @@ public:
                                                          dst__.size(),
                                                          true);
 
-                    if (element_centric)
-                      {
-                        const auto predicate_1D = [&](const auto i) {
-                          return (n_overlap - 1 <= i) &&
-                                 (i < (fe_degree + n_overlap));
-                        };
+                    const auto predicate_1D = [&](const auto i) {
+                      if (element_centric)
+                        return (n_overlap - 1 <= i) &&
+                               (i < (fe_degree + n_overlap));
+                      else
+                        return (((patch_size_1d / 2 - counter) <= i) &&
+                                (i <= (patch_size_1d / 2 + counter)));
+                    };
 
-                        const auto predicate =
-                          [&](const auto i, const auto j, const auto k) {
-                            if (predicate_1D(i) == false)
-                              return false;
-                            if (dim >= 2 && (predicate_1D(j) == false))
-                              return false;
-                            if (dim == 3 && (predicate_1D(k) == false))
-                              return false;
+                    const auto predicate =
+                      [&](const auto i, const auto j, const auto k) {
+                        if (predicate_1D(i) == false)
+                          return false;
+                        if (dim >= 2 && (predicate_1D(j) == false))
+                          return false;
+                        if (dim == 3 && (predicate_1D(k) == false))
+                          return false;
 
-                            return true;
-                          };
+                        return true;
+                      };
 
-                        for (unsigned int k = 0, c = 0;
-                             k < ((dim == 3) ? patch_size_1d : 1);
-                             ++k)
-                          for (unsigned int j = 0;
-                               j < ((dim >= 3) ? patch_size_1d : 1);
-                               ++j)
-                            for (unsigned int i = 0; i < patch_size_1d;
-                                 ++i, ++c)
-                              if (predicate(i, j, k))
-                                dst__[c][v] = std::min<double>(
-                                  dst__[c][v],
-                                  (cell_batch_prefix + cell) *
-                                      VectorizedArrayType::size() +
-                                    v);
-                      }
-                    else
-                      {
-                        for (unsigned int i = 0; i < patch_size; ++i)
-                          if (dst__[i][v] == invalid_cell_id)
-                            dst__[i][v] =
-                              std::min<double>(dst__[i][v],
+                    for (unsigned int k = 0, c = 0;
+                         k < ((dim == 3) ? patch_size_1d : 1);
+                         ++k)
+                      for (unsigned int j = 0;
+                           j < ((dim >= 2) ? patch_size_1d : 1);
+                           ++j)
+                        for (unsigned int i = 0; i < patch_size_1d; ++i, ++c)
+                          if (predicate(i, j, k))
+                            dst__[c][v] =
+                              std::min<double>(dst__[c][v],
                                                (cell_batch_prefix + cell) *
                                                    VectorizedArrayType::size() +
                                                  v);
-                      }
 
                     // scatter
                     internal::VectorSetter<Number, VectorizedArrayType> writer;
