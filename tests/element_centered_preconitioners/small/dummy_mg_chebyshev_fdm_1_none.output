@@ -48,7 +48,7 @@
     - max ev: 1.2
     - omega:  0.90909
 
-- Setting up smoother on inermediate level 1
+- Setting up smoother on level 1
 
 - Create system preconditioner: FDM
     - n overlap:              1
@@ -62,7 +62,7 @@
     - max ev: 4.80001
     - omega:  0.227272
 
-- Setting up smoother on inermediate level 2
+- Setting up smoother on level 2
 
 - Create system preconditioner: FDM
     - n overlap:              1

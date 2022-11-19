@@ -14,7 +14,7 @@
     - max ev: 1.2
     - omega:  0.909091
 
-- Setting up smoother on inermediate level 1
+- Setting up smoother on level 1
 
 - Create system preconditioner: AdditiveSchwarzPreconditioner
 
@@ -24,7 +24,7 @@
     - max ev: 1.2
     - omega:  0.909091
 
-- Setting up smoother on inermediate level 2
+- Setting up smoother on level 2
 
 - Create system preconditioner: AdditiveSchwarzPreconditioner
 
