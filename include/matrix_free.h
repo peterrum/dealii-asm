@@ -33,6 +33,30 @@
     }
 // clang-format on
 
+template <typename T>
+std::tuple<T, T>
+my_compute_prefix_sum(const T &value, const MPI_Comm &comm)
+{
+#ifndef DEAL_II_WITH_MPI
+  (void)comm;
+  return {0, value};
+#else
+  T prefix = {};
+
+  int ierr = MPI_Exscan(&value,
+                        &prefix,
+                        1,
+                        Utilities::MPI::mpi_type_id_for_type<decltype(value)>,
+                        MPI_SUM,
+                        comm);
+  AssertThrowMPI(ierr);
+
+  T sum = Utilities::MPI::sum(value, comm);
+
+  return {prefix, sum};
+#endif
+}
+
 template <int dim, typename Number, typename VectorizedArrayType>
 class ASPoissonPreconditioner
   : public PreconditionerBase<LinearAlgebra::distributed::Vector<Number>>
@@ -487,9 +511,63 @@ public:
                                 vector_partitioner->locally_owned_size());
     }
 
+    unsigned int cell_batch_prefix = 0;
+
     if (weight_type == Restrictors::WeightingType::ras)
       {
         AssertThrow(false, ExcNotImplemented());
+
+        AlignedVector<VectorizedArrayType> dst__(patch_size);
+
+        auto [prefix, sum] =
+          my_compute_prefix_sum(matrix_free.n_cell_batches(), MPI_COMM_WORLD);
+        cell_batch_prefix = prefix;
+
+        const unsigned int invalid_cell_id = sum * VectorizedArrayType::size();
+
+        dst_ = invalid_cell_id;
+        dst_.update_ghost_values();
+
+        for (unsigned int cell = 0; cell < matrix_free.n_cell_batches(); ++cell)
+          {
+            for (unsigned int v = 0;
+                 v < matrix_free.n_active_entries_per_cell_batch(cell);
+                 ++v)
+              {
+                // gather
+                internal::VectorReader<Number, VectorizedArrayType> reader;
+                constraint_info.read_write_operation(reader,
+                                                     dst_,
+                                                     dst__.data(),
+                                                     cell_ptr[cell],
+                                                     cell_ptr[cell + 1] -
+                                                       cell_ptr[cell],
+                                                     dst__.size(),
+                                                     true);
+
+                for (unsigned int i = 0; i < patch_size; ++i)
+                  if (dst__[i][v] == invalid_cell_id)
+                    dst__[i][v] =
+                      std::min<double>(dst__[i][v],
+                                       (cell_batch_prefix + cell) *
+                                           VectorizedArrayType::size() * cell +
+                                         v);
+
+                // scatter
+                internal::VectorSetter<Number, VectorizedArrayType> writer;
+                constraint_info.read_write_operation(writer,
+                                                     dst_,
+                                                     dst__.data(),
+                                                     cell_ptr[cell],
+                                                     cell_ptr[cell + 1] -
+                                                       cell_ptr[cell],
+                                                     dst__.size(),
+                                                     true);
+              }
+          }
+
+        dst_.compress(VectorOperation::min);
+        weights.update_ghost_values();
       }
     else
       {
@@ -553,7 +631,22 @@ public:
                 phi.reinit(cell);
                 phi.read_dof_values_plain(weights);
 
-                const auto weights_local = phi.begin_dof_values();
+                auto weights_local = phi.begin_dof_values();
+
+                if (weight_type == Restrictors::WeightingType::ras)
+                  for (unsigned int i = 0; i < patch_size; ++i)
+                    for (unsigned int v = 0;
+                         v < matrix_free.n_active_entries_per_cell_batch(cell);
+                         ++v)
+                      {
+                        if (weights_local[i][v] ==
+                            ((cell_batch_prefix + cell) *
+                               VectorizedArrayType::size() * cell +
+                             v))
+                          weights_local[i][v] = 1.0;
+                        else
+                          weights_local[i][v] = 0.0;
+                      }
 
                 if (actually_use_compression)
                   {
@@ -610,6 +703,21 @@ public:
                                                        cell_ptr[cell],
                                                      weights_local.size(),
                                                      true);
+
+                if (weight_type == Restrictors::WeightingType::ras)
+                  for (unsigned int i = 0; i < patch_size; ++i)
+                    for (unsigned int v = 0;
+                         v < matrix_free.n_active_entries_per_cell_batch(cell);
+                         ++v)
+                      {
+                        if (weights_local[i][v] ==
+                            ((cell_batch_prefix + cell) *
+                               VectorizedArrayType::size() * cell +
+                             v))
+                          weights_local[i][v] = 1.0;
+                        else
+                          weights_local[i][v] = 0.0;
+                      }
 
                 if (actually_use_compression)
                   {
