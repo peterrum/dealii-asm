@@ -515,8 +515,6 @@ public:
 
     if (weight_type == Restrictors::WeightingType::ras)
       {
-        AssertThrow(false, ExcNotImplemented());
-
         AlignedVector<VectorizedArrayType> dst__(patch_size);
 
         auto [prefix, sum] =
@@ -526,6 +524,7 @@ public:
         const unsigned int invalid_cell_id = sum * VectorizedArrayType::size();
 
         dst_ = invalid_cell_id;
+
         dst_.update_ghost_values();
 
         for (unsigned int cell = 0; cell < matrix_free.n_cell_batches(); ++cell)
@@ -550,7 +549,7 @@ public:
                     dst__[i][v] =
                       std::min<double>(dst__[i][v],
                                        (cell_batch_prefix + cell) *
-                                           VectorizedArrayType::size() * cell +
+                                           VectorizedArrayType::size() +
                                          v);
 
                 // scatter
@@ -567,6 +566,9 @@ public:
           }
 
         dst_.compress(VectorOperation::min);
+
+        weights.reinit(partitioner_fdm);
+        weights.copy_locally_owned_data_from(dst_);
         weights.update_ghost_values();
       }
     else
@@ -641,7 +643,7 @@ public:
                       {
                         if (weights_local[i][v] ==
                             ((cell_batch_prefix + cell) *
-                               VectorizedArrayType::size() * cell +
+                               VectorizedArrayType::size() +
                              v))
                           weights_local[i][v] = 1.0;
                         else
@@ -712,7 +714,7 @@ public:
                       {
                         if (weights_local[i][v] ==
                             ((cell_batch_prefix + cell) *
-                               VectorizedArrayType::size() * cell +
+                               VectorizedArrayType::size() +
                              v))
                           weights_local[i][v] = 1.0;
                         else
