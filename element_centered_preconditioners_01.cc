@@ -262,18 +262,22 @@ test(const boost::property_tree::ptree params, ConvergenceTable &table)
 
   if (geometry_name == "hypercube")
     {
+      auto n_subdivisions = mesh_parameters.get<int>("n subdivisions", 1);
+
       pcout << "- Create mesh: hypercube" << std::endl;
       pcout << std::endl;
 
-      GridGenerator::hyper_cube(tria);
+      GridGenerator::subdivided_hyper_cube(tria, n_subdivisions);
       mapping_degree = std::min(mapping_degree, 1u);
     }
   else if (geometry_name == "symmetric hypercube")
     {
+      auto n_subdivisions = mesh_parameters.get<int>("n subdivisions", 1);
+
       pcout << "- Create mesh: symmetric hypercube" << std::endl;
       pcout << std::endl;
 
-      GridGenerator::hyper_cube(tria, -1.0, +1.0);
+      GridGenerator::subdivided_hyper_cube(tria, n_subdivisions, -1.0, +1.0);
       mapping_degree = std::min(mapping_degree, 1u);
     }
   else if (geometry_name == "anisotropy")
@@ -383,6 +387,16 @@ test(const boost::property_tree::ptree params, ConvergenceTable &table)
     {
       const std::vector<Point<dim>> points = {Point<dim>(-0.5, -0.5, -0.5)};
       const double                  width  = 0.1;
+
+      rhs_func = std::make_shared<GaussianRightHandSide<dim>>(points, width);
+      dbc_func = std::make_shared<GaussianSolution<dim>>(points, width);
+    }
+  else if (rhs_name == "gaussian-jw")
+    {
+      const std::vector<Point<dim>> points = {Point<dim>(0.0, 0.0, 0.0),
+                                              Point<dim>(0.25, 0.85, 0.85),
+                                              Point<dim>(0.6, 0.4, 0.4)};
+      const double                  width  = 0.3;
 
       rhs_func = std::make_shared<GaussianRightHandSide<dim>>(points, width);
       dbc_func = std::make_shared<GaussianSolution<dim>>(points, width);

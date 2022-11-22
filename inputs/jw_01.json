@@ -3,10 +3,9 @@
     "name": "fdm-1-r",
     "degree": 4,
     "dim": 3,
-    "operator compress indices" : true, 
     "solver": {
         "type": "CG",
-        "rel tolerance": 1e-05
+        "rel tolerance": 1e-08
     },
     "preconditioner": {
         "mg smoother": {
@@ -14,30 +13,27 @@
                 "n overlap": "2",
                 "type": "FDM",
                 "sub mesh approximation": 3,
-                "weighting type": "symm",
-                "weight sequence" : "compressed", 
+                "weighting type": "none",
                 "reuse partitioner" : "true",
-                "element centric" : "true"
+                "element centric" : "false"
             },
-            "type": "Chebyshev",
-            "degree": 2,
-            "optimize" : 2
+            "type": "Relaxation",
+            "degree": 1,
+            "omega": 0.125
         },
         "mg p sequence": "bisect",
         "mg coarse grid solver": {
             "type": "AMG"
         },
         "type": "Multigrid",
-        "mg type": "p",
-        "n coarse cycles": "2"
+        "mg type": "hp"
     },
     "mesh": {
-        "stratch": 50.0,
-        "name": "anisotropy",
-        "eps": 0.3,
-        "n initial refinements" : 0,
-        "n subdivisions" : 9
+        "name": "hypercube",
+        "n subdivisions": 4
     },
-    "n refinements": 2,
-    "type": "matrixfree"
+    "n refinements": 4,
+    "type": "matrixfree",
+    "do output": false,
+    "rhs": "gaussian-jw"
 }

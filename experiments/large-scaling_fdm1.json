@@ -28,12 +28,12 @@
             "type": "AMG"
         },
         "type": "Multigrid",
-        "mg type": "ph",
-        "n coarse cycles": "1"
+        "mg type": "p",
+        "n coarse cycles": "2"
     },
     "mesh": {
         "stratch": 50.0,
-        "name": "kershaw",
+        "name": "anisotropy",
         "eps": 0.3,
         "n initial refinements" : 0,
         "n subdivisions" : 9
