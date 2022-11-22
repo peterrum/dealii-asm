@@ -12,7 +12,7 @@
     "mesh": {"name" : "kershaw", "eps" : 0.2 , "stratch" : 1.0},
     "preconditioner" : {
         "type" : "Multigrid",
-        "mg type" : "p",
+        "mg type" : "ph",
         "mg p sequence" : "bisect",
         "mg smoother" : {
             "type" : "Chebyshev",
