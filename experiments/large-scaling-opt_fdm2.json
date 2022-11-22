@@ -1,33 +1,32 @@
 {
     "print timing": true,
-    "name": "gmres-fdm_post_1_f-4th_kind-one_sided",
+    "name": "cg-fdm_symm_2_f-1st_kind-two_sided",
     "degree": 4,
     "dim": 3,
     "solver": {
-        "type": "GMRES",
+        "type": "CG",
         "rel tolerance": 1e-05,
         "max n tmp vectors": 15
     },
     "preconditioner": {
-        "one-sided v-cycle": true,
         "mg smoother": {
-            "polynomial type": "4th kind",
+            "polynomial type": "1st kind",
             "type": "Chebyshev",
-            "degree": 6,
+            "degree": 3,
             "weighting type": "post",
             "preconditioner": {
-                "n overlap": "1",
+                "n overlap": "2",
                 "type": "FDM",
                 "sub mesh approximation": 3,
-                "weighting type": "post"
+                "weighting type": "symm"
             }
         },
         "mg p sequence": "bisect",
-        "mg type": "ph",
-        "type": "Multigrid",
         "mg coarse grid solver": {
             "type": "AMG"
-        }
+        },
+        "type": "Multigrid",
+        "mg type": "ph"
     },
     "mesh": {
         "stratch": 1.0,
