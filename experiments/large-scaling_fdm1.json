@@ -6,7 +6,8 @@
     "operator compress indices" : true, 
     "solver": {
         "type": "CG",
-        "rel tolerance": 1e-05
+        "rel tolerance": 1e-05,
+        "max n tmp vectors" : 20
     },
     "preconditioner": {
         "mg smoother": {

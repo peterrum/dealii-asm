@@ -6,18 +6,13 @@
     "operator compress indices" : true, 
     "solver": {
         "type": "CG",
-        "rel tolerance": 1e-05
+        "rel tolerance": 1e-05,
+        "max n tmp vectors" : 20
     },
     "preconditioner": {
         "mg smoother": {
             "preconditioner": {
-                "n overlap": "2",
-                "type": "Diagonal",
-                "sub mesh approximation": 3,
-                "weighting type": "symm",
-                "weight sequence" : "compressed", 
-                "reuse partitioner" : "true",
-                "element centric" : "true"
+                "type": "Diagonal"
             },
             "type": "Chebyshev",
             "degree": 3,
