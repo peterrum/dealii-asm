@@ -22,12 +22,20 @@
                 "weighting type": "symm"
             }
         },
+        "mg intermediate smoother": {
+            "preconditioner": {
+                "type": "Diagonal"
+            },
+            "type": "Chebyshev",
+            "optimize": "3",
+            "degree": 4
+        },
         "mg p sequence": "bisect",
+        "mg type": "ph",
+        "type": "Multigrid",
         "mg coarse grid solver": {
             "type": "AMG"
-        },
-        "type": "Multigrid",
-        "mg type": "ph"
+        }
     },
     "mesh": {
         "stratch": 1.0,
