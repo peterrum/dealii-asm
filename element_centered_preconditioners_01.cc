@@ -353,9 +353,10 @@ test(const boost::property_tree::ptree params, ConvergenceTable &table)
     }
 
 
-  for (const auto &face : tria.active_face_iterators())
-    if (face->at_boundary())
-      face->set_boundary_id(1);
+  for (const auto &cell : tria.cell_iterators())
+    for (const auto &face : cell->face_iterators())
+      if (face->at_boundary())
+        face->set_boundary_id(1);
 
   tria.refine_global(n_global_refinements);
 
