@@ -85,3 +85,13 @@ array=($(ls *.json))
 mpirun -np 40 ../element_centered_preconditioners_01 "${array[@]}" | tee output.out
 cd ..
 ```
+
+### SUPERMUC
+
+```
+mkdir experiments-large-scaling-opt
+cd experiments-large-scaling-opt
+python ../../experiments/large-scaling-create-job-files.py
+python ../../experiments/large-scaling-opt.py 3
+array=($(ls *.json))
+```
