@@ -9,3 +9,11 @@
       is_zero_ghost &= (vec[i] == 0.0);                         \
     AssertThrow(is_zero_ghost, ExcInternalError());             \
   }
+
+
+#define DEBUG_OUTPUT(a)                                        \
+  {                                                            \
+    MPI_Barrier(MPI_COMM_WORLD);                               \
+    if (Utilities::MPI::this_mpi_process(MPI_COMM_WORLD) == 0) \
+      std::cout << a << std::endl;                             \
+  }

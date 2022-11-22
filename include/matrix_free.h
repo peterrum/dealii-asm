@@ -11,6 +11,7 @@
 #include <deal.II/numerics/tensor_product_matrix_creator.h>
 
 #include "dof_tools.h"
+#include "exceptions.h"
 #include "grid_tools.h"
 #include "matrix_free_internal.h"
 #include "preconditioners.h"

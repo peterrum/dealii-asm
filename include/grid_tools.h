@@ -63,26 +63,49 @@ namespace dealii
                                                 triangulation,
                                                 quadrature);
 
+      int index = -1;
+
+      for (const auto &cell : triangulation.cell_iterators())
+        for (const auto &face : cell->face_iterators())
+          index = std::max<int>(index, face->index());
+
+      // std::cout << (index + 1) << " " << triangulation.n_faces() <<
+      // std::endl;
+
+      // AssertDimension(triangulation.n_faces(), index + 1);
+
       // 2) accumulate for each face the normal extend for the
       // neigboring cell(s); here we also consider periodicies
-      std::vector<double> face_extend(triangulation.n_faces(), 0.0);
+      std::vector<double> face_extend(index + 1, 0.0);
+
 
       for (const auto &cell : triangulation.active_cell_iterators())
         if (cell->is_artificial() == false)
           for (unsigned int d = 0; d < dim; ++d)
             {
+              AssertIndexRange(cell->active_cell_index(),
+                               harmonic_cell_extends.size());
+
               const auto extend =
                 harmonic_cell_extends[cell->active_cell_index()][d];
 
               const auto add_extend_to_faces = [&](const unsigned int face_no) {
-                face_extend[cell->face(face_no)->index()] += extend;
+                const auto index = cell->face(face_no)->index();
+                AssertIndexRange(index, face_extend.size());
+
+                face_extend[index] += extend;
 
                 if (cell->has_periodic_neighbor(face_no) &&
                     (cell->periodic_neighbor(face_no)->is_artificial() ==
                      false))
-                  face_extend[cell->periodic_neighbor(face_no)
-                                ->face(cell->periodic_neighbor_face_no(face_no))
-                                ->index()] += extend;
+                  {
+                    const auto index =
+                      cell->periodic_neighbor(face_no)
+                        ->face(cell->periodic_neighbor_face_no(face_no))
+                        ->index();
+
+                    face_extend[index] += extend;
+                  }
               };
 
               add_extend_to_faces(2 * d + 0); // face 0

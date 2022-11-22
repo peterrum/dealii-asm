@@ -352,7 +352,6 @@ test(const boost::property_tree::ptree params, ConvergenceTable &table)
                              "> is not known!"));
     }
 
-
   for (const auto &cell : tria.cell_iterators())
     for (const auto &face : cell->face_iterators())
       if (face->at_boundary())
@@ -469,15 +468,12 @@ test(const boost::property_tree::ptree params, ConvergenceTable &table)
 
       pcout << "- Create system preconditioner: Multigrid" << std::endl;
 
-      MGLevelObject<std::shared_ptr<const DoFHandler<dim>>> mg_dof_handlers;
+      std::vector<std::shared_ptr<const Triangulation<dim>>> mg_triangulations;
+      MGLevelObject<std::shared_ptr<MappingQCache<dim>>>     mg_mapping;
+      MGLevelObject<std::shared_ptr<LevelOperatorType>>      mg_operators;
+      MGLevelObject<std::shared_ptr<const DoFHandler<dim>>>  mg_dof_handlers;
       MGLevelObject<std::shared_ptr<const AffineConstraints<LevelNumber>>>
-                                                         mg_constraints;
-      MGLevelObject<std::shared_ptr<LevelOperatorType>>  mg_operators;
-      MGLevelObject<std::shared_ptr<MappingQCache<dim>>> mg_mapping;
-
-      MGLevelObject<MGTwoLevelTransfer<dim, LevelVectorType>> transfers;
-      std::unique_ptr<MGTransferGlobalCoarsening<dim, LevelVectorType>>
-        transfer;
+        mg_constraints;
 
       const auto mg_type =
         preconditioner_parameters.get<std::string>("mg type", "h");
@@ -517,7 +513,7 @@ test(const boost::property_tree::ptree params, ConvergenceTable &table)
 
       const auto mg_degress =
         create_polynomial_coarsening_sequence(fe_degree, mg_p_sequence);
-      const auto mg_triangulations =
+      mg_triangulations =
         MGTransferGlobalCoarseningTools::create_geometric_coarsening_sequence(
           tria);
 
@@ -563,12 +559,13 @@ test(const boost::property_tree::ptree params, ConvergenceTable &table)
                                  levels.rend(),
                                  [](const auto &i) { return i.second == 1; });
 
-      const unsigned int intermediate_level =
+      unsigned int intermediate_level =
         ((result != levels.rend()) ?
            (std::distance(result, levels.rend()) - 1) :
            0) +
         min_level;
 
+      intermediate_level = 0; // TODO
 
       mg_dof_handlers.resize(min_level, max_level);
       mg_constraints.resize(min_level, max_level);
