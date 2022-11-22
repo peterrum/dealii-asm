@@ -347,6 +347,7 @@ public:
     typename MatrixFree<dim, Number, VectorizedArrayType>::AdditionalData data;
     data.mapping_update_flags =
       update_values | update_gradients | update_quadrature_points;
+    data.overlap_communication_computation = false;
 
     MatrixFree<dim, Number, VectorizedArrayType> matrix_free;
     matrix_free.reinit(
