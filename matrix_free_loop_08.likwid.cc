@@ -370,10 +370,18 @@ test(const Parameters params_in)
                             .count() /
                           1e9;
 
+      const auto n_ghost_indices = Utilities::MPI::sum<types::global_dof_index>(
+        src.get_partitioner()->n_ghost_indices(), MPI_COMM_WORLD);
+      const auto n_import_indices =
+        Utilities::MPI::sum<types::global_dof_index>(
+          src.get_partitioner()->n_import_indices(), MPI_COMM_WORLD);
+
       pcout << ">> " << label << " " << std::to_string(dof_handler.n_dofs())
             << " " << std::to_string(params_in.n_repetitions * factor) << " "
             << time << " " << std::to_string(sizeof(Number)) << " "
-            << std::to_string(params_in.fe_degree) << " " << std::endl;
+            << std::to_string(params_in.fe_degree) << " "
+            << std::to_string(n_ghost_indices) << " "
+            << std::to_string(n_import_indices) << std::endl;
     }
 }
 
