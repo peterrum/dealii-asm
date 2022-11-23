@@ -4,6 +4,8 @@
 #include "multigrid.h"
 #include "preconditioners.h"
 
+MPI_Comm sub_comm;
+
 template <typename OperatorType>
 std::shared_ptr<
   const ASPoissonPreconditioner<OperatorType::dimension,

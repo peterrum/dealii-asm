@@ -589,9 +589,14 @@ create_system_preconditioner(const OperatorType &              op,
       typename PreconditionerType::AdditionalData additional_data;
       additional_data.n_cycles = 1;
 
-      const auto preconitioner = std::make_shared<PreconditionerType>();
+      std::shared_ptr<PreconditionerType> preconitioner;
 
-      preconitioner->initialize(op.get_sparse_matrix(), additional_data);
+      if (sub_comm != MPI_COMM_NULL)
+        {
+          preconitioner = std::make_shared<PreconditionerType>();
+          preconitioner->initialize(op.get_sparse_matrix(sub_comm),
+                                    additional_data);
+        }
 
       return std::make_shared<
         PreconditionerAdapter<VectorType, PreconditionerType, double>>(

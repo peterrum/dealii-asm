@@ -2,6 +2,7 @@
 #include <deal.II/base/convergence_table.h>
 #include <deal.II/base/quadrature_lib.h>
 
+#include <deal.II/distributed/repartitioning_policy_tools.h>
 #include <deal.II/distributed/tria.h>
 
 #include <deal.II/dofs/dof_handler.h>
@@ -220,6 +221,8 @@ template <typename OperatorTrait>
 void
 test(const boost::property_tree::ptree params, ConvergenceTable &table)
 {
+  const MPI_Comm comm = MPI_COMM_WORLD;
+
   const unsigned int fe_degree = params.get<unsigned int>("degree", 1);
   const unsigned int n_global_refinements =
     params.get<unsigned int>("n refinements", 6);
@@ -513,9 +516,56 @@ test(const boost::property_tree::ptree params, ConvergenceTable &table)
 
       const auto mg_degress =
         create_polynomial_coarsening_sequence(fe_degree, mg_p_sequence);
-      mg_triangulations =
-        MGTransferGlobalCoarseningTools::create_geometric_coarsening_sequence(
-          tria);
+
+      RepartitioningPolicyTools::DefaultPolicy<dim> policy(true);
+
+      if (mg_type == "h" || mg_type == "hp" || mg_type == "ph")
+        {
+          mg_triangulations = MGTransferGlobalCoarseningTools::
+            create_geometric_coarsening_sequence(tria, policy, true, false);
+
+          unsigned int cell_counter = 0;
+
+          for (const auto &cell : mg_triangulations[0]->active_cell_iterators())
+            if (cell->is_locally_owned())
+              cell_counter++;
+
+          const unsigned int rank = Utilities::MPI::this_mpi_process(comm);
+
+#if DEBUG
+          const auto t = Utilities::MPI::gather(comm, cell_counter);
+
+          if (rank == 0)
+            {
+              for (const auto tt : t)
+                std::cout << tt << " ";
+              std::cout << std::endl;
+            }
+#endif
+
+          const int temp = cell_counter == 0 ? -1 : rank;
+
+          const unsigned int max_rank = Utilities::MPI::max(temp, comm);
+
+          table.add_value("sub_comm_size", max_rank + 1);
+
+          if (max_rank != Utilities::MPI::n_mpi_processes(comm) - 1)
+            {
+              const bool color = rank <= max_rank;
+              MPI_Comm_split(comm, color, rank, &sub_comm);
+
+              if (color == false)
+                {
+                  MPI_Comm_free(&sub_comm);
+                  sub_comm = MPI_COMM_NULL;
+                }
+            }
+        }
+      else
+        {
+          mg_triangulations.emplace_back(&tria, [](auto *) {});
+          sub_comm = comm;
+        }
 
       std::vector<std::pair<unsigned int, unsigned int>> levels;
 
@@ -628,6 +678,9 @@ test(const boost::property_tree::ptree params, ConvergenceTable &table)
 
       solve(op, solution, rhs, preconditioner, solver_parameters, table);
     }
+
+  if (comm != sub_comm && sub_comm != MPI_COMM_NULL)
+    MPI_Comm_free(&sub_comm);
 
 
   if (params.get<bool>("do output", false))

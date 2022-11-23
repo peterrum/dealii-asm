@@ -199,6 +199,14 @@ public:
     return sparse_matrix;
   }
 
+  const TrilinosWrappers::SparseMatrix &
+  get_sparse_matrix(const MPI_Comm comm) const
+  {
+    AssertThrow(comm == MPI_COMM_WORLD, ExcInternalError());
+
+    return sparse_matrix;
+  }
+
   const TrilinosWrappers::SparsityPattern &
   get_sparsity_pattern() const
   {
@@ -1449,7 +1457,16 @@ public:
   get_sparse_matrix() const
   {
     if (sparse_matrix.m() == 0 && sparse_matrix.n() == 0)
-      compute_system_matrix();
+      compute_system_matrix(matrix_free.get_dof_handler().get_communicator());
+
+    return sparse_matrix;
+  }
+
+  const TrilinosWrappers::SparseMatrix &
+  get_sparse_matrix(const MPI_Comm comm) const
+  {
+    if (sparse_matrix.m() == 0 && sparse_matrix.n() == 0)
+      compute_system_matrix(comm);
 
     return sparse_matrix;
   }
@@ -1458,7 +1475,7 @@ public:
   get_sparsity_pattern() const
   {
     if (sparse_matrix.m() == 0 && sparse_matrix.n() == 0)
-      compute_system_matrix();
+      compute_system_matrix(matrix_free.get_dof_handler().get_communicator());
 
     return sparsity_pattern;
   }
@@ -1534,15 +1551,15 @@ private:
   }
 
   void
-  compute_system_matrix() const
+  compute_system_matrix(const MPI_Comm comm) const
   {
-    Assert((sparse_matrix.m() == 0 && sparse_matrix.n() == 0),
+    Assert((comm != MPI_COMM_NULL && sparse_matrix.m() == 0 &&
+            sparse_matrix.n() == 0),
            ExcNotImplemented());
 
     const auto &dof_handler = get_dof_handler();
 
-    sparsity_pattern.reinit(dof_handler.locally_owned_dofs(),
-                            dof_handler.get_triangulation().get_communicator());
+    sparsity_pattern.reinit(dof_handler.locally_owned_dofs(), comm);
 
     DoFTools::make_sparsity_pattern(dof_handler,
                                     sparsity_pattern,
