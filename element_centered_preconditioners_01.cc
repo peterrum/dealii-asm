@@ -559,13 +559,11 @@ test(const boost::property_tree::ptree params, ConvergenceTable &table)
                                  levels.rend(),
                                  [](const auto &i) { return i.second == 1; });
 
-      unsigned int intermediate_level =
+      const unsigned int intermediate_level =
         ((result != levels.rend()) ?
            (std::distance(result, levels.rend()) - 1) :
            0) +
         min_level;
-
-      intermediate_level = 0; // TODO
 
       mg_dof_handlers.resize(min_level, max_level);
       mg_constraints.resize(min_level, max_level);
