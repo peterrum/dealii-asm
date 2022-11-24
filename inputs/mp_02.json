@@ -24,7 +24,8 @@
             },
             "type": "Chebyshev",
             "degree": 5,
-            "optimize" : 2
+            "optimize" : 2,
+            "smoothing range" : 20
         },
         "mg p sequence": "bisect",
         "mg coarse grid solver": {

@@ -106,8 +106,9 @@ create_chebyshev_preconditioner(
   chebyshev_additional_data.preconditioner = precon;
   chebyshev_additional_data.constraints.copy_from(op.get_constraints());
   chebyshev_additional_data.degree = params.get<unsigned int>("degree", 3);
-  chebyshev_additional_data.smoothing_range     = 20;
-  chebyshev_additional_data.eig_cg_n_iterations = 20;
+  chebyshev_additional_data.smoothing_range =
+    params.get<double>("smoothing range", 20.);
+  chebyshev_additional_data.eig_cg_n_iterations = 10;
 
   const auto ev_algorithm =
     params.get<std::string>("ev algorithm", "power iteration");
