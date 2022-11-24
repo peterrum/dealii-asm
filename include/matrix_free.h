@@ -606,6 +606,19 @@ public:
         while (norm_0 != dst_.l2_norm());
 
 
+        if (element_centric)
+          {
+            bool succes = true;
+
+            for (const auto i : dst_)
+              succes &= (i == invalid_cell_id) ||
+                        ((prefix * VectorizedArrayType::size() <= i) &&
+                         (i < (prefix + matrix_free.n_cell_batches()) *
+                                VectorizedArrayType::size()));
+
+            AssertThrow(succes, ExcNotImplemented());
+          }
+
         weights.reinit(partitioner_fdm);
         weights.copy_locally_owned_data_from(dst_);
         weights.update_ghost_values();
