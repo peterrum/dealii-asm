@@ -92,6 +92,7 @@ public:
     , do_weights_global(weight_local_global == "global")
     , overlap_pre_post(overlap_pre_post)
     , element_centric(element_centric)
+    , needs_compression(true)
   {
     const auto &dof_handler = matrix_free.get_dof_handler();
     const auto &constraints = matrix_free.get_affine_constraints();
@@ -617,6 +618,8 @@ public:
                                 VectorizedArrayType::size()));
 
             AssertThrow(succes, ExcNotImplemented());
+
+            needs_compression = false;
           }
 
         weights.reinit(partitioner_fdm);
@@ -1235,7 +1238,8 @@ private:
           src_scratch,
           cell_operation_overlap,
           pre_operation_with_weighting,
-          post_operation_with_weighting);
+          post_operation_with_weighting,
+          needs_compression);
 
         MFRunner runner(overlap_pre_post);
         runner.loop(worker);
@@ -1259,7 +1263,8 @@ private:
           this->src_,
           cell_operation_overlap,
           pre_operation_with_copying_and_weighting,
-          post_operation_with_weighting_and_copying);
+          post_operation_with_weighting_and_copying,
+          needs_compression);
 
         MFRunner runner(overlap_pre_post);
         runner.loop(worker);
@@ -1435,6 +1440,7 @@ private:
   const bool                                          do_weights_global;
   const bool                                          overlap_pre_post;
   const bool                                          element_centric;
+  bool                                                needs_compression;
 
   std::shared_ptr<const Utilities::MPI::Partitioner> partitioner_fdm;
 
