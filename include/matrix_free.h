@@ -1189,12 +1189,28 @@ private:
         // version 1) with overlap=1 -> use dealii::MatrixFree
         if (overlap_pre_post)
           {
-            matrix_free.template cell_loop<VectorType, VectorType>(
-              cell_operation_normal,
+            VectorDataExchange<Number> exchanger_dst(partitioner_fdm,
+                                                     buffer_dst);
+            VectorDataExchange<Number> exchanger_src(partitioner_fdm,
+                                                     buffer_src);
+
+            MFWorker<dim, Number, VectorizedArrayType, VectorType> worker(
+              matrix_free,
+              matrix_free.get_dof_info().cell_loop_pre_list_index,
+              matrix_free.get_dof_info().cell_loop_pre_list,
+              matrix_free.get_dof_info().cell_loop_post_list_index,
+              matrix_free.get_dof_info().cell_loop_post_list,
+              exchanger_dst,
+              exchanger_src,
               dst,
               src_scratch,
+              cell_operation_overlap,
               pre_operation_with_weighting,
-              post_operation_with_weighting);
+              post_operation_with_weighting,
+              needs_compression);
+
+            MFRunner runner(overlap_pre_post);
+            runner.loop(worker);
           }
         else
           {
