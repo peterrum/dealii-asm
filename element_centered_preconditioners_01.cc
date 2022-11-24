@@ -222,6 +222,7 @@ void
 test(const boost::property_tree::ptree params, ConvergenceTable &table)
 {
   const MPI_Comm comm = MPI_COMM_WORLD;
+  sub_comm            = comm;
 
   const unsigned int fe_degree = params.get<unsigned int>("degree", 1);
   const unsigned int n_global_refinements =
@@ -547,8 +548,6 @@ test(const boost::property_tree::ptree params, ConvergenceTable &table)
 
           const unsigned int max_rank = Utilities::MPI::max(temp, comm);
 
-          table.add_value("sub_comm_size", max_rank + 1);
-
           if (max_rank != Utilities::MPI::n_mpi_processes(comm) - 1)
             {
               const bool color = rank <= max_rank;
@@ -564,7 +563,6 @@ test(const boost::property_tree::ptree params, ConvergenceTable &table)
       else
         {
           mg_triangulations.emplace_back(&tria, [](auto *) {});
-          sub_comm = comm;
         }
 
       std::vector<std::pair<unsigned int, unsigned int>> levels;
