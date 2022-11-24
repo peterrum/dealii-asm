@@ -15,7 +15,7 @@
             "preconditioner": {
                 "n overlap": "2",
                 "type": "FDM",
-                "sub mesh approximation": 3,
+                "sub mesh approximation": 1,
                 "weighting type": "ras",
                 "weight sequence" : "dg",
                 "reuse partitioner" : "true",
