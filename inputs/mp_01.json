@@ -8,7 +8,7 @@
     "solver": {
         "type": "GMRES",
         "rel tolerance": 1e-08,
-        "max n tmp vectors": 30
+        "max n tmp vectors": 32
     },
     "preconditioner": {
         "mg smoother": {
@@ -16,8 +16,8 @@
                 "n overlap": "2",
                 "type": "FDM",
                 "sub mesh approximation": 3,
-                "weighting type": "post",
-                "weight sequence" : "global",
+                "weighting type": "ras",
+                "weight sequence" : "dg",
                 "reuse partitioner" : "true",
                 "element centric" : "true"
             },
@@ -30,7 +30,7 @@
             "type": "AMG"
         },
         "type": "Multigrid",
-        "mg type": "ph",
+        "mg type": "p",
         "n coarse cycles" : 1
     },
     "mesh": {
