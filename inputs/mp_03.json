@@ -37,11 +37,12 @@
     },
     "mesh": {
         "stratch": 1.0,
-        "name": "kershaw",
+        "name": "kershaw-mp",
         "eps": 0.05,
         "n initial refinements" : 0,
         "n subdivisions" : 9
     },
     "n refinements": 2,
-    "type": "matrixfree"
+    "type": "matrixfree",
+    "rhs" : "sin-mp"
 }

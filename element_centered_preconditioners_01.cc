@@ -80,6 +80,31 @@ private:
 
 
 
+template <int dim>
+class RightHandSideSinusMP : public Function<dim>
+{
+public:
+  RightHandSideSinusMP() = default;
+
+  virtual double
+  value(const Point<dim> &p, const unsigned int component = 0) const override
+  {
+    (void)p;
+    (void)component;
+
+    double value = dim * numbers::PI;
+
+    for (int d = 0; d < dim; ++d)
+      value *= std::sin(numbers::PI * p[d]);
+
+    return value;
+  }
+
+private:
+};
+
+
+
 template <typename MatrixType, typename PreconditionerType, typename VectorType>
 void
 solve(const MatrixType &                              A,
@@ -302,7 +327,7 @@ test(const boost::property_tree::ptree params, ConvergenceTable &table)
         return new_point;
       };
     }
-  else if (geometry_name == "kershaw")
+  else if (geometry_name == "kershaw" || geometry_name == "kershaw-mp")
     {
       auto epsy = mesh_parameters.get<double>("epsy", 0.0);
       auto epsz = mesh_parameters.get<double>("epsz", 0.0);
@@ -333,16 +358,20 @@ test(const boost::property_tree::ptree params, ConvergenceTable &table)
 
       mapping_degree = std::min(mapping_degree, 3u /*TODO*/);
 
-      transformation_function = [epsy, epsz](const auto &,
-                                             const auto &in_point) {
-        Point<dim> out_point;
-        double     dummy = 0.0;
-        // clang-format off
+      transformation_function =
+        [epsy, epsz, geometry_name](const auto &, const auto &in_point) {
+          Point<dim> out_point;
+          double     dummy = 0.0;
+          // clang-format off
         kershaw(epsy, epsz, in_point[0], in_point[1], dim == 3 ? in_point[2] : dummy, out_point[0], out_point[1], dim == 3 ? out_point[2] : dummy);
-        // clang-format on
+          // clang-format on
 
-        return out_point;
-      };
+          if (geometry_name == "kershaw-mp")
+            for (unsigned int d = 0; d < dim; ++d)
+              out_point[d] -= 0.5;
+
+          return out_point;
+        };
     }
   else if (geometry_name == "hyperball")
     {
@@ -404,6 +433,11 @@ test(const boost::property_tree::ptree params, ConvergenceTable &table)
 
       rhs_func = std::make_shared<GaussianRightHandSide<dim>>(points, width);
       dbc_func = std::make_shared<GaussianSolution<dim>>(points, width);
+    }
+  else if (rhs_name == "sin-mp")
+    {
+      rhs_func = std::make_shared<RightHandSideSinusMP<dim>>();
+      dbc_func = std::make_shared<Functions::ZeroFunction<dim>>();
     }
   else
     {
