@@ -1,0 +1,45 @@
+{
+    "print timing": true,
+    "name": "fdm-1-r",
+    "degree": 7,
+    "dim": 3,
+    "operator compress indices" : true,
+    "mapping degree" : 2,
+    "operator mapping type" : "quadratic geometry",
+    "solver": {
+        "type": "GMRES",
+        "rel tolerance": 1e-08,
+        "max n tmp vectors": 30
+    },
+    "preconditioner": {
+        "mg smoother": {
+            "preconditioner": {
+                "n overlap": "2",
+                "type": "FDM",
+                "sub mesh approximation": 3,
+                "weighting type": "post",
+                "weight sequence" : "global",
+                "reuse partitioner" : "true",
+                "element centric" : "true"
+            },
+            "type": "Chebyshev",
+            "degree": 5,
+            "optimize" : 2
+        },
+        "mg p sequence": "bisect",
+        "mg coarse grid solver": {
+            "type": "AMG"
+        },
+        "type": "Multigrid",
+        "mg type": "ph"
+    },
+    "mesh": {
+        "stratch": 1.0,
+        "name": "kershaw",
+        "eps": 0.3,
+        "n initial refinements" : 0,
+        "n subdivisions" : 9
+    },
+    "n refinements": 2,
+    "type": "matrixfree"
+}
