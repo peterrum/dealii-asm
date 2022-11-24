@@ -547,9 +547,8 @@ public:
                     constraint_info.read_write_operation(reader,
                                                          dst_,
                                                          dst__.data(),
-                                                         cell_ptr[cell],
-                                                         cell_ptr[cell + 1] -
-                                                           cell_ptr[cell],
+                                                         cell_ptr[cell] + v,
+                                                         1,
                                                          dst__.size(),
                                                          true);
 
@@ -582,8 +581,8 @@ public:
                            ++j)
                         for (unsigned int i = 0; i < patch_size_1d; ++i, ++c)
                           if (predicate(i, j, k))
-                            dst__[c][v] =
-                              std::min<double>(dst__[c][v],
+                            dst__[c][0] =
+                              std::min<double>(dst__[c][0],
                                                (cell_batch_prefix + cell) *
                                                    VectorizedArrayType::size() +
                                                  v);
@@ -593,9 +592,8 @@ public:
                     constraint_info.read_write_operation(writer,
                                                          dst_,
                                                          dst__.data(),
-                                                         cell_ptr[cell],
-                                                         cell_ptr[cell + 1] -
-                                                           cell_ptr[cell],
+                                                         cell_ptr[cell] + v,
+                                                         1,
                                                          dst__.size(),
                                                          true);
                   }
