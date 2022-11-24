@@ -6,7 +6,8 @@
     "solver": {
         "type": "CG",
         "rel tolerance": 1e-05,
-        "max n tmp vectors": 15
+        "max n tmp vectors": 15,
+        "best of": 10
     },
     "preconditioner": {
         "mg smoother": {

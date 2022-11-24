@@ -118,6 +118,7 @@ solve(const MatrixType &                              A,
   const auto abs_tolerance  = params.get<double>("abs tolerance", 1e-10);
   const auto rel_tolerance  = params.get<double>("rel tolerance", 1e-2);
   const auto type           = params.get<std::string>("type", "");
+  const auto best_of        = params.get<unsigned int>("best of", 1);
   const auto control_type =
     params.get<std::string>("control type", "ReductionControl");
 
@@ -204,15 +205,20 @@ solve(const MatrixType &                              A,
 
   if (converged)
     {
-      if constexpr (has_timing_functionality<PreconditionerType>)
-        preconditioner->clear_timings();
+      for (unsigned int i = 0; i < best_of; ++i)
+        {
+          if constexpr (has_timing_functionality<PreconditionerType>)
+            preconditioner->clear_timings();
 
-      const auto timer = std::chrono::system_clock::now();
-      dispatch();
-      time = std::chrono::duration_cast<std::chrono::nanoseconds>(
-               std::chrono::system_clock::now() - timer)
-               .count() /
-             1e9;
+          const auto timer = std::chrono::system_clock::now();
+          dispatch();
+          time = std::min<double>(
+            time,
+            std::chrono::duration_cast<std::chrono::nanoseconds>(
+              std::chrono::system_clock::now() - timer)
+                .count() /
+              1e9);
+        }
 
       pcout << "   - n iterations:   " << solver_control->last_step()
             << std::endl;
