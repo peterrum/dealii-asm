@@ -4,8 +4,8 @@
     "degree": 7,
     "dim": 3,
     "operator compress indices" : true,
-    "mapping degree" : 2,
-    "operator mapping type" : "quadratic geometry",
+    "mapping degree" : 1,
+    "operator mapping type" : "linear geometry",
     "solver": {
         "type": "GMRES",
         "rel tolerance": 1e-08,
