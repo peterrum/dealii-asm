@@ -13,6 +13,7 @@
 #include <deal.II/fe/mapping_q_cache.h>
 
 #include <deal.II/grid/grid_generator.h>
+#include <deal.II/grid/grid_tools.h>
 
 #include <deal.II/lac/diagonal_matrix.h>
 #include <deal.II/lac/dynamic_sparsity_pattern.h>
@@ -89,7 +90,6 @@ public:
   virtual double
   value(const Point<dim> &p, const unsigned int component = 0) const override
   {
-    (void)p;
     (void)component;
 
     double value = dim * numbers::PI;
@@ -714,6 +714,11 @@ test(const boost::property_tree::ptree params, ConvergenceTable &table)
   if (comm != sub_comm && sub_comm != MPI_COMM_NULL)
     MPI_Comm_free(&sub_comm);
 
+  table.add_value(
+    "aspect_ratio",
+    GridTools::compute_maximum_aspect_ratio(op.get_mapping(),
+                                            op.get_triangulation(),
+                                            op.get_quadrature()));
 
   if (params.get<bool>("do output", false))
     {
