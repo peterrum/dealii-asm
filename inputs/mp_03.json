@@ -33,6 +33,7 @@
         },
         "type": "Multigrid",
         "mg type": "ph",
+        "n coarse cycles" : 1,
         "one-sided v-cycle": true
     },
     "mesh": {

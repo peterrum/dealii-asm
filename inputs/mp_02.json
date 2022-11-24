@@ -31,7 +31,8 @@
             "type": "AMG"
         },
         "type": "Multigrid",
-        "mg type": "ph"
+        "mg type": "ph",
+        "n coarse cycles" : 1
     },
     "mesh": {
         "stratch": 1.0,
