@@ -600,6 +600,7 @@ public:
                   }
               }
 
+            dst_.set_ghost_state(false);
             dst_.compress(VectorOperation::min);
 
             counter++;
