@@ -1204,7 +1204,7 @@ private:
               exchanger_src,
               dst,
               src_scratch,
-              cell_operation_overlap,
+              cell_operation_normal,
               pre_operation_with_weighting,
               post_operation_with_weighting,
               needs_compression);
