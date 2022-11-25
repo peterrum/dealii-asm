@@ -8,7 +8,8 @@
     "solver": {
         "type": "GMRES",
         "rel tolerance": 1e-08,
-        "max n tmp vectors": 32
+        "max n tmp vectors": 32,
+	"best of" : 10
     },
     "preconditioner": {
         "mg smoother": {
