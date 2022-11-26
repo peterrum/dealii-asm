@@ -30,10 +30,13 @@ def main():
     counter = 0
 
     for l in range(0, 12):
-        run_instance(counter, d, l, "large-scaling-ras_fdm2.json")
+        run_instance(counter, d, l, "large-scaling-ras_0.json")
         counter = counter + 1;
 
-        run_instance(counter, d, l, "large-scaling-ras_fdm2_ras.json")
+        run_instance(counter, d, l, "large-scaling-ras_1.json")
+        counter = counter + 1;
+
+        run_instance(counter, d, l, "large-scaling-ras_2.json")
         counter = counter + 1;
 
 
