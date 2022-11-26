@@ -285,6 +285,22 @@ public:
                 for (auto &i : local_dofs)
                   resolve_constraint(i);
 
+#if false
+                if(cell_counter == 0)
+                {
+                            for (unsigned int i = 0, c = 0; i < patch_size_1d;
+                                 ++i)
+                              {
+                                for (unsigned int j = 0; j < patch_size_1d; ++j)
+                                  {
+                                      std::cout << local_dofs[c++] << " ";
+                                  }
+                                std::cout << std::endl;
+                              }
+                            std::cout << std::endl;
+                }
+#endif
+
                 for (const auto &i : local_dofs)
                   if (i != numbers::invalid_dof_index)
                     {
@@ -523,7 +539,8 @@ public:
           my_compute_prefix_sum(matrix_free.n_cell_batches(), MPI_COMM_WORLD);
         cell_batch_prefix = prefix;
 
-        const unsigned int invalid_cell_id = sum * VectorizedArrayType::size();
+        const unsigned int invalid_cell_id =
+          sum * VectorizedArrayType::size() + 1;
 
         dst_ = invalid_cell_id;
 
@@ -586,7 +603,7 @@ public:
                               std::min<double>(dst__[c][0],
                                                (cell_batch_prefix + cell) *
                                                    VectorizedArrayType::size() +
-                                                 v);
+                                                 v + 1);
 
                     // scatter
                     internal::VectorSetter<Number, VectorizedArrayType> writer;
@@ -597,6 +614,31 @@ public:
                                                          1,
                                                          dst__.size(),
                                                          true);
+
+#if false
+                    if(cell == 0 && v == 0)
+                    {
+                    constraint_info.read_write_operation(reader,
+                                                         dst_,
+                                                         dst__.data(),
+                                                         cell_ptr[cell] + v,
+                                                         1,
+                                                         dst__.size(),
+                                                         true);
+
+                    
+                            for (unsigned int i = 0, c = 0; i < patch_size_1d;
+                                 ++i)
+                              {
+                                for (unsigned int j = 0; j < patch_size_1d; ++j)
+                                  {
+                                      std::cout << dst__[c++][0] << " ";
+                                  }
+                                std::cout << std::endl;
+                              }
+                            std::cout << std::endl;
+                    }
+#endif
                   }
               }
 
@@ -613,10 +655,11 @@ public:
             bool succes = true;
 
             for (const auto i : dst_)
-              succes &= (i == invalid_cell_id) ||
-                        ((prefix * VectorizedArrayType::size() <= i) &&
+              succes &= (i == invalid_cell_id) || (i == 0) ||
+                        ((prefix * VectorizedArrayType::size() + 1 <= i) &&
                          (i < (prefix + matrix_free.n_cell_batches()) *
-                                VectorizedArrayType::size()));
+                                  VectorizedArrayType::size() +
+                                1));
 
             AssertThrow(succes, ExcNotImplemented());
 
@@ -700,7 +743,7 @@ public:
                         if (weights_local[i][v] ==
                             ((cell_batch_prefix + cell) *
                                VectorizedArrayType::size() +
-                             v))
+                             v + 1))
                           weights_local[i][v] = 1.0;
                         else
                           weights_local[i][v] = 0.0;
@@ -771,11 +814,32 @@ public:
                         if (weights_local[i][v] ==
                             ((cell_batch_prefix + cell) *
                                VectorizedArrayType::size() +
-                             v))
+                             v + 1))
                           weights_local[i][v] = 1.0;
                         else
                           weights_local[i][v] = 0.0;
                       }
+
+#if false
+                if (true || weight_type == Restrictors::WeightingType::ras)
+                  {
+                    for (unsigned int v = 0;
+                         v < matrix_free.n_active_entries_per_cell_batch(cell);
+                         ++v)
+                      {
+                            for (unsigned int i = 0, c = 0; i < patch_size_1d;
+                                 ++i)
+                              {
+                                for (unsigned int j = 0; j < patch_size_1d; ++j)
+                                  {
+                                      std::cout << weights_local[c++][v] << " ";
+                                  }
+                                std::cout << std::endl;
+                              }
+                            std::cout << std::endl;
+                      }
+                  }
+#endif
 
                 if (actually_use_compression)
                   {
