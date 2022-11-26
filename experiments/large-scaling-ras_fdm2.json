@@ -23,6 +23,18 @@
                 "weight sequence": "dg"
             }
         },
+        "mg intermediate smoother": {
+            "polynomial type": "1st kind",
+            "type": "Chebyshev",
+            "degree": 3,
+            "weighting type": "post",
+            "preconditioner": {
+                "n overlap": "1",
+                "type": "FDM",
+                "sub mesh approximation": 3,
+                "weighting type": "post"
+            }
+        },
         "mg p sequence": "bisect",
         "mg coarse grid solver": {
             "type": "AMG"
