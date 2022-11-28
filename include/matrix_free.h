@@ -17,6 +17,7 @@
 #include "preconditioners.h"
 #include "read_write_operation.h"
 #include "restrictors.h"
+#include "symmetry.h"
 #include "vector_access_reduced.h"
 
 // clang-format off
@@ -890,6 +891,16 @@ public:
         weights.reinit(0);
         weights_compressed_q2.clear();
       }
+  }
+
+  SymmetryType::SymmetryType
+  is_symmetric() const
+  {
+    if (weight_type == Restrictors::WeightingType::none ||
+        weight_type == Restrictors::WeightingType::symm)
+      return SymmetryType::symmetric;
+    else
+      return SymmetryType::non_symmetric;
   }
 
   VectorType &

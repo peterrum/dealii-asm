@@ -21,6 +21,7 @@
 #include "exceptions.h"
 #include "grid_tools.h"
 #include "matrix_free_internal.h"
+#include "symmetry.h"
 #include "vector_access_reduced.h"
 
 /**
@@ -48,6 +49,12 @@ public:
   virtual void
   rhs(VectorType &                                  vec,
       const std::shared_ptr<Function<dim, Number>> &rhs_func) = 0;
+
+  SymmetryType::SymmetryType
+  is_symmetric() const
+  {
+    return SymmetryType::symmetric;
+  }
 
 private:
 };
