@@ -23,7 +23,8 @@
                 "element centric" : "true"
             },
             "type": "Chebyshev",
-            "degree": 2,
+            "omega": 0,
+            "degree": 1,
             "optimize" : 2,
             "smoothing range" : 20
         },
