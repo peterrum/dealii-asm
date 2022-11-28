@@ -24,9 +24,9 @@
                 "element centric" : "true"
             },
             "type": "Chebyshev",
-            "degree": 5,
+            "degree": 12,
             "optimize" : 2,
-            "smoothing range" : 20
+            "polynomial type" : "4th kind"
         },
         "mg p sequence": "bisect",
         "mg coarse grid solver": {
@@ -34,12 +34,13 @@
         },
         "type": "Multigrid",
         "mg type": "p",
-        "n coarse cycles" : 1
+        "n coarse cycles" : 1,
+        "one-sided v-cycle": true
     },
     "mesh": {
         "stratch": 1.0,
         "name": "kershaw-mp",
-        "eps": 0.3,
+        "eps": 0.05,
         "n initial refinements" : 0,
         "n subdivisions" : 9
     },

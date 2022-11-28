@@ -4,8 +4,7 @@
     "degree": 7,
     "dim": 3,
     "operator compress indices" : true,
-    "mapping degree" : 1,
-    "operator mapping type" : "linear geometry",
+    "mapping degree" : 2,
     "solver": {
         "type": "GMRES",
         "rel tolerance": 1e-08,
@@ -23,8 +22,9 @@
                 "reuse partitioner" : "true",
                 "element centric" : "true"
             },
-            "type": "Chebyshev",
-            "degree": 5,
+            "type": "Relaxation",
+            "omega": 1,
+            "degree": 1,
             "optimize" : 2,
             "smoothing range" : 20
         },
@@ -39,7 +39,7 @@
     "mesh": {
         "stratch": 1.0,
         "name": "kershaw-mp",
-        "eps": 0.3,
+        "eps": 1.0,
         "n initial refinements" : 0,
         "n subdivisions" : 9
     },

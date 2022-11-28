@@ -22,8 +22,9 @@
                 "reuse partitioner" : "true",
                 "element centric" : "true"
             },
-            "type": "Chebyshev",
-            "degree": 2,
+            "type": "Relaxation",
+            "omega": 0,
+            "degree": 1,
             "optimize" : 2,
             "smoothing range" : 20
         },
