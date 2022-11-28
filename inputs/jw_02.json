@@ -1,38 +1,44 @@
 {
     "print timing": true,
     "name": "fdm-1-r",
-    "degree": 4,
-    "dim": 3,
+    "degree": 2,
+    "dim": 2,
     "solver": {
-        "type": "CG",
-        "rel tolerance": 1e-08
+        "type": "GMRES",
+        "rel tolerance": 1e-08,
+        "abs tolerance": 1e-14,
+        "use right preconditioning" : false,
+        "orthogonalization strategy" : "modified gram schmidt"
     },
     "preconditioner": {
         "mg smoother": {
             "preconditioner": {
-                "n overlap": "2",
+                "n overlap": "1",
                 "type": "FDM",
                 "sub mesh approximation": 3,
-                "weighting type": "none",
+                "weighting type": "post",
                 "reuse partitioner" : "true",
-                "element centric" : "false"
+                "element centric" : "false",
+                "weight sequence" : "compressed"
             },
-            "type": "Chebyshev",
-            "degree": 1
+            "type": "Relaxation",
+            "degree": 1,
+            "omega": 1.0,
+            "optimize": 0
         },
         "mg p sequence": "bisect",
         "mg coarse grid solver": {
             "type": "AMG"
         },
         "type": "Multigrid",
-        "mg type": "hp"
+        "mg type": "h"
     },
     "mesh": {
         "name": "hypercube",
-        "n subdivisions": 4
+        "n subdivisions": 2
     },
-    "n refinements": 4,
+    "n refinements": 1,
     "type": "matrixfree",
-    "do output": false,
+    "do output": true,
     "rhs": "gaussian-jw"
 }

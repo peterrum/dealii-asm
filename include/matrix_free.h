@@ -702,7 +702,7 @@ public:
 
         for (auto &i : weights)
           i = (i == 0.0) ?
-                1.0 :
+                0.0 :
                 (1.0 / ((weight_type == Restrictors::WeightingType::symm) ?
                           std::sqrt(i) :
                           i));

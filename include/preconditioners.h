@@ -925,6 +925,29 @@ private:
   const std::shared_ptr<const PreconditionerType> preconditioner;
 };
 
+template <typename VectorType,
+          typename PreconditionerType,
+          typename PreconditionerNumer = typename VectorType::value_type>
+class PreconditionerAdapterWithoutStep
+{
+public:
+  PreconditionerAdapterWithoutStep(
+    const std::shared_ptr<const PreconditionerType> preconditioner)
+    : preconditioner(preconditioner)
+  {}
+
+  void
+  vmult(VectorType &dst, const VectorType &src) const
+  {
+    internal_::PreconditionerAdapter::solve<PreconditionerNumer>(preconditioner,
+                                                                 dst,
+                                                                 src);
+  }
+
+private:
+  const std::shared_ptr<const PreconditionerType> preconditioner;
+};
+
 template <typename VectorType>
 class DiagonalMatrixPrePost : public Subscriptor
 {

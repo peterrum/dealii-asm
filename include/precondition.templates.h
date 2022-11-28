@@ -393,7 +393,7 @@ create_system_preconditioner(const OperatorType &              op,
               // optimization 0: A (-) and P (-)
               return setup_relaxation(
                 static_cast<const LaplaceOperatorBase<dim, VectorType> &>(op),
-                std::make_shared<PreconditionerAdapter<
+                std::make_shared<PreconditionerAdapterWithoutStep<
                   VectorType,
                   ASPoissonPreconditioner<dim, Number, VectorizedArrayType>>>(
                   fdm));

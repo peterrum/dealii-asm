@@ -167,10 +167,26 @@ solve(const MatrixType &                              A,
         else if (type == "GMRES")
           {
             typename SolverGMRES<VectorType>::AdditionalData additional_data;
-            additional_data.right_preconditioning = true;
-            additional_data.orthogonalization_strategy =
-              SolverGMRES<VectorType>::AdditionalData::
-                OrthogonalizationStrategy::classical_gram_schmidt;
+
+            // left or right preconditioning
+            additional_data.right_preconditioning =
+              params.get<bool>("use right preconditioning", true);
+
+            // orthogonalization strategy
+            const auto orthogonalization_strategy =
+              params.get<std::string>("orthogonalization strategy",
+                                      "classical gram schmidt");
+
+            if (orthogonalization_strategy == "classical gram schmidt")
+              additional_data.orthogonalization_strategy =
+                SolverGMRES<VectorType>::AdditionalData::
+                  OrthogonalizationStrategy::classical_gram_schmidt;
+            else if (orthogonalization_strategy == "modified gram schmidt")
+              additional_data.orthogonalization_strategy =
+                SolverGMRES<VectorType>::AdditionalData::
+                  OrthogonalizationStrategy::modified_gram_schmidt;
+            else
+              AssertThrow(false, ExcNotImplemented());
 
             const auto max_n_tmp_vectors =
               params.get<int>("max n tmp vectors", 0);
@@ -432,10 +448,24 @@ test(const boost::property_tree::ptree params, ConvergenceTable &table)
     }
   else if (rhs_name == "gaussian-jw")
     {
-      const std::vector<Point<dim>> points = {Point<dim>(0.0, 0.0, 0.0),
-                                              Point<dim>(0.25, 0.85, 0.85),
-                                              Point<dim>(0.6, 0.4, 0.4)};
-      const double                  width  = 0.3;
+      std::vector<Point<dim>> points;
+
+      if (dim == 2)
+        {
+          points.emplace_back(0.0, 0.0);
+          points.emplace_back(0.25, 0.85);
+          points.emplace_back(0.6, 0.4);
+        }
+      else if (dim == 3)
+        {
+          points.emplace_back(0.0, 0.0, 0.0);
+          points.emplace_back(0.25, 0.85, 0.85);
+          points.emplace_back(0.6, 0.4, 0.4);
+        }
+      else
+        AssertThrow(false, ExcNotImplemented());
+
+      const double width = 1. / 3.;
 
       rhs_func = std::make_shared<GaussianRightHandSide<dim>>(points, width);
       dbc_func = std::make_shared<GaussianSolution<dim>>(points, width);
@@ -472,6 +502,7 @@ test(const boost::property_tree::ptree params, ConvergenceTable &table)
 
   op.rhs(rhs, rhs_func);
   rhs.zero_out_ghost_values();
+
 
   // ASM on cell level
   if (preconditioner_type == "Identity")
