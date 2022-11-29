@@ -4,6 +4,7 @@
 
 #include <deal.II/fe/fe_dgq.h>
 #include <deal.II/fe/fe_q.h>
+#include <deal.II/fe/fe_tools.h>
 
 #include <deal.II/grid/grid_generator.h>
 
@@ -206,6 +207,10 @@ test(const unsigned int fe_degree,
       AssertThrow(false, ExcNotImplemented())
     }
 
+  const auto lexicographic_to_hierarchic_numbering =
+    Utilities::invert_permutation(
+      FETools::hierarchic_to_lexicographic_numbering<dim>(fe_degree));
+
   const auto get_face_indices_of_neighbor = [&](const auto &cell,
                                                 const auto  face_no,
                                                 auto &      dof_indices) {
@@ -216,7 +221,14 @@ test(const unsigned int fe_degree,
 
     cell->neighbor(face_no)->get_dof_indices(dof_indices);
 
-    // TODO: lex ordering
+    // lex ordering
+    if (fe.n_dofs_per_vertex() > 0)
+      {
+        auto temp = dof_indices;
+
+        for (unsigned int i = 0; i < n_dofs_per_cell; ++i)
+          dof_indices[i] = temp[lexicographic_to_hierarchic_numbering[i]];
+      }
 
     for (unsigned int i = 0; i < n_dofs_per_face; ++i)
       dof_indices_face[i] =
@@ -236,7 +248,6 @@ test(const unsigned int fe_degree,
           2 * neighbor->face_flip(exterior_face_no) +
           4 * neighbor->face_rotation(exterior_face_no);
 
-        // TODO: is this correct?
         auto face_orientation = interior_face_orientation;
 
         if (face_orientation == 0)
