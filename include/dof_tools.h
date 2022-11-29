@@ -29,6 +29,7 @@ namespace dealii
         Utilities::invert_permutation(
           FETools::hierarchic_to_lexicographic_numbering<dim>(fe_degree));
 
+      // TODO: use functionality from overlap_unstructured_01.cc
       const auto get_lexicographic_dof_indices = [&](const auto &cell) {
         const auto n_dofs_per_cell = fe.n_dofs_per_cell();
 
