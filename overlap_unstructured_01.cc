@@ -102,7 +102,8 @@ template <int dim>
 void
 test(const unsigned int fe_degree,
      const unsigned int n_overlap,
-     const unsigned int orientation)
+     const unsigned int orientation,
+     const bool         use_dg)
 {
   Triangulation<dim> tria;
 
@@ -121,11 +122,17 @@ test(const unsigned int fe_degree,
   else
     AssertThrow(false, ExcNotImplemented());
 
-  FE_DGQ<dim> fe(fe_degree);
+  std::unique_ptr<FiniteElement<dim>> fe;
+
+  if (use_dg)
+    fe = std::make_unique<FE_DGQ<dim>>(fe_degree);
+  else
+    fe = std::make_unique<FE_Q<dim>>(fe_degree);
+
   QGauss<dim> quad(fe_degree + 1);
 
   DoFHandler<dim> dof_handler(tria);
-  dof_handler.distribute_dofs(fe);
+  dof_handler.distribute_dofs(*fe);
 
   const unsigned int n_dofs_per_cell  = Utilities::pow(fe_degree + 1, dim);
   const unsigned int n_dofs_per_layer = Utilities::pow(fe_degree + 1, dim - 1);
@@ -135,9 +142,7 @@ test(const unsigned int fe_degree,
   std::vector<types::global_dof_index> dof_indices_temp(n_dofs_per_layer);
   std::vector<types::global_dof_index> dof_indices(n_dofs_per_cell);
 
-  internal::MatrixFreeFunctions::ShapeInfo<double> shape_info(quad, fe);
-
-  // const auto &face_to_cell_index_nodal = shape_info.face_to_cell_index_nodal;
+  internal::MatrixFreeFunctions::ShapeInfo<double> shape_info(quad, *fe);
 
   dealii::Table<2, unsigned int> face_to_cell_index_nodal(2 * dim,
                                                           n_dofs_per_cell);
@@ -222,7 +227,7 @@ test(const unsigned int fe_degree,
     cell->neighbor(face_no)->get_dof_indices(dof_indices);
 
     // lex ordering
-    if (fe.n_dofs_per_vertex() > 0)
+    if (fe->n_dofs_per_vertex() > 0)
       {
         auto temp = dof_indices;
 
@@ -293,20 +298,24 @@ test(const unsigned int fe_degree,
     }
 }
 
+/**
+ * ./overlap_unstructured_01 3 1 2 2 0
+ */
 int
 main(int argc, char *argv[])
 {
-  AssertThrow(argc == 5, ExcNotImplemented());
+  AssertThrow(argc == 6, ExcNotImplemented());
 
   const int dim         = std::atoi(argv[1]);
   const int fe_degree   = std::atoi(argv[2]);
   const int n_overlap   = std::atoi(argv[3]);
   const int orientation = std::atoi(argv[4]);
+  const int use_dg      = std::atoi(argv[5]);
 
   if (dim == 2)
-    test<2>(fe_degree, n_overlap, orientation);
+    test<2>(fe_degree, n_overlap, orientation, use_dg);
   else if (dim == 3)
-    test<3>(fe_degree, n_overlap, orientation);
+    test<3>(fe_degree, n_overlap, orientation, use_dg);
   else
     AssertThrow(false, ExcNotImplemented());
 }
