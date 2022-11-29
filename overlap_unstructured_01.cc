@@ -99,7 +99,9 @@ namespace dealii
 
 template <int dim>
 void
-test(const int fe_degree, const unsigned int n_overlap, const int orientation)
+test(const unsigned int fe_degree,
+     const unsigned int n_overlap,
+     const unsigned int orientation)
 {
   Triangulation<dim> tria;
 
@@ -130,7 +132,40 @@ test(const int fe_degree, const unsigned int n_overlap, const int orientation)
   std::vector<types::global_dof_index> dof_indices(n_dofs_per_cell);
 
   internal::MatrixFreeFunctions::ShapeInfo<double> shape_info(quad, fe);
-  const auto &face_to_cell_index_nodal = shape_info.face_to_cell_index_nodal;
+
+  // const auto &face_to_cell_index_nodal = shape_info.face_to_cell_index_nodal;
+
+  dealii::Table<2, unsigned int> face_to_cell_index_nodal(2 * dim,
+                                                          n_dofs_per_cell);
+
+  if (dim == 2)
+    {
+      const auto to_index = [&](const unsigned int i, const unsigned int j) {
+        return i + j * (fe_degree + 1);
+      };
+
+      for (unsigned int o = 0, c = 0; o < n_overlap; ++o)
+        for (unsigned int i = 0; i <= fe_degree; ++i)
+          face_to_cell_index_nodal[0][c++] = to_index(o, i);
+
+      for (unsigned int o = 0, c = 0; o < n_overlap; ++o)
+        for (unsigned int i = 0; i <= fe_degree; ++i)
+          face_to_cell_index_nodal[1][c++] = to_index(fe_degree - o, i);
+
+      for (unsigned int o = 0, c = 0; o < n_overlap; ++o)
+        for (unsigned int i = 0; i <= fe_degree; ++i)
+          face_to_cell_index_nodal[2][c++] = to_index(i, o);
+
+      for (unsigned int o = 0, c = 0; o < n_overlap; ++o)
+        for (unsigned int i = 0; i <= fe_degree; ++i)
+          face_to_cell_index_nodal[3][c++] = to_index(i, fe_degree - o);
+    }
+  else if (dim == 3)
+    {}
+  else
+    {
+      AssertThrow(false, ExcNotImplemented())
+    }
 
   const auto get_face_indices_of_neighbor = [&](const auto &cell,
                                                 const auto  face_no,
