@@ -111,8 +111,11 @@ test(const unsigned int fe_degree,
     }
   else if constexpr (dim == 3)
     {
+      std::cout << "o " << ((orientation & 1)) << " " << ((orientation & 2))
+                << " " << ((orientation & 4)) << std::endl;
+
       GridGenerator::non_standard_orientation_mesh(
-        tria, !(orientation & 1), orientation & 2, orientation & 4, false);
+        tria, (orientation & 4), (orientation & 2), (orientation & 1), false);
     }
   else
     AssertThrow(false, ExcNotImplemented());
@@ -209,6 +212,8 @@ test(const unsigned int fe_degree,
     const auto exterior_face_no = cell->neighbor_face_no(face_no);
     const auto neighbor         = cell->neighbor(face_no);
 
+    std::cout << exterior_face_no << std::endl;
+
     cell->neighbor(face_no)->get_dof_indices(dof_indices);
 
     // TODO: lex ordering
@@ -222,16 +227,24 @@ test(const unsigned int fe_degree,
 
     if (dim == 3) // adjust orientation
       {
+        const unsigned int interior_face_orientation =
+          !cell->face_orientation(face_no) + 2 * cell->face_flip(face_no) +
+          4 * cell->face_rotation(face_no);
+
         const unsigned int exterior_face_orientation =
           !neighbor->face_orientation(exterior_face_no) +
           2 * neighbor->face_flip(exterior_face_no) +
           4 * neighbor->face_rotation(exterior_face_no);
 
+        // TODO: is this correct?
+        const auto face_orientation =
+          std::max(interior_face_orientation, exterior_face_orientation);
+
         for (unsigned int l = 0; l < n_overlap; ++l)
           {
             for (unsigned int i = 0; i < n_dofs_per_layer; ++i)
-              dof_indices_temp[shape_info.face_orientations_quad
-                                 [exterior_face_orientation][i]] =
+              dof_indices_temp[shape_info
+                                 .face_orientations_quad[face_orientation][i]] =
                 dof_indices_face[i + l * n_dofs_per_layer];
 
             for (unsigned int i = 0; i < n_dofs_per_layer; ++i)
@@ -239,8 +252,11 @@ test(const unsigned int fe_degree,
           }
       }
 
+    std::cout << (face_no ^ (1 << (face_no / 2))) << std::endl;
+
     for (unsigned int i = 0; i < n_dofs_per_face; ++i)
-      dof_indices[face_to_cell_index_nodal[face_no][i]] = dof_indices_face[i];
+      dof_indices[face_to_cell_index_nodal[face_no ^ (1 << (face_no / 2))][i]] =
+        dof_indices_face[i];
   };
 
   for (const auto &cell : dof_handler.active_cell_iterators())
@@ -248,7 +264,7 @@ test(const unsigned int fe_degree,
       for (const auto face_index : cell->face_indices())
         if (cell->at_boundary(face_index) == false)
           {
-            std::cout << face_index << std::endl;
+            std::cout << "f " << face_index << std::endl;
 
             get_face_indices_of_neighbor(cell, face_index, dof_indices);
 
