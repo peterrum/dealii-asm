@@ -237,8 +237,14 @@ test(const unsigned int fe_degree,
           4 * neighbor->face_rotation(exterior_face_no);
 
         // TODO: is this correct?
-        const auto face_orientation =
-          std::max(interior_face_orientation, exterior_face_orientation);
+        auto face_orientation = interior_face_orientation;
+
+        if (face_orientation == 0)
+          {
+            constexpr std::array<std::uint8_t, 8> table{
+              {0, 1, 2, 3, 6, 5, 4, 7}};
+            face_orientation = table[exterior_face_orientation];
+          }
 
         for (unsigned int l = 0; l < n_overlap; ++l)
           {
