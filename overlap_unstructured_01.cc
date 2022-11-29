@@ -113,9 +113,6 @@ test(const unsigned int fe_degree,
     }
   else if constexpr (dim == 3)
     {
-      std::cout << "o " << ((orientation & 1)) << " " << ((orientation & 2))
-                << " " << ((orientation & 4)) << std::endl;
-
       GridGenerator::non_standard_orientation_mesh(
         tria, (orientation & 4), (orientation & 2), (orientation & 1), false);
     }
@@ -222,8 +219,6 @@ test(const unsigned int fe_degree,
     const auto exterior_face_no = cell->neighbor_face_no(face_no);
     const auto neighbor         = cell->neighbor(face_no);
 
-    std::cout << exterior_face_no << std::endl;
-
     cell->neighbor(face_no)->get_dof_indices(dof_indices);
 
     // lex ordering
@@ -274,8 +269,6 @@ test(const unsigned int fe_degree,
           }
       }
 
-    std::cout << (face_no ^ (1 << (face_no / 2))) << std::endl;
-
     for (unsigned int i = 0; i < n_dofs_per_face; ++i)
       dof_indices[face_to_cell_index_nodal[face_no ^ (1 << (face_no / 2))][i]] =
         dof_indices_face[i];
@@ -286,8 +279,6 @@ test(const unsigned int fe_degree,
       for (const auto face_index : cell->face_indices())
         if (cell->at_boundary(face_index) == false)
           {
-            std::cout << "f " << face_index << std::endl;
-
             get_face_indices_of_neighbor(cell, face_index, dof_indices);
 
             for (const auto i : dof_indices)
