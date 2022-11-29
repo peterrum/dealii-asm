@@ -161,7 +161,43 @@ test(const unsigned int fe_degree,
           face_to_cell_index_nodal[3][c++] = to_index(i, fe_degree - o);
     }
   else if (dim == 3)
-    {}
+    {
+      const auto to_index = [&](const unsigned int i,
+                                const unsigned int j,
+                                const unsigned int k) {
+        return i + j * (fe_degree + 1) + k * (fe_degree + 1) * (fe_degree + 1);
+      };
+
+      for (unsigned int o = 0, c = 0; o < n_overlap; ++o)
+        for (unsigned int j = 0; j <= fe_degree; ++j)
+          for (unsigned int i = 0; i <= fe_degree; ++i)
+            face_to_cell_index_nodal[0][c++] = to_index(o, i, j);
+
+      for (unsigned int o = 0, c = 0; o < n_overlap; ++o)
+        for (unsigned int j = 0; j <= fe_degree; ++j)
+          for (unsigned int i = 0; i <= fe_degree; ++i)
+            face_to_cell_index_nodal[1][c++] = to_index(fe_degree - o, i, j);
+
+      for (unsigned int o = 0, c = 0; o < n_overlap; ++o)
+        for (unsigned int j = 0; j <= fe_degree; ++j)
+          for (unsigned int i = 0; i <= fe_degree; ++i)
+            face_to_cell_index_nodal[2][c++] = to_index(i, o, j);
+
+      for (unsigned int o = 0, c = 0; o < n_overlap; ++o)
+        for (unsigned int j = 0; j <= fe_degree; ++j)
+          for (unsigned int i = 0; i <= fe_degree; ++i)
+            face_to_cell_index_nodal[3][c++] = to_index(i, fe_degree - o, j);
+
+      for (unsigned int o = 0, c = 0; o < n_overlap; ++o)
+        for (unsigned int j = 0; j <= fe_degree; ++j)
+          for (unsigned int i = 0; i <= fe_degree; ++i)
+            face_to_cell_index_nodal[4][c++] = to_index(i, j, o);
+
+      for (unsigned int o = 0, c = 0; o < n_overlap; ++o)
+        for (unsigned int j = 0; j <= fe_degree; ++j)
+          for (unsigned int i = 0; i <= fe_degree; ++i)
+            face_to_cell_index_nodal[5][c++] = to_index(i, j, fe_degree - o);
+    }
   else
     {
       AssertThrow(false, ExcNotImplemented())
