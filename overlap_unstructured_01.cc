@@ -117,28 +117,49 @@ main()
   const unsigned int n_dofs_per_face =
     n_overlap * Utilities::pow(fe_degree + 1, dim - 1);
 
+  std::vector<types::global_dof_index> dof_indices_face(n_dofs_per_face);
   std::vector<types::global_dof_index> dof_indices_temp(n_dofs_per_face);
   std::vector<types::global_dof_index> dof_indices(n_dofs_per_cell);
 
   internal::MatrixFreeFunctions::ShapeInfo<double> shape_info(quad, fe);
 
-  const auto get_face_indices_of_neighbor =
-    [&](const auto &cell, const auto face_no, auto &dof_indices) {
-      const auto neigbor_face_no = cell->neighbor_face_no(face_no);
+  const auto get_face_indices_of_neighbor = [&](const auto &cell,
+                                                const auto  face_no,
+                                                auto &      dof_indices) {
+    const auto exterior_face_no = cell->neighbor_face_no(face_no);
+    const auto neighbor         = cell->neighbor(face_no);
 
-      cell->neighbor(face_no)->get_dof_indices(dof_indices);
+    cell->neighbor(face_no)->get_dof_indices(dof_indices);
 
-      for (unsigned int i = 0; i < n_dofs_per_face; ++i)
-        dof_indices_temp[i] =
-          dof_indices[shape_info.face_to_cell_index_nodal[neigbor_face_no][i]];
+    // TODO: lex ordering
 
-      for (unsigned int i = 0; i < n_dofs_per_cell; ++i)
-        dof_indices[i] = 0;
+    for (unsigned int i = 0; i < n_dofs_per_face; ++i)
+      dof_indices_face[i] =
+        dof_indices[shape_info.face_to_cell_index_nodal[exterior_face_no][i]];
 
-      for (unsigned int i = 0; i < n_dofs_per_face; ++i)
-        dof_indices[shape_info.face_to_cell_index_nodal[face_no][i]] =
-          dof_indices_temp[i];
-    };
+    for (unsigned int i = 0; i < n_dofs_per_cell; ++i)
+      dof_indices[i] = 0;
+
+    if (dim == 3) // adjust orientation
+      {
+        const unsigned int exterior_face_orientation =
+          !neighbor->face_orientation(exterior_face_no) +
+          2 * neighbor->face_flip(exterior_face_no) +
+          4 * neighbor->face_rotation(exterior_face_no);
+
+        for (unsigned int i = 0; i < n_dofs_per_face; ++i)
+          dof_indices_temp
+            [shape_info.face_orientations_quad[exterior_face_orientation][i]] =
+              dof_indices_face[i];
+
+        for (unsigned int i = 0; i < n_dofs_per_face; ++i)
+          dof_indices_face[i] = dof_indices_temp[i];
+      }
+
+    for (unsigned int i = 0; i < n_dofs_per_face; ++i)
+      dof_indices[shape_info.face_to_cell_index_nodal[face_no][i]] =
+        dof_indices_face[i];
+  };
 
   for (const auto &cell : dof_handler.active_cell_iterators())
     {
