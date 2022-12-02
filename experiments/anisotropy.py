@@ -36,6 +36,19 @@ def run_instance(counter, d, l, k, solver, preconditioner, sequence, s, eps, che
 
         if props[2] == "v":
             datastore["preconditioner"]["mg smoother"]["preconditioner"]["element centric"] = False
+
+            datastore["preconditioner"]["mg intermediate smoother"] = {}
+            datastore["preconditioner"]["mg intermediate smoother"]["preconditioner"] = {}
+
+            datastore["preconditioner"]["mg intermediate smoother"]["preconditioner"]["type"] = "Diagonal"
+            datastore["preconditioner"]["mg intermediate smoother"]["type"]                   = "Chebyshev"
+
+            if cycle_type == "one sided":
+                datastore["preconditioner"]["mg intermediate smoother"]["degree"] = 2 * (s + 2)
+            else:
+                datastore["preconditioner"]["mg intermediate smoother"]["degree"] = s + 2
+
+            datastore["preconditioner"]["mg intermediate smoother"]["optimize"] = "3"
         else:
             datastore["preconditioner"]["mg smoother"]["preconditioner"]["n overlap"] = props[2]
 

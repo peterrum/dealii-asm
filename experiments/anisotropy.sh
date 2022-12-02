@@ -4,7 +4,7 @@ if [[ $# -eq 1 ]] ; then
   executation_type=$1
 fi
 
-for i in "2 6" "3 6" "4 6" "5 6" "6 5" "7 4"
+for i in "2 6" "3 6" "4 6" "5 6" "6 5" "7 5"
 do
     set -- $i
 

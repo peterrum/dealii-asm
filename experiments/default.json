@@ -4,10 +4,12 @@
     "degree" : 4,
     "n refinements" : 2,
     "print timing" : true,
+    "operator compress indices" : true,
     "solver" : {
         "type" : "GMRES",
         "rel tolerance" : 1e-5,
-        "max n tmp vectors" : 15
+        "max n tmp vectors" : 17,
+        "best of" : 10
     },
     "mesh": {"name" : "kershaw", "eps" : 0.2 , "stratch" : 1.0},
     "preconditioner" : {
