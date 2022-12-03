@@ -4,10 +4,10 @@
     "degree": 4,
     "dim": 3,
     "solver": {
+        "best of": 10,
         "type": "GMRES",
         "rel tolerance": 1e-05,
-        "max n tmp vectors": 15,
-        "best of": 10
+        "max n tmp vectors": 17
     },
     "preconditioner": {
         "mg smoother": {
@@ -29,6 +29,7 @@
         "type": "Multigrid",
         "mg type": "ph"
     },
+    "operator compress indices": true,
     "mesh": {
         "stratch": 1.0,
         "name": "kershaw",
