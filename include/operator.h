@@ -21,6 +21,7 @@
 #include "exceptions.h"
 #include "grid_tools.h"
 #include "matrix_free_internal.h"
+#include "symmetry.h"
 #include "vector_access_reduced.h"
 
 /**
@@ -49,10 +50,14 @@ public:
   rhs(VectorType &                                  vec,
       const std::shared_ptr<Function<dim, Number>> &rhs_func) = 0;
 
+  SymmetryType::SymmetryType
+  is_symmetric() const
+  {
+    return SymmetryType::symmetric;
+  }
+
 private:
 };
-
-
 
 /**
  * Matrix-based implementation of the Laplace operator.
@@ -201,6 +206,14 @@ public:
     return sparse_matrix;
   }
 
+  const TrilinosWrappers::SparseMatrix &
+  get_sparse_matrix(const MPI_Comm comm) const
+  {
+    AssertThrow(comm == MPI_COMM_WORLD, ExcInternalError());
+
+    return sparse_matrix;
+  }
+
   const TrilinosWrappers::SparsityPattern &
   get_sparsity_pattern() const
   {
@@ -245,8 +258,6 @@ private:
 
   std::shared_ptr<const Utilities::MPI::Partitioner> partitioner;
 };
-
-
 
 /**
  * Matrix-free implementation of the Laplace operator.
@@ -351,6 +362,7 @@ public:
     typename MatrixFree<dim, Number, VectorizedArrayType>::AdditionalData data;
     data.mapping_update_flags =
       update_values | update_gradients | update_quadrature_points;
+    data.overlap_communication_computation = false;
 
     MatrixFree<dim, Number, VectorizedArrayType> matrix_free;
     matrix_free.reinit(
@@ -398,6 +410,9 @@ public:
 
     const auto setup_constraints = [&]() {
       constraints_internal.clear();
+      constraints_internal.reinit(
+        DoFTools::extract_locally_relevant_dofs(dof_handler_internal));
+
       if (dbc_func)
         VectorTools::interpolate_boundary_values(
           mapping, dof_handler_internal, 1, *dbc_func, constraints_internal);
@@ -483,10 +498,11 @@ public:
         if (flag)
           this->compressed_rw = compressed_rw;
 
+        MPI_Barrier(MPI_COMM_WORLD);
+
         pcout << "  - compress indices: " << (flag ? "success" : "failure")
               << std::endl;
       }
-
 
     if (mapping_type == "")
       {
@@ -794,10 +810,10 @@ public:
               get_dof_handler(), cells, 1, false);
 
             for (auto &dof : dofs)
-              if (dof != numbers::invalid_unsigned_int)
+              if (dof != numbers::invalid_dof_index)
                 {
                   if (get_constraints().is_constrained(dof))
-                    dof = numbers::invalid_unsigned_int;
+                    dof = numbers::invalid_dof_index;
                   else if (locally_owned_indices.is_element(dof) == false)
                     relevant_dofs.push_back(dof);
                 }
@@ -1217,7 +1233,6 @@ public:
     const auto &quad_1d = matrix_free.get_quadrature().get_tensor_basis()[0];
     const unsigned int n_q_points_1d = quad_1d.size();
 
-
     AlignedVector<VectorizedArrayType> jacobians_x(dim * n_q_points_1d); // TODO
     AlignedVector<VectorizedArrayType> jacobians_y(dim * n_q_points_1d *
                                                    n_q_points_1d);    // TODO
@@ -1449,7 +1464,16 @@ public:
   get_sparse_matrix() const
   {
     if (sparse_matrix.m() == 0 && sparse_matrix.n() == 0)
-      compute_system_matrix();
+      compute_system_matrix(matrix_free.get_dof_handler().get_communicator());
+
+    return sparse_matrix;
+  }
+
+  const TrilinosWrappers::SparseMatrix &
+  get_sparse_matrix(const MPI_Comm comm) const
+  {
+    if (sparse_matrix.m() == 0 && sparse_matrix.n() == 0)
+      compute_system_matrix(comm);
 
     return sparse_matrix;
   }
@@ -1458,7 +1482,7 @@ public:
   get_sparsity_pattern() const
   {
     if (sparse_matrix.m() == 0 && sparse_matrix.n() == 0)
-      compute_system_matrix();
+      compute_system_matrix(matrix_free.get_dof_handler().get_communicator());
 
     return sparsity_pattern;
   }
@@ -1534,15 +1558,15 @@ private:
   }
 
   void
-  compute_system_matrix() const
+  compute_system_matrix(const MPI_Comm comm) const
   {
-    Assert((sparse_matrix.m() == 0 && sparse_matrix.n() == 0),
+    Assert((comm != MPI_COMM_NULL && sparse_matrix.m() == 0 &&
+            sparse_matrix.n() == 0),
            ExcNotImplemented());
 
     const auto &dof_handler = get_dof_handler();
 
-    sparsity_pattern.reinit(dof_handler.locally_owned_dofs(),
-                            dof_handler.get_triangulation().get_communicator());
+    sparsity_pattern.reinit(dof_handler.locally_owned_dofs(), comm);
 
     DoFTools::make_sparsity_pattern(dof_handler,
                                     sparsity_pattern,

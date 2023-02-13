@@ -2,7 +2,6 @@
 
 #include <deal.II/fe/fe_tools.h>
 
-
 namespace dealii
 {
   namespace DoFTools
@@ -30,6 +29,7 @@ namespace dealii
         Utilities::invert_permutation(
           FETools::hierarchic_to_lexicographic_numbering<dim>(fe_degree));
 
+      // TODO: use functionality from overlap_unstructured_01.cc
       const auto get_lexicographic_dof_indices = [&](const auto &cell) {
         const auto n_dofs_per_cell = fe.n_dofs_per_cell();
 
@@ -68,7 +68,7 @@ namespace dealii
               if (i != 0 && i != fe_degree && j != 0 && j != fe_degree)
                 inner_dof_indices.emplace_back(dof_indices[c]);
               else if (return_all)
-                inner_dof_indices.emplace_back(numbers::invalid_unsigned_int);
+                inner_dof_indices.emplace_back(numbers::invalid_dof_index);
 
           AssertDimension(inner_dof_indices.size(),
                           Utilities::pow(n_dofs_with_overlap_1D, dim));
@@ -87,7 +87,7 @@ namespace dealii
 
           std::vector<types::global_dof_index> dof_indices(
             Utilities::pow(n_dofs_with_overlap_1D, dim),
-            numbers::invalid_unsigned_int);
+            numbers::invalid_dof_index);
 
           const auto translate =
             [&](const auto i,
@@ -129,7 +129,7 @@ namespace dealii
           std::vector<types::global_dof_index> dof_indices_cleaned;
 
           for (const auto i : dof_indices)
-            if (i != numbers::invalid_unsigned_int)
+            if (i != numbers::invalid_dof_index)
               dof_indices_cleaned.push_back(i);
 
           return dof_indices_cleaned;
@@ -223,8 +223,8 @@ namespace dealii
       if (std::any_of(cells.begin(), cells.end(), [&](const auto &cell) {
             return cell == dof_handler.get_triangulation().end();
           }))
-        return std::vector<types::global_dof_index>(
-          n_dofs_per_patch, numbers::invalid_unsigned_int);
+        return std::vector<types::global_dof_index>(n_dofs_per_patch,
+                                                    numbers::invalid_dof_index);
 
       const auto map =
         FETools::hierarchic_to_lexicographic_numbering<dim>(fe_degree);
@@ -295,7 +295,6 @@ namespace dealii
                   result.push_back(result_all[c]);
                 }
         }
-
 
       return result;
     }

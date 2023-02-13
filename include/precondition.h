@@ -4,6 +4,8 @@
 #include "multigrid.h"
 #include "preconditioners.h"
 
+MPI_Comm sub_comm;
+
 template <typename OperatorType>
 std::shared_ptr<
   const ASPoissonPreconditioner<OperatorType::dimension,
@@ -31,6 +33,11 @@ public:
   WrapperForGMG(
     const std::shared_ptr<const PreconditionerBase<VectorType>> &base)
     : base(base)
+  {}
+
+  template <typename T>
+  WrapperForGMG(const std::shared_ptr<T> &base_in)
+    : base(std::make_shared<PreconditionerAdapter<VectorType, T>>(base_in))
   {}
 
   void
@@ -100,17 +107,20 @@ public:
     const MGLevelObject<
       std::shared_ptr<const AffineConstraints<typename VectorType::value_type>>>
       &                                                    mg_constraints,
-    const MGLevelObject<std::shared_ptr<LevelMatrixType>> &mg_operators)
+    const MGLevelObject<std::shared_ptr<LevelMatrixType>> &mg_operators,
+    const unsigned int                                     intermediate_level)
     : PreconditionerGMG<dim,
                         LevelMatrixType_,
                         WrapperForGMG<VectorType>,
                         VectorType,
-                        VectorTypeOuter>(dof_handler,
-                                         mg_dof_handlers,
-                                         mg_constraints,
-                                         mg_operators,
-                                         params.get<bool>("one-sided v-cycle",
-                                                          false))
+                        VectorTypeOuter>(
+        dof_handler,
+        mg_dof_handlers,
+        mg_constraints,
+        mg_operators,
+        params.get<bool>("one-sided v-cycle", false),
+        params.get<unsigned int>("n coarse cycles", 1),
+        intermediate_level)
     , params(params)
     , pcout(std::cout, Utilities::MPI::this_mpi_process(MPI_COMM_WORLD) == 0)
   {
@@ -129,6 +139,30 @@ public:
     return WrapperForGMG<VectorType>(
       create_system_preconditioner<LevelMatrixType>(
         level_matrix, try_get_child(params, "mg smoother")));
+  }
+
+  SmootherType
+  create_mg_intermediate_level_smoother(
+    unsigned int           level,
+    const LevelMatrixType &level_matrix) final
+  {
+    pcout << "- Setting up smoother on inermediate level " << level << ""
+          << std::endl
+          << std::endl;
+
+    (void)level;
+
+    const auto params_intermediate =
+      try_get_child(params, "mg intermediate smoother");
+
+    if (params_intermediate.get<std::string>("type", "") != "")
+      return WrapperForGMG<VectorType>(
+        create_system_preconditioner<LevelMatrixType>(level_matrix,
+                                                      params_intermediate));
+    else
+      return WrapperForGMG<VectorType>(
+        create_system_preconditioner<LevelMatrixType>(
+          level_matrix, try_get_child(params, "mg smoother")));
   }
 
   SmootherType

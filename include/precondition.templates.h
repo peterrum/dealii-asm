@@ -18,6 +18,8 @@ get_weighting_type(const boost::property_tree::ptree params)
     return Restrictors::WeightingType::pre;
   else if (type == "post")
     return Restrictors::WeightingType::post;
+  else if (type == "ras")
+    return Restrictors::WeightingType::ras;
   else if (type == "none")
     return Restrictors::WeightingType::none;
 
@@ -91,7 +93,7 @@ std::shared_ptr<const PreconditionChebyshev<OperatorType,
 create_chebyshev_preconditioner(
   const OperatorType &                       op,
   const std::shared_ptr<PreconditionerType> &precon,
-  const boost::property_tree::ptree          params)
+  const boost::property_tree::ptree          params, SymmetryType::SymmetryType is_symmetric)
 {
   using ChebyshevPreconditionerType =
     PreconditionChebyshev<OperatorType,
@@ -104,11 +106,12 @@ create_chebyshev_preconditioner(
   chebyshev_additional_data.preconditioner = precon;
   chebyshev_additional_data.constraints.copy_from(op.get_constraints());
   chebyshev_additional_data.degree = params.get<unsigned int>("degree", 3);
-  chebyshev_additional_data.smoothing_range     = 20;
-  chebyshev_additional_data.eig_cg_n_iterations = 20;
+  chebyshev_additional_data.smoothing_range =
+    params.get<double>("smoothing range", 20.);
+  chebyshev_additional_data.eig_cg_n_iterations = 40;
 
   const auto ev_algorithm =
-    params.get<std::string>("ev algorithm", "power iteration");
+    params.get<std::string>("ev algorithm", is_symmetric == SymmetryType::symmetric ? "lanczos" : "power iteration");
 
   if (ev_algorithm == "lanczos")
     {
@@ -126,6 +129,25 @@ create_chebyshev_preconditioner(
     {
       AssertThrow(false,
                   ExcMessage("Eigen-value algorithm <" + ev_algorithm +
+                             "> is not known!"))
+    }
+
+  const auto poly_type = params.get<std::string>("polynomial type", "1st kind");
+
+  if (poly_type == "1st kind")
+    {
+      chebyshev_additional_data.polynomial_type =
+        ChebyshevPreconditionerType::AdditionalData::PolynomialType::first_kind;
+    }
+  else if (poly_type == "4th kind")
+    {
+      chebyshev_additional_data.polynomial_type = ChebyshevPreconditionerType::
+        AdditionalData::PolynomialType::fourth_kind;
+    }
+  else
+    {
+      AssertThrow(false,
+                  ExcMessage("Polynomial type <" + ev_algorithm +
                              "> is not known!"))
     }
 
@@ -252,7 +274,7 @@ create_system_preconditioner(const OperatorType &              op,
 
       AssertThrow(preconditioner_type != "", ExcNotImplemented());
 
-      const auto setup_relaxation = [&](const auto &op, const auto precon) {
+      const auto setup_relaxation = [&](const auto &op, const auto precon, const auto is_symmetric) {
         using MyOperatorType = typename std::remove_cv<
           typename std::remove_reference<decltype(op)>::type>::type;
         using RelaxationPreconditionerType = PreconditionRelaxation<
@@ -270,7 +292,7 @@ create_system_preconditioner(const OperatorType &              op,
         if (omega == 0.0)
           {
             const auto chebyshev =
-              create_chebyshev_preconditioner(op, precon, params);
+              create_chebyshev_preconditioner(op, precon, params, is_symmetric);
 
             VectorType vec;
             op.initialize_dof_vector(vec);
@@ -324,6 +346,8 @@ create_system_preconditioner(const OperatorType &              op,
           const auto my_diag =
             std::make_shared<DiagonalMatrixPrePost<VectorType>>(diag);
 
+          const auto is_symmetric = op.is_symmetric();
+
           if (preconditioner_optimize == 0)
             {
               // optimization 0: A (-) and P (-)
@@ -331,24 +355,24 @@ create_system_preconditioner(const OperatorType &              op,
                 static_cast<const LaplaceOperatorBase<dim, VectorType> &>(op),
                 std::make_shared<
                   PreconditionerAdapter<VectorType,
-                                        DiagonalMatrix<VectorType>>>(diag));
+                                        DiagonalMatrix<VectorType>>>(diag), is_symmetric);
             }
           else if (preconditioner_optimize == 1)
             {
               // optimization 1: A (-) and P (pp)
               return setup_relaxation(
                 static_cast<const LaplaceOperatorBase<dim, VectorType> &>(op),
-                my_diag);
+                my_diag, is_symmetric);
             }
           else if (preconditioner_optimize == 2)
             {
               // optimization 2: A (pp) and P (pp)
-              return setup_relaxation(op, my_diag);
+              return setup_relaxation(op, my_diag, is_symmetric);
             }
           else if (preconditioner_optimize == 3)
             {
               // optimization 2: A (pp) and P (diag)
-              return setup_relaxation(op, diag);
+              return setup_relaxation(op, diag, is_symmetric);
             }
           else
             {
@@ -366,15 +390,17 @@ create_system_preconditioner(const OperatorType &              op,
           const auto fdm =
             create_fdm_preconditioner(op, preconditioner_parameters);
 
+          const auto is_symmetric = op.is_symmetric() & fdm->is_symmetric();
+
           if (preconditioner_optimize == 0)
             {
               // optimization 0: A (-) and P (-)
               return setup_relaxation(
                 static_cast<const LaplaceOperatorBase<dim, VectorType> &>(op),
-                std::make_shared<PreconditionerAdapter<
+                std::make_shared<PreconditionerAdapterWithoutStep<
                   VectorType,
                   ASPoissonPreconditioner<dim, Number, VectorizedArrayType>>>(
-                  fdm));
+                  fdm), is_symmetric);
             }
           else if (preconditioner_optimize == 1)
             {
@@ -383,7 +409,7 @@ create_system_preconditioner(const OperatorType &              op,
                 static_cast<const LaplaceOperatorBase<dim, VectorType> &>(op),
                 std::const_pointer_cast<
                   ASPoissonPreconditioner<dim, Number, VectorizedArrayType>>(
-                  fdm));
+                  fdm), is_symmetric);
             }
           else if (preconditioner_optimize == 2)
             {
@@ -392,7 +418,7 @@ create_system_preconditioner(const OperatorType &              op,
                 op,
                 std::const_pointer_cast<
                   ASPoissonPreconditioner<dim, Number, VectorizedArrayType>>(
-                  fdm));
+                  fdm), is_symmetric);
             }
           else
             {
@@ -407,7 +433,7 @@ create_system_preconditioner(const OperatorType &              op,
           return setup_relaxation(
             op,
             std::const_pointer_cast<
-              PreconditionerBase<typename OperatorType::vector_type>>(precon));
+              PreconditionerBase<typename OperatorType::vector_type>>(precon), SymmetryType::undefined);
         }
     }
   else if (type == "Chebyshev")
@@ -420,7 +446,7 @@ create_system_preconditioner(const OperatorType &              op,
 
       AssertThrow(preconditioner_type != "", ExcNotImplemented());
 
-      const auto setup_chebshev = [&](const auto &op, const auto precon) {
+      const auto setup_chebshev = [&](const auto &op, const auto precon, const auto is_symmetric) {
         using MyOperatorType = typename std::remove_cv<
           typename std::remove_reference<decltype(op)>::type>::type;
         using PreconditionerType = PreconditionChebyshev<
@@ -430,7 +456,7 @@ create_system_preconditioner(const OperatorType &              op,
             typename std::remove_reference<decltype(*precon)>::type>::type>;
 
         const auto chebyshev =
-          create_chebyshev_preconditioner(op, precon, params);
+          create_chebyshev_preconditioner(op, precon, params, is_symmetric);
 
         VectorType vec;
         op.initialize_dof_vector(vec);
@@ -466,6 +492,8 @@ create_system_preconditioner(const OperatorType &              op,
           const auto my_diag =
             std::make_shared<DiagonalMatrixPrePost<VectorType>>(diag);
 
+          const auto is_symmetric = op.is_symmetric();
+
           if (preconditioner_optimize == 0)
             {
               // optimization 0: A (-) and P (-)
@@ -473,24 +501,24 @@ create_system_preconditioner(const OperatorType &              op,
                 static_cast<const LaplaceOperatorBase<dim, VectorType> &>(op),
                 std::make_shared<
                   PreconditionerAdapter<VectorType,
-                                        DiagonalMatrix<VectorType>>>(diag));
+                                        DiagonalMatrix<VectorType>>>(diag), is_symmetric);
             }
           else if (preconditioner_optimize == 1)
             {
               // optimization 1: A (-) and P (pp)
               return setup_chebshev(
                 static_cast<const LaplaceOperatorBase<dim, VectorType> &>(op),
-                my_diag);
+                my_diag, is_symmetric);
             }
           else if (preconditioner_optimize == 2)
             {
               // optimization 2: A (pp) and P (pp)
-              return setup_chebshev(op, my_diag);
+              return setup_chebshev(op, my_diag, is_symmetric);
             }
           else if (preconditioner_optimize == 3)
             {
               // optimization 2: A (pp) and P (diag)
-              return setup_chebshev(op, diag);
+              return setup_chebshev(op, diag, is_symmetric);
             }
           else
             {
@@ -508,6 +536,8 @@ create_system_preconditioner(const OperatorType &              op,
           const auto fdm =
             create_fdm_preconditioner(op, preconditioner_parameters);
 
+          const auto is_symmetric = op.is_symmetric() & fdm->is_symmetric();
+
           if (preconditioner_optimize == 0)
             {
               // optimization 0: A (-) and P (-)
@@ -516,7 +546,7 @@ create_system_preconditioner(const OperatorType &              op,
                 std::make_shared<PreconditionerAdapter<
                   VectorType,
                   ASPoissonPreconditioner<dim, Number, VectorizedArrayType>>>(
-                  fdm));
+                  fdm), is_symmetric);
             }
           else if (preconditioner_optimize == 1)
             {
@@ -525,7 +555,7 @@ create_system_preconditioner(const OperatorType &              op,
                 static_cast<const LaplaceOperatorBase<dim, VectorType> &>(op),
                 std::const_pointer_cast<
                   ASPoissonPreconditioner<dim, Number, VectorizedArrayType>>(
-                  fdm));
+                  fdm), is_symmetric);
             }
           else if (preconditioner_optimize == 2)
             {
@@ -534,7 +564,7 @@ create_system_preconditioner(const OperatorType &              op,
                 op,
                 std::const_pointer_cast<
                   ASPoissonPreconditioner<dim, Number, VectorizedArrayType>>(
-                  fdm));
+                  fdm), is_symmetric);
             }
           else
             {
@@ -549,7 +579,7 @@ create_system_preconditioner(const OperatorType &              op,
           return setup_chebshev(
             op,
             std::const_pointer_cast<
-              PreconditionerBase<typename OperatorType::vector_type>>(precon));
+              PreconditionerBase<typename OperatorType::vector_type>>(precon), SymmetryType::undefined);
         }
     }
   else if (type == "FDM")
@@ -566,10 +596,16 @@ create_system_preconditioner(const OperatorType &              op,
       using PreconditionerType = TrilinosWrappers::PreconditionAMG;
 
       typename PreconditionerType::AdditionalData additional_data;
+      additional_data.n_cycles = 1;
 
-      const auto preconitioner = std::make_shared<PreconditionerType>();
+      std::shared_ptr<PreconditionerType> preconitioner;
 
-      preconitioner->initialize(op.get_sparse_matrix(), additional_data);
+      if (sub_comm != MPI_COMM_NULL)
+        {
+          preconitioner = std::make_shared<PreconditionerType>();
+          preconitioner->initialize(op.get_sparse_matrix(sub_comm),
+                                    additional_data);
+        }
 
       return std::make_shared<
         PreconditionerAdapter<VectorType, PreconditionerType, double>>(

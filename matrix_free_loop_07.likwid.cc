@@ -191,6 +191,8 @@ test(const Parameters params_in)
         << std::to_string(params_in.n_repetitions) << " ";
   for (const auto time : times)
     pcout << time << " ";
+  pcout << std::to_string(src.get_partitioner()->n_ghost_indices()) << " "
+        << std::to_string(src.get_partitioner()->n_import_indices()) << " ";
   pcout << std::endl << std::endl;
 }
 

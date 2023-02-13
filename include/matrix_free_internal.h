@@ -136,7 +136,8 @@ public:
            const std::pair<unsigned int, unsigned int>)> &cell_function,
     const std::function<void(unsigned int, unsigned int)>
       &operation_before_loop,
-    const std::function<void(unsigned int, unsigned int)> &operation_after_loop)
+    const std::function<void(unsigned int, unsigned int)> &operation_after_loop,
+    const bool needs_compression = true)
     : matrix_free(matrix_free)
     , cell_loop_pre_list_index(cell_loop_pre_list_index)
     , cell_loop_pre_list(cell_loop_pre_list)
@@ -150,6 +151,7 @@ public:
     , operation_before_loop(operation_before_loop)
     , operation_after_loop(operation_after_loop)
     , zero_dst_vector_setting(false)
+    , needs_compression(needs_compression)
   {}
 
   const std::vector<unsigned int> &
@@ -173,13 +175,15 @@ public:
   virtual void
   vector_compress_start()
   {
-    exchanger_dst.compress_start(dst);
+    if (needs_compression)
+      exchanger_dst.compress_start(dst);
   }
 
   virtual void
   vector_compress_finish()
   {
-    exchanger_dst.compress_finish(dst);
+    if (needs_compression)
+      exchanger_dst.compress_finish(dst);
     exchanger_src.zero_out_ghost_values(src);
   }
 
@@ -287,6 +291,7 @@ private:
   const std::function<void(unsigned int, unsigned int)> operation_before_loop;
   const std::function<void(unsigned int, unsigned int)> operation_after_loop;
   const bool                                            zero_dst_vector_setting;
+  const bool                                            needs_compression;
 };
 
 struct MFRunner

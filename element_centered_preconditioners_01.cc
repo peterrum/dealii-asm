@@ -2,6 +2,7 @@
 #include <deal.II/base/convergence_table.h>
 #include <deal.II/base/quadrature_lib.h>
 
+#include <deal.II/distributed/repartitioning_policy_tools.h>
 #include <deal.II/distributed/tria.h>
 
 #include <deal.II/dofs/dof_handler.h>
@@ -12,6 +13,7 @@
 #include <deal.II/fe/mapping_q_cache.h>
 
 #include <deal.II/grid/grid_generator.h>
+#include <deal.II/grid/grid_tools.h>
 
 #include <deal.II/lac/diagonal_matrix.h>
 #include <deal.II/lac/dynamic_sparsity_pattern.h>
@@ -79,8 +81,32 @@ private:
 
 
 
+template <int dim>
+class RightHandSideSinusMP : public Function<dim>
+{
+public:
+  RightHandSideSinusMP() = default;
+
+  virtual double
+  value(const Point<dim> &p, const unsigned int component = 0) const override
+  {
+    (void)component;
+
+    double value = dim * numbers::PI;
+
+    for (int d = 0; d < dim; ++d)
+      value *= std::sin(numbers::PI * p[d]);
+
+    return value;
+  }
+
+private:
+};
+
+
+
 template <typename MatrixType, typename PreconditionerType, typename VectorType>
-std::shared_ptr<ReductionControl>
+void
 solve(const MatrixType &                              A,
       VectorType &                                    x,
       const VectorType &                              b,
@@ -92,6 +118,9 @@ solve(const MatrixType &                              A,
   const auto abs_tolerance  = params.get<double>("abs tolerance", 1e-10);
   const auto rel_tolerance  = params.get<double>("rel tolerance", 1e-2);
   const auto type           = params.get<std::string>("type", "");
+  const auto best_of        = params.get<unsigned int>("best of", 1);
+  const auto control_type =
+    params.get<std::string>("control type", "ReductionControl");
 
   ConditionalOStream pcout(std::cout,
                            Utilities::MPI::this_mpi_process(MPI_COMM_WORLD) ==
@@ -102,9 +131,23 @@ solve(const MatrixType &                              A,
   pcout << "   - abs tolerance:  " << abs_tolerance << std::endl;
   pcout << "   - rel tolrance:   " << rel_tolerance << std::endl;
 
-  auto reduction_control = std::make_shared<ReductionControl>(max_iterations,
-                                                              abs_tolerance,
-                                                              rel_tolerance);
+  std::shared_ptr<SolverControl> solver_control;
+
+  if (control_type == "ReductionControl")
+    {
+      solver_control = std::make_shared<ReductionControl>(max_iterations,
+                                                          abs_tolerance,
+                                                          rel_tolerance);
+    }
+  else if (control_type == "IterationNumberControl")
+    {
+      solver_control =
+        std::make_shared<IterationNumberControl>(max_iterations, abs_tolerance);
+    }
+  else
+    {
+      AssertThrow(false, ExcNotImplemented());
+    }
 
   const auto dispatch = [&]() {
     x = 0;
@@ -113,33 +156,49 @@ solve(const MatrixType &                              A,
       {
         if (type == "CG")
           {
-            SolverCG<VectorType> solver(*reduction_control);
+            SolverCG<VectorType> solver(*solver_control);
             solver.solve(A, x, b, *preconditioner);
           }
         else if (type == "FCG")
           {
-            SolverFlexibleCG<VectorType> solver(*reduction_control);
+            SolverFlexibleCG<VectorType> solver(*solver_control);
             solver.solve(A, x, b, *preconditioner);
           }
         else if (type == "GMRES")
           {
             typename SolverGMRES<VectorType>::AdditionalData additional_data;
-            additional_data.right_preconditioning = true;
-            additional_data.orthogonalization_strategy =
-              SolverGMRES<VectorType>::AdditionalData::
-                OrthogonalizationStrategy::classical_gram_schmidt;
+
+            // left or right preconditioning
+            additional_data.right_preconditioning =
+              params.get<bool>("use right preconditioning", true);
+
+            // orthogonalization strategy
+            const auto orthogonalization_strategy =
+              params.get<std::string>("orthogonalization strategy",
+                                      "classical gram schmidt");
+
+            if (orthogonalization_strategy == "classical gram schmidt")
+              additional_data.orthogonalization_strategy =
+                SolverGMRES<VectorType>::AdditionalData::
+                  OrthogonalizationStrategy::classical_gram_schmidt;
+            else if (orthogonalization_strategy == "modified gram schmidt")
+              additional_data.orthogonalization_strategy =
+                SolverGMRES<VectorType>::AdditionalData::
+                  OrthogonalizationStrategy::modified_gram_schmidt;
+            else
+              AssertThrow(false, ExcNotImplemented());
 
             const auto max_n_tmp_vectors =
               params.get<int>("max n tmp vectors", 0);
             if (max_n_tmp_vectors > 0)
               additional_data.max_n_tmp_vectors = max_n_tmp_vectors;
 
-            SolverGMRES<VectorType> solver(*reduction_control, additional_data);
+            SolverGMRES<VectorType> solver(*solver_control, additional_data);
             solver.solve(A, x, b, *preconditioner);
           }
         else if (type == "FGMRES")
           {
-            SolverFGMRES<VectorType> solver(*reduction_control);
+            SolverFGMRES<VectorType> solver(*solver_control);
             solver.solve(A, x, b, *preconditioner);
           }
         else
@@ -162,17 +221,22 @@ solve(const MatrixType &                              A,
 
   if (converged)
     {
-      if constexpr (has_timing_functionality<PreconditionerType>)
-        preconditioner->clear_timings();
+      for (unsigned int i = 0; i < best_of; ++i)
+        {
+          if constexpr (has_timing_functionality<PreconditionerType>)
+            preconditioner->clear_timings();
 
-      const auto timer = std::chrono::system_clock::now();
-      dispatch();
-      time = std::chrono::duration_cast<std::chrono::nanoseconds>(
-               std::chrono::system_clock::now() - timer)
-               .count() /
-             1e9;
+          const auto timer = std::chrono::system_clock::now();
+          dispatch();
+          time = std::min<double>(
+            time,
+            std::chrono::duration_cast<std::chrono::nanoseconds>(
+              std::chrono::system_clock::now() - timer)
+                .count() /
+              1e9);
+        }
 
-      pcout << "   - n iterations:   " << reduction_control->last_step()
+      pcout << "   - n iterations:   " << solver_control->last_step()
             << std::endl;
       pcout << "   - time:           " << time << " #" << std::endl;
       pcout << std::endl;
@@ -185,7 +249,7 @@ solve(const MatrixType &                              A,
 
 
   if (converged)
-    table.add_value("it", reduction_control->last_step());
+    table.add_value("it", solver_control->last_step());
   else
     table.add_value("it", 999);
 
@@ -196,8 +260,6 @@ solve(const MatrixType &                              A,
       if constexpr (has_timing_functionality<PreconditionerType>)
         preconditioner->print_timings();
     }
-
-  return reduction_control;
 }
 
 
@@ -206,6 +268,9 @@ template <typename OperatorTrait>
 void
 test(const boost::property_tree::ptree params, ConvergenceTable &table)
 {
+  const MPI_Comm comm = MPI_COMM_WORLD;
+  sub_comm            = comm;
+
   const unsigned int fe_degree = params.get<unsigned int>("degree", 1);
   const unsigned int n_global_refinements =
     params.get<unsigned int>("n refinements", 6);
@@ -248,18 +313,22 @@ test(const boost::property_tree::ptree params, ConvergenceTable &table)
 
   if (geometry_name == "hypercube")
     {
+      auto n_subdivisions = mesh_parameters.get<int>("n subdivisions", 1);
+
       pcout << "- Create mesh: hypercube" << std::endl;
       pcout << std::endl;
 
-      GridGenerator::hyper_cube(tria);
+      GridGenerator::subdivided_hyper_cube(tria, n_subdivisions);
       mapping_degree = std::min(mapping_degree, 1u);
     }
   else if (geometry_name == "symmetric hypercube")
     {
+      auto n_subdivisions = mesh_parameters.get<int>("n subdivisions", 1);
+
       pcout << "- Create mesh: symmetric hypercube" << std::endl;
       pcout << std::endl;
 
-      GridGenerator::hyper_cube(tria, -1.0, +1.0);
+      GridGenerator::subdivided_hyper_cube(tria, n_subdivisions, -1.0, +1.0);
       mapping_degree = std::min(mapping_degree, 1u);
     }
   else if (geometry_name == "anisotropy")
@@ -280,10 +349,14 @@ test(const boost::property_tree::ptree params, ConvergenceTable &table)
         return new_point;
       };
     }
-  else if (geometry_name == "kershaw")
+  else if (geometry_name == "kershaw" || geometry_name == "kershaw-mp")
     {
       auto epsy = mesh_parameters.get<double>("epsy", 0.0);
       auto epsz = mesh_parameters.get<double>("epsz", 0.0);
+
+      auto n_intial_refinements =
+        mesh_parameters.get<int>("n initial refinements", 1);
+      auto n_subdivisions = mesh_parameters.get<int>("n subdivisions", 3);
 
       if (epsy == 0.0 || epsz == 0.0)
         {
@@ -302,20 +375,25 @@ test(const boost::property_tree::ptree params, ConvergenceTable &table)
       // replace 6 coarse cells by 3 coarse cells and
       // an additional refinement to favor GMG (TODO: is this
       // according to specification)
-      GridGenerator::subdivided_hyper_cube(tria, 3);
-      tria.refine_global(1);
+      GridGenerator::subdivided_hyper_cube(tria, n_subdivisions);
+      tria.refine_global(n_intial_refinements);
 
       mapping_degree = std::min(mapping_degree, 3u /*TODO*/);
 
-      transformation_function = [epsy, epsz](const auto &,
-                                             const auto &in_point) {
-        Point<dim> out_point;
-        // clang-format off
-        kershaw(epsy, epsz, in_point[0], in_point[1], in_point[2], out_point[0], out_point[1], out_point[2]);
-        // clang-format on
+      transformation_function =
+        [epsy, epsz, geometry_name](const auto &, const auto &in_point) {
+          Point<dim> out_point;
+          double     dummy = 0.0;
+          // clang-format off
+        kershaw(epsy, epsz, in_point[0], in_point[1], dim == 3 ? in_point[2] : dummy, out_point[0], out_point[1], dim == 3 ? out_point[2] : dummy);
+          // clang-format on
 
-        return out_point;
-      };
+          if (geometry_name == "kershaw-mp")
+            for (unsigned int d = 0; d < dim; ++d)
+              out_point[d] -= 0.5;
+
+          return out_point;
+        };
     }
   else if (geometry_name == "hyperball")
     {
@@ -329,10 +407,10 @@ test(const boost::property_tree::ptree params, ConvergenceTable &table)
                              "> is not known!"));
     }
 
-
-  for (const auto &face : tria.active_face_iterators())
-    if (face->at_boundary())
-      face->set_boundary_id(1);
+  for (const auto &cell : tria.cell_iterators())
+    for (const auto &face : cell->face_iterators())
+      if (face->at_boundary())
+        face->set_boundary_id(1);
 
   tria.refine_global(n_global_refinements);
 
@@ -368,6 +446,35 @@ test(const boost::property_tree::ptree params, ConvergenceTable &table)
       rhs_func = std::make_shared<GaussianRightHandSide<dim>>(points, width);
       dbc_func = std::make_shared<GaussianSolution<dim>>(points, width);
     }
+  else if (rhs_name == "gaussian-jw")
+    {
+      std::vector<Point<dim>> points;
+
+      if (dim == 2)
+        {
+          points.emplace_back(0.0, 0.0);
+          points.emplace_back(0.25, 0.85);
+          points.emplace_back(0.6, 0.4);
+        }
+      else if (dim == 3)
+        {
+          points.emplace_back(0.0, 0.0, 0.0);
+          points.emplace_back(0.25, 0.85, 0.85);
+          points.emplace_back(0.6, 0.4, 0.4);
+        }
+      else
+        AssertThrow(false, ExcNotImplemented());
+
+      const double width = 1. / 3.;
+
+      rhs_func = std::make_shared<GaussianRightHandSide<dim>>(points, width);
+      dbc_func = std::make_shared<GaussianSolution<dim>>(points, width);
+    }
+  else if (rhs_name == "sin-mp")
+    {
+      rhs_func = std::make_shared<RightHandSideSinusMP<dim>>();
+      dbc_func = std::make_shared<Functions::ZeroFunction<dim>>();
+    }
   else
     {
       AssertThrow(false,
@@ -396,7 +503,6 @@ test(const boost::property_tree::ptree params, ConvergenceTable &table)
   op.rhs(rhs, rhs_func);
   rhs.zero_out_ghost_values();
 
-  std::shared_ptr<ReductionControl> reduction_control;
 
   // ASM on cell level
   if (preconditioner_type == "Identity")
@@ -410,8 +516,7 @@ test(const boost::property_tree::ptree params, ConvergenceTable &table)
       const auto preconditioner =
         std::make_shared<const PreconditionIdentity>();
 
-      reduction_control =
-        solve(op, solution, rhs, preconditioner, solver_parameters, table);
+      solve(op, solution, rhs, preconditioner, solver_parameters, table);
     }
   else if (preconditioner_type == "Diagonal")
     {
@@ -424,14 +529,13 @@ test(const boost::property_tree::ptree params, ConvergenceTable &table)
       auto preconditioner = std::make_shared<DiagonalMatrix<VectorType>>();
       op.compute_inverse_diagonal(preconditioner->get_vector());
 
-      reduction_control =
-        solve(op,
-              solution,
-              rhs,
-              std::const_pointer_cast<const DiagonalMatrix<VectorType>>(
-                preconditioner),
-              solver_parameters,
-              table);
+      solve(op,
+            solution,
+            rhs,
+            std::const_pointer_cast<const DiagonalMatrix<VectorType>>(
+              preconditioner),
+            solver_parameters,
+            table);
     }
   else if (preconditioner_type == "Multigrid")
     {
@@ -439,15 +543,12 @@ test(const boost::property_tree::ptree params, ConvergenceTable &table)
 
       pcout << "- Create system preconditioner: Multigrid" << std::endl;
 
-      MGLevelObject<std::shared_ptr<const DoFHandler<dim>>> mg_dof_handlers;
+      std::vector<std::shared_ptr<const Triangulation<dim>>> mg_triangulations;
+      MGLevelObject<std::shared_ptr<MappingQCache<dim>>>     mg_mapping;
+      MGLevelObject<std::shared_ptr<LevelOperatorType>>      mg_operators;
+      MGLevelObject<std::shared_ptr<const DoFHandler<dim>>>  mg_dof_handlers;
       MGLevelObject<std::shared_ptr<const AffineConstraints<LevelNumber>>>
-                                                         mg_constraints;
-      MGLevelObject<std::shared_ptr<LevelOperatorType>>  mg_operators;
-      MGLevelObject<std::shared_ptr<MappingQCache<dim>>> mg_mapping;
-
-      MGLevelObject<MGTwoLevelTransfer<dim, LevelVectorType>> transfers;
-      std::unique_ptr<MGTransferGlobalCoarsening<dim, LevelVectorType>>
-        transfer;
+        mg_constraints;
 
       const auto mg_type =
         preconditioner_parameters.get<std::string>("mg type", "h");
@@ -487,9 +588,53 @@ test(const boost::property_tree::ptree params, ConvergenceTable &table)
 
       const auto mg_degress =
         create_polynomial_coarsening_sequence(fe_degree, mg_p_sequence);
-      const auto mg_triangulations =
-        MGTransferGlobalCoarseningTools::create_geometric_coarsening_sequence(
-          tria);
+
+      RepartitioningPolicyTools::DefaultPolicy<dim> policy(true);
+
+      if (mg_type == "h" || mg_type == "hp" || mg_type == "ph")
+        {
+          mg_triangulations = MGTransferGlobalCoarseningTools::
+            create_geometric_coarsening_sequence(tria, policy, true, false);
+
+          unsigned int cell_counter = 0;
+
+          for (const auto &cell : mg_triangulations[0]->active_cell_iterators())
+            if (cell->is_locally_owned())
+              cell_counter++;
+
+          const unsigned int rank = Utilities::MPI::this_mpi_process(comm);
+
+#if DEBUG
+          const auto t = Utilities::MPI::gather(comm, cell_counter);
+
+          if (rank == 0)
+            {
+              for (const auto tt : t)
+                std::cout << tt << " ";
+              std::cout << std::endl;
+            }
+#endif
+
+          const int temp = cell_counter == 0 ? -1 : rank;
+
+          const unsigned int max_rank = Utilities::MPI::max(temp, comm);
+
+          if (max_rank != Utilities::MPI::n_mpi_processes(comm) - 1)
+            {
+              const bool color = rank <= max_rank;
+              MPI_Comm_split(comm, color, rank, &sub_comm);
+
+              if (color == false)
+                {
+                  MPI_Comm_free(&sub_comm);
+                  sub_comm = MPI_COMM_NULL;
+                }
+            }
+        }
+      else
+        {
+          mg_triangulations.emplace_back(&tria, [](auto *) {});
+        }
 
       std::vector<std::pair<unsigned int, unsigned int>> levels;
 
@@ -529,6 +674,16 @@ test(const boost::property_tree::ptree params, ConvergenceTable &table)
       const unsigned int min_level = 0;
       const unsigned int max_level = levels.size() - 1;
 
+      auto result = std::find_if(levels.rbegin(),
+                                 levels.rend(),
+                                 [](const auto &i) { return i.second == 1; });
+
+      const unsigned int intermediate_level =
+        ((result != levels.rend()) ?
+           (std::distance(result, levels.rend()) - 1) :
+           0) +
+        min_level;
+
       mg_dof_handlers.resize(min_level, max_level);
       mg_constraints.resize(min_level, max_level);
       mg_operators.resize(min_level, max_level);
@@ -546,11 +701,11 @@ test(const boost::property_tree::ptree params, ConvergenceTable &table)
 
           if (transformation_function)
             mg_mapping[l]->initialize(mapping_q1,
-                                      tria,
+                                      mg_tria,
                                       transformation_function,
                                       false);
           else
-            mg_mapping[l]->initialize(mapping_q1, tria);
+            mg_mapping[l]->initialize(mapping_q1, mg_tria);
 
           mg_operators[l] = std::make_shared<LevelOperatorType>(
             *mg_mapping[l],
@@ -578,10 +733,10 @@ test(const boost::property_tree::ptree params, ConvergenceTable &table)
         op.get_dof_handler(),
         mg_dof_handlers,
         mg_constraints,
-        mg_operators);
+        mg_operators,
+        intermediate_level);
 
-      reduction_control =
-        solve(op, solution, rhs, preconditioner, solver_parameters, table);
+      solve(op, solution, rhs, preconditioner, solver_parameters, table);
     }
   else
     {
@@ -590,10 +745,17 @@ test(const boost::property_tree::ptree params, ConvergenceTable &table)
       const auto preconditioner =
         create_system_preconditioner(op, preconditioner_parameters);
 
-      reduction_control =
-        solve(op, solution, rhs, preconditioner, solver_parameters, table);
+      solve(op, solution, rhs, preconditioner, solver_parameters, table);
     }
 
+  if (comm != sub_comm && sub_comm != MPI_COMM_NULL)
+    MPI_Comm_free(&sub_comm);
+
+  table.add_value(
+    "aspect_ratio",
+    GridTools::compute_maximum_aspect_ratio(op.get_mapping(),
+                                            op.get_triangulation(),
+                                            op.get_quadrature()));
 
   if (params.get<bool>("do output", false))
     {

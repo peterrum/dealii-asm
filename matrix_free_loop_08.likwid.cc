@@ -6,6 +6,7 @@
 #include <deal.II/dofs/dof_renumbering.h>
 
 #include <deal.II/fe/fe_q.h>
+#include <deal.II/fe/mapping_q_cache.h>
 
 #include <deal.II/grid/grid_tools.h>
 
@@ -33,8 +34,9 @@ struct Parameters
 
   std::string preconditioner_types = "post-1-c";
 
-  bool dof_renumbering  = true;
-  bool compress_indices = true;
+  bool dof_renumbering    = true;
+  bool compress_indices   = true;
+  bool use_cartesian_mesh = true;
 
   unsigned int n_repetitions = 10;
 
@@ -64,6 +66,7 @@ private:
 
     prm.add_parameter("n repetitions", n_repetitions);
     prm.add_parameter("dof renumbering", dof_renumbering);
+    prm.add_parameter("use cartesian mesh", use_cartesian_mesh);
   }
 };
 
@@ -80,7 +83,9 @@ setup_constraints(const DoFHandler<dim> &    dof_handler,
 }
 
 std::vector<std::string>
-split_string(const std::string text, const char deliminator)
+split_string(const std::string  text,
+             const char         deliminator,
+             const unsigned int size = numbers::invalid_unsigned_int)
 {
   std::stringstream stream;
   stream << text;
@@ -91,7 +96,49 @@ split_string(const std::string text, const char deliminator)
   while (std::getline(stream, substring, deliminator))
     substring_list.push_back(substring);
 
+  if (size != numbers::invalid_unsigned_int)
+    for (unsigned int i = substring_list.size(); i < size; ++i)
+      substring_list.push_back("-");
+
   return substring_list;
+}
+
+void
+process_fdm_parameters(const unsigned int              offset,
+                       const std::vector<std::string> &props,
+                       boost::property_tree::ptree &   params,
+                       std::string &                   constness)
+{
+  const auto type               = props[offset + 0];
+  const auto n_overlap          = props[offset + 1];
+  const auto weighting_sequence = props[offset + 2];
+
+  const bool overlap_pre_post =
+    (weighting_sequence == "g") ? (props[offset + 3] == "p") : true;
+  constness =
+    (weighting_sequence == "g") ? (props[offset + 4]) : std::string("c");
+
+  // configure preconditioner
+  params.put("weighting type", (type == "add") ? "none" : type);
+
+  if (n_overlap == "v")
+    {
+      params.put("element centric", false);
+    }
+  else
+    {
+      params.put("n overlap", n_overlap);
+      params.put("element centric", true);
+    }
+
+  params.put("weight sequence",
+             weighting_sequence == "g" ?
+               "global" :
+               (weighting_sequence == "l" ?
+                  "local" :
+                  (weighting_sequence == "dg" ? "DG" : "compressed")));
+
+  params.put("overlap pre post", overlap_pre_post);
 }
 
 template <int dim, typename Number>
@@ -105,9 +152,8 @@ test(const Parameters params_in)
                            Utilities::MPI::this_mpi_process(MPI_COMM_WORLD) ==
                              0);
 
-  FE_Q<dim>      fe(params_in.fe_degree);
-  QGauss<dim>    quadrature(params_in.fe_degree + 1);
-  MappingQ1<dim> mapping;
+  FE_Q<dim>   fe(params_in.fe_degree);
+  QGauss<dim> quadrature(params_in.fe_degree + 1);
 
   parallel::distributed::Triangulation<dim> tria(MPI_COMM_WORLD);
   const unsigned int                        n_global_refinements =
@@ -125,10 +171,35 @@ test(const Parameters params_in)
 
   tria.refine_global(n_global_refinements);
 
+  MappingQ1<dim> mapping;
+
+  const bool use_cartesian_mesh = params_in.use_cartesian_mesh;
+
+  const unsigned int mapping_degree = 2;
+  MappingQCache<dim> mapping_q_cache(mapping_degree);
+  mapping_q_cache.initialize(
+    mapping,
+    tria,
+    [use_cartesian_mesh](const auto &, const auto &point) {
+      Point<dim> result;
+
+      if (use_cartesian_mesh)
+        return result;
+
+      for (unsigned int d = 0; d < dim; ++d)
+        result[d] = std::sin(2 * numbers::PI * point[(d + 1) % dim]) *
+                    std::sin(numbers::PI * point[d]) * 0.1;
+
+      return result;
+    },
+    true);
+
+
   DoFHandler<dim> dof_handler(tria);
   dof_handler.distribute_dofs(fe);
 
   pcout << "Info" << std::endl;
+  pcout << " - degree: " << params_in.fe_degree << std::endl;
   pcout << " - n dofs: " << dof_handler.n_dofs() << std::endl;
   pcout << std::endl << std::endl;
 
@@ -148,54 +219,72 @@ test(const Parameters params_in)
 
   MatrixFree<dim, Number, VectorizedArrayType> matrix_free;
   matrix_free.reinit(
-    mapping, dof_handler, constraints, quadrature, additional_data);
+    mapping_q_cache, dof_handler, constraints, quadrature, additional_data);
 
   // create linear operator
   typename LaplaceOperatorMatrixFree<dim, Number>::AdditionalData ad_operator;
   ad_operator.compress_indices = params_in.compress_indices;
-  ad_operator.mapping_type     = "";
+
+  if (use_cartesian_mesh)
+    ad_operator.mapping_type = "";
+  else
+    ad_operator.mapping_type = "quadratic geometry";
 
   const auto labels = split_string(params_in.preconditioner_types, ' ');
 
   for (const auto label : labels)
     {
       // extract properties
-      const auto props              = split_string(label, '-');
-      const auto type               = props[0];
-      const auto n_overlap          = props[1];
-      const auto weighting_sequence = props[2];
-
-      const bool overlap_pre_post =
-        (weighting_sequence == "g") ? (props[3] == "p") : true;
-      const std::string constness =
-        (weighting_sequence == "g") ? (props[4]) : std::string("c");
-
-      // configure preconditioner
-      boost::property_tree::ptree params;
-      params.put("weighting type", (type == "add") ? "none" : type);
-
-      if (n_overlap == "v")
-        {
-          params.put("element centric", false);
-        }
-      else
-        {
-          params.put("n overlap", n_overlap);
-          params.put("element centric", true);
-        }
-
-      params.put("weight sequence",
-                 weighting_sequence == "g" ?
-                   "global" :
-                   (weighting_sequence == "l" ?
-                      "local" :
-                      (weighting_sequence == "dg" ? "DG" : "compressed")));
-
-      params.put("overlap pre post", overlap_pre_post);
+      const auto   props     = split_string(label, '-', 10);
+      const auto   type      = props[0];
+      std::string  constness = "c";
+      unsigned int factor    = 1;
 
       // create preconditioner
       LaplaceOperatorMatrixFree<dim, Number> op(matrix_free, ad_operator);
-      const auto precondition = create_fdm_preconditioner(op, params);
+
+      std::shared_ptr<
+        const ASPoissonPreconditioner<dim, Number, VectorizedArray<Number>>>
+        precondition_fdm;
+
+      std::shared_ptr<const PreconditionerBase<VectorType>> precondition;
+
+      if (type != "vmult")
+        {
+          if (type == "cheby")
+            {
+              boost::property_tree::ptree params;
+
+              boost::property_tree::ptree params_fdm;
+
+              if (props[3] == "diag")
+                {
+                  params_fdm.put("type", "Diagonal");
+                }
+              else
+                {
+                  std::string constness;
+                  process_fdm_parameters(3, props, params_fdm, constness);
+                  params_fdm.put("type", "FDM");
+                }
+
+              params.add_child("preconditioner", params_fdm);
+
+              params.put("type", "Chebyshev");
+              params.put("degree", std::atoi(props[1].c_str()));
+              params.put("optimize", std::atoi(props[2].c_str()));
+
+              factor = std::atoi(props[1].c_str());
+
+              precondition = create_system_preconditioner(op, params);
+            }
+          else
+            {
+              boost::property_tree::ptree params;
+              process_fdm_parameters(0, props, params, constness);
+              precondition_fdm = create_fdm_preconditioner(op, params);
+            }
+        }
 
       // create vectors
       VectorType src, dst;
@@ -205,17 +294,36 @@ test(const Parameters params_in)
 
       // function to be excuated
       const auto fu = [&]() {
-        if (type == "add")
+        if (type == "vmult")
           {
-            precondition->vmult(dst, src, {}, {});
+            op.vmult(dst, src);
+          }
+        else if (type == "add")
+          {
+            AssertThrow(precondition_fdm, ExcNotImplemented());
+
+            precondition_fdm->vmult(dst, src, {}, {});
           }
         else if (constness == "c")
           {
-            precondition->vmult(dst, static_cast<const VectorType &>(src));
+            if (precondition_fdm)
+              {
+                precondition_fdm->vmult(dst,
+                                        static_cast<const VectorType &>(src));
+              }
+            else if (precondition)
+              {
+                precondition->step(dst, src);
+              }
+            else
+              {
+                AssertThrow(false, ExcNotImplemented());
+              }
           }
         else if (constness == "n")
           {
-            precondition->vmult(dst, src);
+            AssertThrow(precondition_fdm, ExcNotImplemented());
+            precondition_fdm->vmult(dst, src);
           }
         else
           {
@@ -262,9 +370,18 @@ test(const Parameters params_in)
                             .count() /
                           1e9;
 
+      const auto n_ghost_indices = Utilities::MPI::sum<types::global_dof_index>(
+        src.get_partitioner()->n_ghost_indices(), MPI_COMM_WORLD);
+      const auto n_import_indices =
+        Utilities::MPI::sum<types::global_dof_index>(
+          src.get_partitioner()->n_import_indices(), MPI_COMM_WORLD);
+
       pcout << ">> " << label << " " << std::to_string(dof_handler.n_dofs())
-            << " " << std::to_string(params_in.n_repetitions) << " " << time
-            << " " << std::to_string(sizeof(Number)) << " " << std::endl;
+            << " " << std::to_string(params_in.n_repetitions * factor) << " "
+            << time << " " << std::to_string(sizeof(Number)) << " "
+            << std::to_string(params_in.fe_degree) << " "
+            << std::to_string(n_ghost_indices) << " "
+            << std::to_string(n_import_indices) << std::endl;
     }
 }
 
@@ -283,21 +400,23 @@ main(int argc, char *argv[])
   LIKWID_MARKER_THREADINIT;
 #endif
 
-  AssertThrow(argc == 2, ExcNotImplemented());
+  AssertThrow(argc >= 2, ExcNotImplemented());
+  for (int i = 1; i < argc; ++i)
+    {
+      Parameters params;
+      params.parse(argv[i]);
 
-  Parameters params;
-  params.parse(argv[1]);
-
-  if ((params.dim == 2) && (params.number_type == "float"))
-    test<2, float>(params);
-  else if ((params.dim == 3) && (params.number_type == "float"))
-    test<3, float>(params);
-  else if ((params.dim == 2) && (params.number_type == "double"))
-    test<2, double>(params);
-  else if ((params.dim == 3) && (params.number_type == "double"))
-    test<3, double>(params);
-  else
-    AssertThrow(false, ExcNotImplemented());
+      if ((params.dim == 2) && (params.number_type == "float"))
+        test<2, float>(params);
+      else if ((params.dim == 3) && (params.number_type == "float"))
+        test<3, float>(params);
+      else if ((params.dim == 2) && (params.number_type == "double"))
+        test<2, double>(params);
+      else if ((params.dim == 3) && (params.number_type == "double"))
+        test<3, double>(params);
+      else
+        AssertThrow(false, ExcNotImplemented());
+    }
 
 #ifdef LIKWID_PERFMON
   LIKWID_MARKER_CLOSE;

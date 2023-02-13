@@ -16,6 +16,7 @@
 #include "include/dof_tools.h"
 #include "include/grid_tools.h"
 #include "include/kershaw.h"
+#include "include/restrictors.h"
 
 using namespace dealii;
 
@@ -98,9 +99,11 @@ main()
   const auto generate_file_name = []() {
     static unsigned int counter = 0;
 
-    std::pair<std::string, std::string> names = {
+    std::tuple<std::string, std::string, std::string, std::string> names = {
       "mesh_types_types_mesh_02." + std::to_string(counter) + ".vtu",
-      "mesh_types_types_points_02." + std::to_string(counter) + ".vtu"};
+      "mesh_types_types_points_02." + std::to_string(counter) + ".vtu",
+      "mesh_types_types_02." + std::to_string(counter) + ".0.tex",
+      "mesh_types_types_02." + std::to_string(counter) + ".1.tex"};
 
     counter++;
 
@@ -113,7 +116,8 @@ main()
                        const unsigned int shift) {
     DoFHandler<dim> dof_handler(tria);
 
-    FE_Q<dim> fe(4);
+    const unsigned int n_points = 5;
+    FE_Q<dim>          fe(n_points - 1);
 
     dof_handler.distribute_dofs(fe);
 
@@ -130,34 +134,94 @@ main()
                            3,
                            DataOut<dim>::CurvedCellRegion::curved_inner_cells);
 
-    std::ofstream file(file_names.first);
+    std::ofstream file(std::get<0>(file_names));
     data_out.write_vtu(file);
 
-    std::vector<Point<dim>> support_points;
+    std::vector<Point<dim>>           support_points;
+    std::set<types::global_dof_index> dof_set;
 
-    auto cell = tria.begin_active();
+    if (i <= 2)
+      {
+        auto cell = tria.begin_active();
 
-    if (shift != 0)
-      for (unsigned int i = 0; i < shift; ++i)
-        cell++;
+        if (shift != 0)
+          for (unsigned int i = 0; i < shift; ++i)
+            cell++;
 
-    const auto cells =
-      GridTools::extract_all_surrounding_cells_cartesian<dim>(cell, i);
+        const auto cells =
+          GridTools::extract_all_surrounding_cells_cartesian<dim>(cell, i);
 
-    const auto dofs =
-      DoFTools::get_dof_indices_cell_with_overlap(dof_handler, cells, 3, true);
+        const auto dofs = DoFTools::get_dof_indices_cell_with_overlap(
+          dof_handler, cells, 3, true);
 
-    const std::set<types::global_dof_index> dof_set(dofs.begin(), dofs.end());
+        dof_set.insert(dofs.begin(), dofs.end());
+      }
+    else if (i == 3)
+      {
+        auto cell = tria.begin_active();
+
+        if (shift != 0)
+          for (unsigned int i = 0; i < shift; ++i)
+            cell++;
+
+        const auto cells =
+          GridTools::extract_all_surrounding_cells_cartesian<dim>(cell, 0);
+
+        const auto dofs = DoFTools::get_dof_indices_cell_with_overlap(
+          dof_handler, cells, 1, true);
+
+        dof_set.insert(dofs.begin(), dofs.end());
+
+        // for(int o = 1; o < 3; ++o)
+        {
+          std::set<types::global_dof_index> dof_set_new = dof_set;
+
+          for (const auto &cell : dof_handler.active_cell_iterators())
+            {
+              const auto cells =
+                GridTools::extract_all_surrounding_cells_cartesian<dim>(cell,
+                                                                        0);
+
+              const auto dofs = DoFTools::get_dof_indices_cell_with_overlap(
+                dof_handler, cells, 1, true);
+
+              for (unsigned int i = 0; i < n_points; ++i)
+                for (unsigned int j = 0; j < n_points; ++j)
+                  for (int ii = -2; ii <= 2; ++ii)
+                    for (int jj = -2; jj <= 2; ++jj)
+                      if (dof_set.find(
+                            dofs[std::min<int>(std::max<int>(0, i + ii),
+                                               n_points - 1) +
+                                 std::min<int>(std::max<int>(0, j + jj),
+                                               n_points - 1) *
+                                   n_points]) != dof_set.end())
+                        dof_set_new.insert(dofs[i + j * n_points]);
+
+
+              std::cout << dof_set_new.size() << std::endl;
+            }
+
+          dof_set = dof_set_new;
+          std::cout << std::endl;
+        }
+      }
+    else if (i == 4)
+      {
+        typename Restrictors::ElementCenteredRestrictor<
+          Vector<double>>::AdditionalData ad;
+        ad.type = "vertex_all";
+
+        Restrictors::ElementCenteredRestrictor<Vector<double>> restrictor(
+          dof_handler, ad);
+
+        const auto dofs = restrictor.get_indices()[shift];
+        dof_set.insert(dofs.begin(), dofs.end());
+      }
 
     std::vector<types::global_dof_index> dof_indices(fe.n_dofs_per_cell());
 
-    for (const auto cell : cells)
+    for (const auto &cell : dof_handler.active_cell_iterators())
       {
-        if (cell.state() != IteratorState::valid)
-          continue;
-
-        const auto cell_dof = cell->as_dof_handler_iterator(dof_handler);
-
         auto points = fe.get_unit_support_points();
 
         for (auto &point : points)
@@ -171,9 +235,9 @@ main()
                                 quadrature,
                                 update_quadrature_points);
 
-        fe_values.reinit(cell_dof);
+        fe_values.reinit(cell);
 
-        cell_dof->get_dof_indices(dof_indices);
+        cell->get_dof_indices(dof_indices);
 
         for (const auto q : fe_values.quadrature_point_indices())
           if (dof_set.find(dof_indices[q]) != dof_set.end())
@@ -185,11 +249,82 @@ main()
 
     Particles::DataOut<dim> data_out_particles;
     data_out_particles.build_patches(particle_handler);
-    std::ofstream file_particles(file_names.second);
+    std::ofstream file_particles(std::get<1>(file_names));
     data_out_particles.write_vtu(file_particles);
+
+    {
+      std::ofstream file(std::get<3>(file_names));
+
+      for (unsigned int p = 0; p < support_points.size(); ++p)
+        {
+          const auto point = support_points[p];
+
+          file << "(";
+          file << point[0];
+          file << ",";
+          file << point[1];
+          file << ")";
+
+          if (p + 1 != support_points.size())
+            file << ",";
+        }
+    }
+
+    {
+      std::ofstream file(std::get<2>(file_names));
+
+      for (const auto &cell : tria.active_cell_iterators())
+        {
+          const unsigned int n_subdivisions = 3;
+
+          std::vector<Point<dim>> points;
+
+          for (unsigned int i = 0; i <= n_subdivisions; ++i)
+            points.emplace_back(1.0 / n_subdivisions * i, 0.0);
+
+          for (unsigned int i = 0; i <= n_subdivisions; ++i)
+            points.emplace_back(1.0 / n_subdivisions * i, 1.0);
+
+          for (unsigned int i = 0; i <= n_subdivisions; ++i)
+            points.emplace_back(0.0, 1.0 / n_subdivisions * i);
+
+          for (unsigned int i = 0; i <= n_subdivisions; ++i)
+            points.emplace_back(1.0, 1.0 / n_subdivisions * i);
+
+          Quadrature<dim> quadrature(points);
+
+          FEValues<dim> fe_values(mapping,
+                                  fe,
+                                  quadrature,
+                                  update_quadrature_points);
+
+          fe_values.reinit(cell);
+
+          for (unsigned int q = 0; q < points.size();)
+            {
+              file << "\\draw [black] plot [smooth] coordinates {";
+              for (unsigned int i = 0; i <= n_subdivisions; ++i, ++q)
+                {
+                  const auto point = fe_values.quadrature_point(q);
+
+                  file << "(";
+                  file << point[0];
+                  file << ",";
+                  file << point[1];
+                  file << ")";
+                }
+              file << "};" << std::endl;
+            }
+
+          file << std::endl;
+
+          // for (const auto q : fe_values.quadrature_point_indices())
+          //  std::cout << fe_values.quadrature_point(q) << std::endl;
+        }
+    }
   };
 
-  for (unsigned int i = 0; i < 3; ++i)
+  for (unsigned int i = 0; i <= 4; ++i)
     {
       Triangulation<dim> tria;
       GridGenerator::subdivided_hyper_cube(tria, 3);
@@ -212,27 +347,19 @@ main()
         },
         true);
 
-      run(tria, mapping, i, 4);
+      if (i != 3)
+        run(tria, mapping, i, i == 4 ? 6 : 4);
     }
 
-  for (unsigned int i = 0; i < 2; ++i)
+  for (const auto i : {0, 1, 3, 4})
     {
       Triangulation<dim> tria;
       GridGenerator::my_quarter_hyper_ball(tria);
-
-      for (const auto cell : tria.active_cell_iterators())
-        {
-          for (const auto v : cell->vertex_indices())
-            std::cout << cell->vertex(v) << std::endl;
-
-          std::cout << std::endl;
-        }
-
 
       tria.refine_global(1);
 
       MappingQ<dim> mapping(3);
 
-      run(tria, mapping, i, 3);
+      run(tria, mapping, i, i == 4 ? 4 : 3);
     }
 }

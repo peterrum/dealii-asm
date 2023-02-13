@@ -188,7 +188,6 @@ public:
         weights.update_ghost_values();
       }
 
-
     for (const auto &cell : dof_handler.active_cell_iterators())
       {
         if (cell->is_locally_owned() == false)
@@ -231,8 +230,6 @@ private:
   const WeightingType weighting_type;
 };
 
-
-
 template <typename Number>
 class MatrixView
 {
@@ -258,8 +255,6 @@ public:
 
 private:
 };
-
-
 
 template <typename MatrixType0, typename MatrixType1>
 class CGMatrixView : public MatrixView<typename MatrixType0::value_type>
@@ -349,8 +344,6 @@ private:
   unsigned int                       n_iterations;
 };
 
-
-
 template <typename Number>
 class DiagonalMatrixView : public MatrixView<Number>
 {
@@ -423,8 +416,6 @@ public:
 private:
   std::vector<std::vector<Number>> diagonals;
 };
-
-
 
 template <typename Number>
 class TriDiagonalMatrixView : public MatrixView<Number>
@@ -534,8 +525,6 @@ private:
   bool is_inverted = false;
 };
 
-
-
 template <typename Number>
 class RestrictedMatrixView : public MatrixView<Number>
 {
@@ -614,8 +603,6 @@ public:
 private:
   std::vector<FullMatrix<Number>> blocks;
 };
-
-
 
 template <typename Number>
 class SubMeshMatrixView : public MatrixView<Number>
@@ -735,8 +722,6 @@ private:
   std::vector<FullMatrix<Number>> blocks;
 };
 
-
-
 template <typename VectorType>
 class PreconditionerBase
 {
@@ -756,8 +741,6 @@ public:
   }
 };
 
-
-
 template <typename VectorType,
           typename InverseMatrixType,
           typename RestrictorType>
@@ -767,7 +750,6 @@ public:
   using Number = typename VectorType::value_type;
 
   RestrictedPreconditioner() = default;
-
 
   RestrictedPreconditioner(
     const std::shared_ptr<const InverseMatrixType> &inverse_matrix,
@@ -829,7 +811,6 @@ private:
   std::shared_ptr<const InverseMatrixType> inverse_matrix;
   std::shared_ptr<const RestrictorType>    restrictor;
 };
-
 
 namespace internal_
 {
@@ -944,6 +925,28 @@ private:
   const std::shared_ptr<const PreconditionerType> preconditioner;
 };
 
+template <typename VectorType,
+          typename PreconditionerType,
+          typename PreconditionerNumer = typename VectorType::value_type>
+class PreconditionerAdapterWithoutStep
+{
+public:
+  PreconditionerAdapterWithoutStep(
+    const std::shared_ptr<const PreconditionerType> preconditioner)
+    : preconditioner(preconditioner)
+  {}
+
+  void
+  vmult(VectorType &dst, const VectorType &src) const
+  {
+    internal_::PreconditionerAdapter::solve<PreconditionerNumer>(preconditioner,
+                                                                 dst,
+                                                                 src);
+  }
+
+private:
+  const std::shared_ptr<const PreconditionerType> preconditioner;
+};
 
 template <typename VectorType>
 class DiagonalMatrixPrePost : public Subscriptor
@@ -976,7 +979,8 @@ public:
     for (unsigned int i = 0; i < locally_owned_size; i += 100)
       {
         const unsigned int begin = i;
-        const unsigned int end   = std::min(begin + 100, locally_owned_size);
+        const unsigned int end =
+          std::min<unsigned int>(begin + 100, locally_owned_size);
 
         operation_before_matrix_vector_product(begin, end);
 

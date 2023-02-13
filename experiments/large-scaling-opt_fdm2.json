@@ -1,0 +1,41 @@
+{
+    "print timing": true,
+    "name": "cg-fdm_symm_2_f-1st_kind-two_sided",
+    "degree": 4,
+    "dim": 3,
+    "solver": {
+        "type": "CG",
+        "rel tolerance": 1e-05,
+        "max n tmp vectors": 15,
+        "best of": 10
+    },
+    "preconditioner": {
+        "mg smoother": {
+            "polynomial type": "1st kind",
+            "type": "Chebyshev",
+            "degree": 3,
+            "weighting type": "post",
+            "preconditioner": {
+                "n overlap": "2",
+                "type": "FDM",
+                "sub mesh approximation": 3,
+                "weighting type": "symm"
+            }
+        },
+        "mg p sequence": "bisect",
+        "mg coarse grid solver": {
+            "type": "AMG"
+        },
+        "type": "Multigrid",
+        "mg type": "ph"
+    },
+    "mesh": {
+        "stratch": 1.0,
+        "name": "kershaw",
+        "eps": 0.3
+    },
+    "mapping degree": 2,
+    "n refinements": 3,
+    "operator mapping type": "quadratic geometry",
+    "type": "matrixfree"
+}
