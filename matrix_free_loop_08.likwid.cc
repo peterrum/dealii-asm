@@ -34,9 +34,10 @@ struct Parameters
 
   std::string preconditioner_types = "post-1-c";
 
-  bool dof_renumbering    = true;
-  bool compress_indices   = true;
-  bool use_cartesian_mesh = true;
+  bool        dof_renumbering    = true;
+  bool        compress_indices   = true;
+  bool        use_cartesian_mesh = true;
+  std::string mapping_type       = "default";
 
   unsigned int n_repetitions = 10;
 
@@ -67,6 +68,7 @@ private:
     prm.add_parameter("n repetitions", n_repetitions);
     prm.add_parameter("dof renumbering", dof_renumbering);
     prm.add_parameter("use cartesian mesh", use_cartesian_mesh);
+    prm.add_parameter("mapping type", mapping_type);
   }
 };
 
@@ -190,6 +192,8 @@ test(const Parameters params_in)
         result[d] = std::sin(2 * numbers::PI * point[(d + 1) % dim]) *
                     std::sin(numbers::PI * point[d]) * 0.1;
 
+      std::cout << result << std::endl;
+
       return result;
     },
     true);
@@ -225,10 +229,17 @@ test(const Parameters params_in)
   typename LaplaceOperatorMatrixFree<dim, Number>::AdditionalData ad_operator;
   ad_operator.compress_indices = params_in.compress_indices;
 
-  if (use_cartesian_mesh)
-    ad_operator.mapping_type = "";
+  if (params_in.mapping_type != "default")
+    {
+      ad_operator.mapping_type = params_in.mapping_type;
+    }
   else
-    ad_operator.mapping_type = "quadratic geometry";
+    {
+      if (use_cartesian_mesh)
+        ad_operator.mapping_type = "";
+      else
+        ad_operator.mapping_type = "quadratic geometry";
+    }
 
   const auto labels = split_string(params_in.preconditioner_types, ' ');
 

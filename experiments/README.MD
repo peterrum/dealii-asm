@@ -1,4 +1,54 @@
-### Multigrid tests (on gold)
+### Section 2: FDM tests (on gold)
+
+```
+mkdir experiment-patch-sequence
+cd experiment-patch-sequence
+likwid-mpirun -np 40 -f -g CACHES -m -O ../matrix_free_loop_08 ../../experiments/matrix_free_loop_08_sequence.json | tee result_caches.out
+
+```
+
+```
+mkdir experiment-patch-degree
+cd experiment-patch-degree
+python ../../experiments/matrix_free_loop_08_degree.py
+array=($(ls *.json))
+likwid-mpirun -np 40 -f -g CACHES -m -O ../matrix_free_loop_08 "${array[@]}"   | tee result_caches.out
+likwid-mpirun -np 40 -f -g FLOPS_SP -m -O ../matrix_free_loop_08 "${array[@]}" | tee result_flops.out
+
+```
+
+### Section 3: Chebyshev tests (on gold)
+
+```
+mkdir experiment-patch-cheby
+cd experiment-patch-cheby
+python ../../experiments/matrix_free_loop_08_cheby.py
+array=($(ls *.json))
+likwid-mpirun -np 40 -f -g CACHES -m -O ../matrix_free_loop_08 "${array[@]}"   | tee result_caches.out
+likwid-mpirun -np 40 -f -g FLOPS_SP -m -O ../matrix_free_loop_08 "${array[@]}" | tee result_flops.out
+
+```
+
+```
+mkdir experiment-patch-cheby-degree
+cd experiment-patch-cheby-degree
+python ../../experiments/matrix_free_loop_08_cheby_degree.py
+array=($(ls *.json))
+mpirun -np 40 ../matrix_free_loop_08 ./input_0000.json | tee result_cartesian.output
+mpirun -np 40 ../matrix_free_loop_08 ./input_0001.json | tee result_general.output
+
+```
+
+```
+mkdir -p experiment-multigrid_cheby_degree
+cd experiment-multigrid_cheby_degree
+python ../../experiments/multigrid_cheby_degree.py
+array=($(ls *.json))
+mpirun -np 40 ../element_centered_preconditioners_01 "${array[@]}" | tee output.out
+cd ..
+```
+
+### Section 4: Multigrid tests (on gold)
 
 #### Full
 
@@ -48,55 +98,7 @@ cd ..
 . ../experiments/ball.sh
 ```
 
-### jk
-
-```
-mkdir experiment-patch-sequence
-cd experiment-patch-sequence
-likwid-mpirun -np 40 -f -g CACHES -m -O ../matrix_free_loop_08 ../../experiments/matrix_free_loop_08_sequence.json | tee result_caches.out
-
-```
-
-```
-mkdir experiment-patch-degree
-cd experiment-patch-degree
-python ../../experiments/matrix_free_loop_08_degree.py
-array=($(ls *.json))
-likwid-mpirun -np 40 -f -g CACHES -m -O ../matrix_free_loop_08 "${array[@]}"   | tee result_caches.out
-likwid-mpirun -np 40 -f -g FLOPS_SP -m -O ../matrix_free_loop_08 "${array[@]}" | tee result_flops.out
-
-```
-
-```
-mkdir experiment-patch-cheby
-cd experiment-patch-cheby
-python ../../experiments/matrix_free_loop_08_cheby.py
-array=($(ls *.json))
-likwid-mpirun -np 40 -f -g CACHES -m -O ../matrix_free_loop_08 "${array[@]}"   | tee result_caches.out
-likwid-mpirun -np 40 -f -g FLOPS_SP -m -O ../matrix_free_loop_08 "${array[@]}" | tee result_flops.out
-
-```
-
-```
-mkdir experiment-patch-cheby-degree
-cd experiment-patch-cheby-degree
-python ../../experiments/matrix_free_loop_08_cheby_degree.py
-array=($(ls *.json))
-mpirun -np 40 ../matrix_free_loop_08 ./input_0000.json | tee result_cartesian.output
-mpirun -np 40 ../matrix_free_loop_08 ./input_0001.json | tee result_general.output
-
-```
-
-```
-mkdir -p experiment-multigrid_cheby_degree
-cd experiment-multigrid_cheby_degree
-python ../../experiments/multigrid_cheby_degree.py
-array=($(ls *.json))
-mpirun -np 40 ../element_centered_preconditioners_01 "${array[@]}" | tee output.out
-cd ..
-```
-
-### SUPERMUC
+### Section 4: Multigrid tests (on SuperMUC-NG)
 
 ```
 mkdir experiments-large-scaling-opt
