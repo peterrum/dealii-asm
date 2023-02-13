@@ -1,6 +1,6 @@
 {
     "print timing": true,
-    "name": "cg-diagonal-1st_kind-two_sided",
+    "name": "cg-diagonal-4th_kind-two_sided",
     "degree": 4,
     "dim": 3,
     "solver": {
@@ -11,7 +11,7 @@
     },
     "preconditioner": {
         "mg smoother": {
-            "polynomial type": "1st kind",
+            "polynomial type": "4th kind",
             "type": "Chebyshev",
             "degree": 3,
             "weighting type": "post",
@@ -21,7 +21,7 @@
                 "weighting type": "post"
             }
         },
-        "mg p sequence": "bisect",
+        "mg p sequence": "decrease by one",
         "mg coarse grid solver": {
             "type": "AMG"
         },
@@ -32,12 +32,8 @@
     "mesh": {
         "stratch": 1.0,
         "name": "kershaw",
-        "eps": 0.3,
-	"n subdivisions" : 6,
-	"n initial refinements": 0
+        "eps": 1.0
     },
-    "mapping degree": 2,
     "n refinements": 3,
-    "operator mapping type": "quadratic geometry",
     "type": "matrixfree"
 }

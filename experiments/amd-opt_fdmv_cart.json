@@ -1,6 +1,6 @@
 {
     "print timing": true,
-    "name": "cg-diagonal-1st_kind-two_sided",
+    "name": "cg-fdm_symm_v_f-1st_kind-two_sided",
     "degree": 4,
     "dim": 3,
     "solver": {
@@ -13,31 +13,37 @@
         "mg smoother": {
             "polynomial type": "1st kind",
             "type": "Chebyshev",
-            "degree": 3,
+            "degree": 1,
             "weighting type": "post",
             "preconditioner": {
                 "n overlap": 1,
-                "type": "Diagonal",
-                "weighting type": "post"
+                "element centric": false,
+                "type": "FDM",
+                "sub mesh approximation": 3,
+                "weighting type": "symm"
             }
         },
-        "mg p sequence": "bisect",
+        "mg intermediate smoother": {
+            "preconditioner": {
+                "type": "Diagonal"
+            },
+            "type": "Chebyshev",
+            "optimize": "3",
+            "degree": 3
+        },
+        "mg p sequence": "decrease by one",
+        "mg type": "ph",
+        "type": "Multigrid",
         "mg coarse grid solver": {
             "type": "AMG"
-        },
-        "type": "Multigrid",
-        "mg type": "ph"
+        }
     },
     "operator compress indices": true,
     "mesh": {
         "stratch": 1.0,
         "name": "kershaw",
-        "eps": 0.3,
-	"n subdivisions" : 6,
-	"n initial refinements": 0
+        "eps": 1.0
     },
-    "mapping degree": 2,
     "n refinements": 3,
-    "operator mapping type": "quadratic geometry",
     "type": "matrixfree"
 }

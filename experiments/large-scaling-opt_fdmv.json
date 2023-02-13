@@ -4,10 +4,10 @@
     "degree": 4,
     "dim": 3,
     "solver": {
+        "best of": 10,
         "type": "CG",
         "rel tolerance": 1e-05,
-        "max n tmp vectors": 15,
-        "best of": 10
+        "max n tmp vectors": 17
     },
     "preconditioner": {
         "mg smoother": {
@@ -38,10 +38,13 @@
             "type": "AMG"
         }
     },
+    "operator compress indices": true,
     "mesh": {
         "stratch": 1.0,
         "name": "kershaw",
-        "eps": 0.3
+        "eps": 0.3,
+        "n subdivisions" : 6,
+        "n initial refinements": 0
     },
     "mapping degree": 2,
     "n refinements": 3,
