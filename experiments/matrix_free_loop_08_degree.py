@@ -20,7 +20,7 @@ def main():
 
     type = ["vmult", "symm-1-c", "symm-2-g-p-n", "symm-v-c"]
 
-    for degree_and_subdivisions in [[2, 45], [3, 44], [4, 40], [5, 40], [6, 40], [7, 37]]:
+    for degree_and_subdivisions in [[2, 45], [3, 44], [4, 40], [5, 39], [6, 38], [7, 36]]:
         run_instance(counter, type, degree_and_subdivisions)
         counter = counter + 1;
 

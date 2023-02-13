@@ -1,6 +1,6 @@
 import json
 import os
-from argparse import ArgumentParser
+import sys
 
 def run_instance(counter, d, l, k, solver, preconditioner, sequence, s, eps, cheby_kind, cycle_type):
     with open(os.path.dirname(os.path.abspath(__file__)) + "/default.json", 'r') as f:
@@ -36,6 +36,19 @@ def run_instance(counter, d, l, k, solver, preconditioner, sequence, s, eps, che
 
         if props[2] == "v":
             datastore["preconditioner"]["mg smoother"]["preconditioner"]["element centric"] = False
+
+            datastore["preconditioner"]["mg intermediate smoother"] = {}
+            datastore["preconditioner"]["mg intermediate smoother"]["preconditioner"] = {}
+
+            datastore["preconditioner"]["mg intermediate smoother"]["preconditioner"]["type"] = "Diagonal"
+            datastore["preconditioner"]["mg intermediate smoother"]["type"]                   = "Chebyshev"
+
+            if cycle_type == "one sided":
+                datastore["preconditioner"]["mg intermediate smoother"]["degree"] = 2 * (s + 2)
+            else:
+                datastore["preconditioner"]["mg intermediate smoother"]["degree"] = s + 2
+
+            datastore["preconditioner"]["mg intermediate smoother"]["optimize"] = "3"
         else:
             datastore["preconditioner"]["mg smoother"]["preconditioner"]["n overlap"] = props[2]
 
@@ -52,22 +65,16 @@ def run_instance(counter, d, l, k, solver, preconditioner, sequence, s, eps, che
     with open("./input_%s.json" % (str(counter).zfill(4)), 'w') as f:
         json.dump(datastore, f, indent=4, separators=(',', ': '))
 
-def parseArguments():
-    parser = ArgumentParser(description="Submit a simulation as a batch job")
-
-    parser.add_argument('d', type=int)
-    parser.add_argument('l', type=int)
-    parser.add_argument('k', type=int)
-    
-    arguments = parser.parse_args()
-    return arguments
-
 def main():
-    options = parseArguments()
 
-    d = options.d
-    l = options.l
-    k = options.k
+    d = int(sys.argv[1])
+    l = int(sys.argv[2])
+    k = int(sys.argv[3])
+
+    if(len(sys.argv)<=4):
+        epsilons = [1.0, 50.0]
+    else:
+        epsilons = [float(sys.argv[4])]
     
     counter = 0
 
@@ -83,7 +90,7 @@ def main():
         #    preconditioners.append("fdm-%d-r" % o);
 
     #for eps in [1.0, 2.0, 5.0, 10.0, 20.0, 50.0]:
-    for eps in [1.0, 50.0]:
+    for eps in epsilons:
         for solver in ["CG", "GMRES"]:
             preconditioners_to_be_used = preconditioners
 

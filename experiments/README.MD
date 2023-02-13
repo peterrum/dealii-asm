@@ -1,44 +1,4 @@
-```
-. ../experiments/smoother.sh
-```
-
-```
-mkdir experiment-cartesian-6
-cd experiment-cartesian-6
-python ../../experiments/cartesian.py 3 5 6
-array=($(ls *.json))
-mpirun -np 40 ../element_centered_preconditioners_01 "${array[@]}" | tee output.out
-cd ..
-```
-
-```
-mkdir experiment-ball-6
-cd experiment-ball-6
-python ../../experiments/ball.py 3 4 6
-array=($(ls *.json))
-mpirun -np 40 ../element_centered_preconditioners_01 "${array[@]}" | tee output.out
-cd ..
-```
-
-```
-mkdir experiment-kershaw
-cd experiment-kershaw
-python ../../experiments/kershaw.py 3 3 6
-array=($(ls *.json))
-mpirun -np 40 ../element_centered_preconditioners_01 "${array[@]}" | tee output.out
-cd ..
-```
-
-```
-mkdir experiment-anisotropy
-cd experiment-anisotropy
-python ../../experiments/anisotropy.py 3 5 6
-array=($(ls *.json))
-mpirun -np 40 ../element_centered_preconditioners_01 "${array[@]}" | tee output.out
-cd ..
-```
-
-### jk
+### Section 2: FDM tests (on gold)
 
 ```
 mkdir experiment-patch-sequence
@@ -56,6 +16,8 @@ likwid-mpirun -np 40 -f -g CACHES -m -O ../matrix_free_loop_08 "${array[@]}"   |
 likwid-mpirun -np 40 -f -g FLOPS_SP -m -O ../matrix_free_loop_08 "${array[@]}" | tee result_flops.out
 
 ```
+
+### Section 3: Chebyshev tests (on gold)
 
 ```
 mkdir experiment-patch-cheby
@@ -86,7 +48,57 @@ mpirun -np 40 ../element_centered_preconditioners_01 "${array[@]}" | tee output.
 cd ..
 ```
 
-### SUPERMUC
+### Section 4: Multigrid tests (on gold)
+
+#### Full
+
+```
+. ../experiments/anisotropy.sh
+```
+
+```
+. ../experiments/kershaw.sh
+```
+
+```
+. ../experiments/ball.sh
+```
+
+#### Short
+
+```
+. ../experiments/anisotropy.sh 1
+
+cd experiment-anisotropy-4/
+array=($(ls *.json))
+mpirun -np 40 ../element_centered_preconditioners_01 "${array[@]}" | tee output.out
+cd ..
+
+cd experiment-anisotropy-7/
+array=($(ls *.json))
+mpirun -np 40 ../element_centered_preconditioners_01 "${array[@]}" | tee output.out
+cd ..
+```
+
+```
+. ../experiments/kershaw.sh 1
+
+cd experiment-kershaw-4/
+array=($(ls *.json))
+mpirun -np 40 ../element_centered_preconditioners_01 "${array[@]}" | tee output.out
+cd ..
+
+cd experiment-kershaw-7/
+array=($(ls *.json))
+mpirun -np 40 ../element_centered_preconditioners_01 "${array[@]}" | tee output.out
+cd ..
+```
+
+```
+. ../experiments/ball.sh
+```
+
+### Section 4: Multigrid tests (on SuperMUC-NG)
 
 ```
 mkdir experiments-large-scaling-opt

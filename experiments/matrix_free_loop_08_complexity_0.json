@@ -1,0 +1,9 @@
+{
+  "dim" : 3,
+  "number type" : "float",
+  "fe degree" : 7,
+  "n subdivisions" : 1,
+  "preconditioner types" : "vmult none-1-g-p-n",
+  "use cartesian mesh" : true,
+  "mapping type" : "default"
+}
