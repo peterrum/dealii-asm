@@ -18,6 +18,7 @@
 #include "read_write_operation.h"
 #include "restrictors.h"
 #include "symmetry.h"
+#include "tensor_product_matrix_creator.h"
 #include "vector_access_reduced.h"
 
 // clang-format off
@@ -647,8 +648,7 @@ public:
             dst_.compress(VectorOperation::min);
 
             counter++;
-          }
-        while (norm_0 != dst_.l2_norm());
+        } while (norm_0 != dst_.l2_norm());
 
 
         if (element_centric)
