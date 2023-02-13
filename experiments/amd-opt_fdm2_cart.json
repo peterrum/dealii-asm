@@ -1,0 +1,40 @@
+{
+    "print timing": true,
+    "name": "gmres-fdm_post_2_f-4th_kind-two_sided",
+    "degree": 4,
+    "dim": 3,
+    "solver": {
+        "best of": 10,
+        "type": "GMRES",
+        "rel tolerance": 1e-05,
+        "max n tmp vectors": 17
+    },
+    "preconditioner": {
+        "mg smoother": {
+            "polynomial type": "4th kind",
+            "type": "Chebyshev",
+            "degree": 1,
+            "weighting type": "post",
+            "preconditioner": {
+                "n overlap": "2",
+                "type": "FDM",
+                "sub mesh approximation": 3,
+                "weighting type": "post"
+            }
+        },
+        "mg p sequence": "go to one",
+        "mg coarse grid solver": {
+            "type": "AMG"
+        },
+        "type": "Multigrid",
+        "mg type": "ph"
+    },
+    "operator compress indices": true,
+    "mesh": {
+        "stratch": 1.0,
+        "name": "kershaw",
+        "eps": 1.0
+    },
+    "n refinements": 3,
+    "type": "matrixfree"
+}
