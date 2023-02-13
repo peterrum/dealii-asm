@@ -32,7 +32,9 @@
     "mesh": {
         "stratch": 1.0,
         "name": "kershaw",
-        "eps": 0.3
+        "eps": 0.3,
+	"n subdivisions" : 6,
+	"n initial refinements": 0
     },
     "mapping degree": 2,
     "n refinements": 3,
