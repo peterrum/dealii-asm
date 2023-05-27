@@ -327,9 +327,20 @@ test(const Parameters params_in)
 
   if (params_in.dof_renumbering)
     {
-      MyDoFRenumbering::matrix_free_data_locality(dof_handler,
-                                                  constraints,
-                                                  additional_data);
+      const auto collect_indices =
+        [](const TriaIterator<DoFCellAccessor<dim, dim, false>> &cell_iterator)
+        -> std::vector<types::global_dof_index> {
+        std::vector<types::global_dof_index> dof_indices(
+          cell_iterator->get_dof_handler().get_fe().dofs_per_cell);
+        cell_iterator->get_dof_indices(dof_indices);
+
+        return dof_indices;
+      };
+
+      MyDoFRenumbering::matrix_free_data_locality<dim>(dof_handler,
+                                                       constraints,
+                                                       additional_data,
+                                                       collect_indices);
       setup_constraints(dof_handler, constraints);
     }
 

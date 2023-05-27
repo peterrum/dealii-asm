@@ -94,17 +94,11 @@ namespace MyDoFRenumbering
   template <int dim, typename Number, typename VectorizedArrayType>
   std::pair<std::vector<unsigned int>, std::vector<unsigned char>>
   compute_mf_numbering(
-    const MatrixFree<dim, Number, VectorizedArrayType> &matrix_free,
-    const unsigned int                                  component)
+    const MatrixFree<dim, Number, VectorizedArrayType> &        matrix_free,
+    const unsigned int                                          component,
+    const std::function<std::vector<types::global_dof_index>(
+      const TriaIterator<DoFCellAccessor<dim, dim, false>> &)> &collect_indices)
   {
-    const auto collect_indices = [](const auto &cell_iterator) {
-      std::vector<types::global_dof_index> dof_indices(
-        cell_iterator->get_dof_handler().get_fe().dofs_per_cell);
-      cell_iterator->get_dof_indices(dof_indices);
-
-      return dof_indices;
-    };
-
     const IndexSet &owned_dofs = matrix_free.get_dof_info(component)
                                    .vector_partitioner->locally_owned_range();
     const unsigned int n_comp =
@@ -371,8 +365,10 @@ namespace MyDoFRenumbering
             typename VectorizedArrayType>
   std::vector<types::global_dof_index>
   compute_matrix_free_data_locality(
-    const DoFHandler<dim, spacedim> &                   dof_handler,
-    const MatrixFree<dim, Number, VectorizedArrayType> &matrix_free)
+    const DoFHandler<dim, spacedim> &                           dof_handler,
+    const MatrixFree<dim, Number, VectorizedArrayType> &        matrix_free,
+    const std::function<std::vector<types::global_dof_index>(
+      const TriaIterator<DoFCellAccessor<dim, dim, false>> &)> &collect_indices)
   {
     Assert(matrix_free.indices_initialized(),
            ExcMessage("You need to set up indices in MatrixFree "
@@ -403,7 +399,8 @@ namespace MyDoFRenumbering
         *matrix_free.get_dof_info(component).vector_partitioner);
 
     const std::pair<std::vector<unsigned int>, std::vector<unsigned char>>
-      local_numbering = compute_mf_numbering(matrix_free, component);
+      local_numbering =
+        compute_mf_numbering<dim>(matrix_free, component, collect_indices);
 
     // Now construct the new numbering
     const IndexSet &owned_dofs = matrix_free.get_dof_info(component)
@@ -465,7 +462,9 @@ namespace MyDoFRenumbering
   compute_matrix_free_data_locality(
     const DoFHandler<dim, spacedim> &dof_handler,
     const AffineConstraints<Number> &constraints,
-    const AdditionalDataType &       matrix_free_data)
+    const AdditionalDataType &       matrix_free_data,
+    const std::function<std::vector<types::global_dof_index>(
+      const TriaIterator<DoFCellAccessor<dim, dim, false>> &)> &collect_indices)
   {
     AdditionalDataType my_mf_data    = matrix_free_data;
     my_mf_data.initialize_mapping    = false;
@@ -477,21 +476,27 @@ namespace MyDoFRenumbering
                                 constraints,
                                 dealii::QGauss<1>(2),
                                 my_mf_data);
-    return compute_matrix_free_data_locality(dof_handler, separate_matrix_free);
+    return compute_matrix_free_data_locality<dim>(dof_handler,
+                                                  separate_matrix_free,
+                                                  collect_indices);
   }
 
 
 
   template <int dim, int spacedim, typename Number, typename AdditionalDataType>
   void
-  matrix_free_data_locality(DoFHandler<dim, spacedim> &      dof_handler,
-                            const AffineConstraints<Number> &constraints,
-                            const AdditionalDataType &       matrix_free_data)
+  matrix_free_data_locality(
+    DoFHandler<dim, spacedim> &      dof_handler,
+    const AffineConstraints<Number> &constraints,
+    const AdditionalDataType &       matrix_free_data,
+    const std::function<std::vector<types::global_dof_index>(
+      const TriaIterator<DoFCellAccessor<dim, dim, false>> &)> &collect_indices)
   {
     const std::vector<types::global_dof_index> new_global_numbers =
-      compute_matrix_free_data_locality(dof_handler,
-                                        constraints,
-                                        matrix_free_data);
+      compute_matrix_free_data_locality<dim>(dof_handler,
+                                             constraints,
+                                             matrix_free_data,
+                                             collect_indices);
     if (matrix_free_data.mg_level == dealii::numbers::invalid_unsigned_int)
       dof_handler.renumber_dofs(new_global_numbers);
     else
