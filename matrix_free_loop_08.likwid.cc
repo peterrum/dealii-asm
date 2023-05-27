@@ -109,6 +109,25 @@ split_string(const std::string  text,
   return substring_list;
 }
 
+template <int dim>
+std::array<typename Triangulation<dim>::cell_iterator, Utilities::pow(2, dim)>
+collect_cells_for_vertex_patch(
+  const std::array<typename Triangulation<dim>::cell_iterator,
+                   Utilities::pow(3, dim)> &cells_all)
+{
+  std::array<typename Triangulation<dim>::cell_iterator, Utilities::pow(2, dim)>
+    cells;
+
+  for (unsigned int k = 0; k < ((dim == 3) ? 2 : 1); ++k)
+    for (unsigned int j = 0; j < ((dim >= 2) ? 2 : 1); ++j)
+      for (unsigned int i = 0; i < 2; ++i)
+        cells[4 * k + 2 * j + i] =
+          cells_all[9 * ((dim == 3) ? (k + 1) : 0) +
+                    3 * ((dim >= 2) ? (j + 1) : 0) + (i + 1)];
+
+  return cells;
+}
+
 void
 process_fdm_parameters(const unsigned int              offset,
                        const std::vector<std::string> &props,
@@ -328,13 +347,28 @@ test(const Parameters params_in)
   if (params_in.dof_renumbering)
     {
       const auto collect_indices =
-        [](const TriaIterator<DoFCellAccessor<dim, dim, false>> &cell_iterator)
+        [&](const TriaIterator<DoFCellAccessor<dim, dim, false>> &cell_iterator)
         -> std::vector<types::global_dof_index> {
-        std::vector<types::global_dof_index> dof_indices(
-          cell_iterator->get_dof_handler().get_fe().dofs_per_cell);
-        cell_iterator->get_dof_indices(dof_indices);
+        const bool         element_centric = true;
+        const unsigned int n_overlap       = 1;
 
-        return dof_indices;
+        const auto cells =
+          dealii::GridTools::extract_all_surrounding_cells_cartesian<dim>(
+            cell_iterator, element_centric ? (n_overlap <= 1 ? 0 : dim) : dim);
+
+        const auto cells_vertex_patch =
+          collect_cells_for_vertex_patch<dim>(cells);
+
+        auto local_dofs =
+          element_centric ?
+            dealii::DoFTools::get_dof_indices_cell_with_overlap(dof_handler,
+                                                                cells,
+                                                                n_overlap,
+                                                                true) :
+            dealii::DoFTools::get_dof_indices_vertex_patch(dof_handler,
+                                                           cells_vertex_patch);
+
+        return local_dofs;
       };
 
       MyDoFRenumbering::matrix_free_data_locality<dim>(dof_handler,
