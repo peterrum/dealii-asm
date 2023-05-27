@@ -3,7 +3,6 @@
 #include <deal.II/base/parameter_handler.h>
 
 #include <deal.II/dofs/dof_handler.h>
-#include <deal.II/dofs/dof_renumbering.h>
 
 #include <deal.II/fe/fe_q.h>
 #include <deal.II/fe/mapping_q_cache.h>
@@ -18,6 +17,7 @@
 
 using namespace dealii;
 
+#include "include/dof_renumbering.h"
 #include "include/json.h"
 #include "include/operator.h"
 #include "include/precondition.h"
@@ -327,9 +327,9 @@ test(const Parameters params_in)
 
   if (params_in.dof_renumbering)
     {
-      DoFRenumbering::matrix_free_data_locality(dof_handler,
-                                                constraints,
-                                                additional_data);
+      MyDoFRenumbering::matrix_free_data_locality(dof_handler,
+                                                  constraints,
+                                                  additional_data);
       setup_constraints(dof_handler, constraints);
     }
 
