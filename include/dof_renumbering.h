@@ -2,6 +2,8 @@
 
 #include <deal.II/dofs/dof_renumbering.h>
 
+#include <deal.II/fe/mapping_q1.h>
+
 namespace MyDoFRenumbering
 {
   using namespace dealii;
@@ -95,6 +97,14 @@ namespace MyDoFRenumbering
     const MatrixFree<dim, Number, VectorizedArrayType> &matrix_free,
     const unsigned int                                  component)
   {
+    const auto collect_indices = [](const auto &cell_iterator) {
+      std::vector<types::global_dof_index> dof_indices(
+        cell_iterator->get_dof_handler().get_fe().dofs_per_cell);
+      cell_iterator->get_dof_indices(dof_indices);
+
+      return dof_indices;
+    };
+
     const IndexSet &owned_dofs = matrix_free.get_dof_info(component)
                                    .vector_partitioner->locally_owned_range();
     const unsigned int n_comp =
@@ -216,6 +226,41 @@ namespace MyDoFRenumbering
       n_owned_dofs, dealii::numbers::invalid_unsigned_int);
     std::vector<unsigned char> touch_count(n_owned_dofs);
 
+
+    const auto resolve_constraint = [&](auto &i) {
+      if (i == numbers::invalid_dof_index)
+        return;
+
+      const auto *entries_ptr =
+        matrix_free.get_affine_constraints().get_constraint_entries(i);
+
+      if (entries_ptr != nullptr)
+        {
+          const auto &                  entries   = *entries_ptr;
+          const types::global_dof_index n_entries = entries.size();
+          if (n_entries == 1 && std::abs(entries[0].second - 1.) <
+                                  100 * std::numeric_limits<double>::epsilon())
+            {
+              i = entries[0].first; // identity constraint
+            }
+          else if (n_entries == 0)
+            {
+              i = numbers::invalid_dof_index; // homogeneous
+                                              // Dirichlet
+            }
+          else
+            {
+              // other constraints, e.g., hanging-node
+              // constraints; not implemented yet
+              AssertThrow(false, ExcNotImplemented());
+            }
+        }
+      else
+        {
+          // not constrained -> nothing to do
+        }
+    };
+
     const auto operation_on_cell_range =
       [&](const MatrixFree<dim, Number, VectorizedArrayType> &data,
           unsigned int &,
@@ -260,13 +305,40 @@ namespace MyDoFRenumbering
                                         counter_dof_numbers);
                   }
               }
+          }
 
+        for (unsigned int cell = cell_range.first; cell < cell_range.second;
+             ++cell)
+          {
             // part (b): increment the touch count of a dof appearing in the
             // current cell batch if it was last touched by another than the
             // present cell batch range (we track them via storing the last
             // cell batch range that touched a particular dof)
-            data.get_dof_info(component).get_dof_indices_on_cell_batch(
-              dofs_extracted, cell);
+            dofs_extracted.clear();
+
+            for (unsigned int v = 0;
+                 v < data.n_active_entries_per_cell_batch(cell);
+                 ++v)
+              {
+                // create iterator
+                const auto cell_iterator =
+                  matrix_free.get_cell_iterator(cell, v);
+
+                // collect indices
+                std::vector<types::global_dof_index> dof_indices =
+                  collect_indices(cell_iterator);
+
+                // resolve constraints
+                for (auto &i : dof_indices)
+                  resolve_constraint(i);
+
+                // global to local
+                for (const auto i : dof_indices)
+                  if (owned_dofs.is_element(i) &&
+                      (i != numbers::invalid_dof_index))
+                    dofs_extracted.push_back(owned_dofs.index_within_set(i));
+              }
+
             for (unsigned int dof_index : dofs_extracted)
               if (dof_index < n_owned_dofs &&
                   last_touch_by_cell_batch_range[dof_index] != cell_range.first)
