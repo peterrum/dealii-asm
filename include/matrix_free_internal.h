@@ -362,3 +362,30 @@ private:
   const bool overlap_pre_post;
   const bool overlap_communication_and_computation;
 };
+
+struct TaskDoFInfo
+{
+  TaskDoFInfo(const std::vector<unsigned int> &partition_row_index,
+              const std::shared_ptr<const Utilities::MPI::Partitioner>
+                &                              vector_partitioner,
+              const std::vector<unsigned int> &cell_loop_pre_list_index,
+              const std::vector<std::pair<unsigned int, unsigned int>>
+                &                              cell_loop_pre_list,
+              const std::vector<unsigned int> &cell_loop_post_list_index,
+              const std::vector<std::pair<unsigned int, unsigned int>>
+                &cell_loop_post_list)
+    : partition_row_index(partition_row_index)
+    , vector_partitioner(vector_partitioner)
+    , cell_loop_pre_list_index(cell_loop_pre_list_index)
+    , cell_loop_pre_list(cell_loop_pre_list)
+    , cell_loop_post_list_index(cell_loop_post_list_index)
+    , cell_loop_post_list(cell_loop_post_list)
+  {}
+
+  const std::vector<unsigned int> &                         partition_row_index;
+  const std::shared_ptr<const Utilities::MPI::Partitioner> &vector_partitioner;
+  const std::vector<unsigned int> &cell_loop_pre_list_index;
+  const std::vector<std::pair<unsigned int, unsigned int>> &cell_loop_pre_list;
+  const std::vector<unsigned int> &cell_loop_post_list_index;
+  const std::vector<std::pair<unsigned int, unsigned int>> &cell_loop_post_list;
+};

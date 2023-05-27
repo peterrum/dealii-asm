@@ -1003,6 +1003,32 @@ public:
     return fdm.storage_size();
   }
 
+  TaskDoFInfo
+  get_task_dof_info() const
+  {
+    const auto &ti = matrix_free.get_task_info();
+    const auto &di = matrix_free.get_dof_info();
+
+    if (element_centric && (n_overlap == 1))
+      {
+        return TaskDoFInfo(ti.partition_row_index,
+                           di.vector_partitioner,
+                           di.cell_loop_pre_list_index,
+                           di.cell_loop_pre_list,
+                           di.cell_loop_post_list_index,
+                           di.cell_loop_post_list);
+      }
+    else
+      {
+        return TaskDoFInfo(ti.partition_row_index,
+                           di.vector_partitioner,
+                           cell_loop_pre_list_index,
+                           cell_loop_pre_list,
+                           cell_loop_post_list_index,
+                           cell_loop_post_list);
+      }
+  }
+
 private:
   void
   vmult_internal(

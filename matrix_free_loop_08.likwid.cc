@@ -41,6 +41,8 @@ struct Parameters
 
   unsigned int n_repetitions = 10;
 
+  bool do_print_stat = false;
+
   void
   parse(const std::string file_name)
   {
@@ -69,6 +71,8 @@ private:
     prm.add_parameter("dof renumbering", dof_renumbering);
     prm.add_parameter("use cartesian mesh", use_cartesian_mesh);
     prm.add_parameter("mapping type", mapping_type);
+
+    prm.add_parameter("do print stat", do_print_stat);
   }
 };
 
@@ -143,23 +147,18 @@ process_fdm_parameters(const unsigned int              offset,
   params.put("overlap pre post", overlap_pre_post);
 }
 
-template <int dim, typename Number, typename VectorizedArrayType>
 void
-print_stat(const MatrixFree<dim, Number, VectorizedArrayType> &matrix_free)
+print_stat(const TaskDoFInfo &tdi)
 {
   const unsigned int chunk_size_zero_vector =
     internal::MatrixFreeFunctions::DoFInfo::chunk_size_zero_vector;
 
-  const auto &di = matrix_free.get_dof_info(0);
-  const auto &ti = matrix_free.get_task_info();
-
-  const auto &partition_row_index = ti.partition_row_index;
-
-  const auto &vector_partitioner        = di.vector_partitioner;
-  const auto &cell_loop_pre_list_index  = di.cell_loop_pre_list_index;
-  const auto &cell_loop_pre_list        = di.cell_loop_pre_list;
-  const auto &cell_loop_post_list_index = di.cell_loop_post_list_index;
-  const auto &cell_loop_post_list       = di.cell_loop_post_list;
+  const auto &partition_row_index       = tdi.partition_row_index;
+  const auto &vector_partitioner        = tdi.vector_partitioner;
+  const auto &cell_loop_pre_list_index  = tdi.cell_loop_pre_list_index;
+  const auto &cell_loop_pre_list        = tdi.cell_loop_pre_list;
+  const auto &cell_loop_post_list_index = tdi.cell_loop_post_list_index;
+  const auto &cell_loop_post_list       = tdi.cell_loop_post_list;
 
   std::vector<unsigned int> distances(vector_partitioner->locally_owned_size() /
                                           chunk_size_zero_vector +
@@ -244,9 +243,15 @@ print_stat(const MatrixFree<dim, Number, VectorizedArrayType> &matrix_free)
       for (unsigned int i = 0; i < temp.size(); ++i)
         temp[i] /= temp.back();
 
+      static unsigned int counter = 0;
+
+      std::ofstream outfile("stat_" + std::to_string(counter));
+
       for (unsigned int i = 0; i < temp.size(); ++i)
-        std::cout << i << " " << temp[i] * 100 << std::endl;
-      std::cout << std::endl;
+        outfile << i << " " << temp[i] * 100 << std::endl;
+      outfile << std::endl;
+
+      counter++;
     }
 }
 
@@ -402,9 +407,9 @@ test(const Parameters params_in)
               process_fdm_parameters(0, props, params, constness);
               precondition_fdm = create_fdm_preconditioner(op, params);
 
-              if (true)
+              if (params_in.do_print_stat)
                 {
-                  print_stat(matrix_free);
+                  print_stat(precondition_fdm->get_task_dof_info());
                 }
             }
         }
