@@ -143,6 +143,116 @@ process_fdm_parameters(const unsigned int              offset,
   params.put("overlap pre post", overlap_pre_post);
 }
 
+template <int dim, typename Number, typename VectorizedArrayType>
+void
+print_stat(const MatrixFree<dim, Number, VectorizedArrayType> &matrix_free)
+{
+  const unsigned int chunk_size_zero_vector =
+    internal::MatrixFreeFunctions::DoFInfo::chunk_size_zero_vector;
+
+  const auto &              di = matrix_free.get_dof_info(0);
+  const auto &              ti = matrix_free.get_task_info();
+  std::vector<unsigned int> distances(
+    di.vector_partitioner->locally_owned_size() / chunk_size_zero_vector + 1,
+    numbers::invalid_unsigned_int);
+  for (unsigned int id =
+         di.cell_loop_pre_list_index
+           [ti.partition_row_index[ti.partition_row_index.size() - 2]];
+       id < di.cell_loop_pre_list_index
+              [ti.partition_row_index[ti.partition_row_index.size() - 2] + 1];
+       ++id)
+    for (unsigned int a = di.cell_loop_pre_list[id].first;
+         a < di.cell_loop_pre_list[id].second;
+         a += chunk_size_zero_vector)
+      distances[a / chunk_size_zero_vector] = 0;
+  for (unsigned int part = 0; part < ti.partition_row_index.size() - 2; ++part)
+    {
+      for (unsigned int i = ti.partition_row_index[part];
+           i < ti.partition_row_index[part + 1];
+           ++i)
+        {
+          // std::cout << "pre ";
+          for (unsigned int id = di.cell_loop_pre_list_index[i];
+               id != di.cell_loop_pre_list_index[i + 1];
+               ++id)
+            {
+              for (unsigned int a = di.cell_loop_pre_list[id].first;
+                   a < di.cell_loop_pre_list[id].second;
+                   a += chunk_size_zero_vector)
+                distances[a / chunk_size_zero_vector] = i;
+              // std::cout << id << "[" << di.cell_loop_pre_list[id].first <<
+              // ","
+              //          << di.cell_loop_pre_list[id].second << ") ";
+            }
+          // std::cout << std::endl;
+          // std::cout << "post ";
+          for (unsigned int id = di.cell_loop_post_list_index[i];
+               id != di.cell_loop_post_list_index[i + 1];
+               ++id)
+            {
+              for (unsigned int a = di.cell_loop_post_list[id].first;
+                   a < di.cell_loop_post_list[id].second;
+                   a += chunk_size_zero_vector)
+                distances[a / chunk_size_zero_vector] =
+                  i - distances[a / chunk_size_zero_vector];
+              // std::cout << id << "[" << di.cell_loop_post_list[id].first <<
+              // ","
+              //          << di.cell_loop_post_list[id].second << ") ";
+            }
+          // std::cout << std::endl;
+        }
+      // std::cout << std::endl;
+    }
+  for (unsigned int id =
+         di.cell_loop_post_list_index
+           [ti.partition_row_index[ti.partition_row_index.size() - 2]];
+       id < di.cell_loop_post_list_index
+              [ti.partition_row_index[ti.partition_row_index.size() - 2] + 1];
+       ++id)
+    for (unsigned int a = di.cell_loop_post_list[id].first;
+         a < di.cell_loop_post_list[id].second;
+         a += chunk_size_zero_vector)
+      distances[a / chunk_size_zero_vector] =
+        ti.partition_row_index[ti.partition_row_index.size() - 2] -
+        distances[a / chunk_size_zero_vector];
+  std::map<unsigned int, unsigned int> count;
+  for (const auto a : distances)
+    if (a != numbers::invalid_unsigned_int)
+      count[a] = 0;
+
+  for (const auto a : distances)
+    if (a != numbers::invalid_unsigned_int)
+      count[a]++;
+
+  unsigned int max_liveliness = 0;
+
+  for (const auto a : count)
+    max_liveliness = std::max(a.first, max_liveliness);
+
+  max_liveliness = Utilities::MPI::max(max_liveliness, MPI_COMM_WORLD);
+
+  std::vector<double> temp_(max_liveliness + 1, 0);
+  std::vector<double> temp(max_liveliness + 1, 0);
+
+  for (const auto a : count)
+    temp_[a.first] = a.second;
+
+  Utilities::MPI::sum(temp_, MPI_COMM_WORLD, temp);
+
+  if (Utilities::MPI::this_mpi_process(MPI_COMM_WORLD) == 0)
+    {
+      for (unsigned int i = 1; i < temp.size(); ++i)
+        temp[i] += temp[i - 1];
+
+      for (unsigned int i = 0; i < temp.size(); ++i)
+        temp[i] /= temp.back();
+
+      for (unsigned int i = 0; i < temp.size(); ++i)
+        std::cout << i << " " << temp[i] * 100 << std::endl;
+      std::cout << std::endl;
+    }
+}
+
 template <int dim, typename Number>
 void
 test(const Parameters params_in)
@@ -294,6 +404,11 @@ test(const Parameters params_in)
               boost::property_tree::ptree params;
               process_fdm_parameters(0, props, params, constness);
               precondition_fdm = create_fdm_preconditioner(op, params);
+
+              if (true)
+                {
+                  print_stat(matrix_free);
+                }
             }
         }
 
