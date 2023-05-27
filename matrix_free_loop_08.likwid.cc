@@ -150,70 +150,67 @@ print_stat(const MatrixFree<dim, Number, VectorizedArrayType> &matrix_free)
   const unsigned int chunk_size_zero_vector =
     internal::MatrixFreeFunctions::DoFInfo::chunk_size_zero_vector;
 
-  const auto &              di = matrix_free.get_dof_info(0);
-  const auto &              ti = matrix_free.get_task_info();
-  std::vector<unsigned int> distances(
-    di.vector_partitioner->locally_owned_size() / chunk_size_zero_vector + 1,
-    numbers::invalid_unsigned_int);
-  for (unsigned int id =
-         di.cell_loop_pre_list_index
-           [ti.partition_row_index[ti.partition_row_index.size() - 2]];
-       id < di.cell_loop_pre_list_index
-              [ti.partition_row_index[ti.partition_row_index.size() - 2] + 1];
+  const auto &di = matrix_free.get_dof_info(0);
+  const auto &ti = matrix_free.get_task_info();
+
+  const auto &partition_row_index = ti.partition_row_index;
+
+  const auto &vector_partitioner        = di.vector_partitioner;
+  const auto &cell_loop_pre_list_index  = di.cell_loop_pre_list_index;
+  const auto &cell_loop_pre_list        = di.cell_loop_pre_list;
+  const auto &cell_loop_post_list_index = di.cell_loop_post_list_index;
+  const auto &cell_loop_post_list       = di.cell_loop_post_list;
+
+  std::vector<unsigned int> distances(vector_partitioner->locally_owned_size() /
+                                          chunk_size_zero_vector +
+                                        1,
+                                      numbers::invalid_unsigned_int);
+  for (unsigned int id = cell_loop_pre_list_index
+         [partition_row_index[partition_row_index.size() - 2]];
+       id < cell_loop_pre_list_index
+              [partition_row_index[partition_row_index.size() - 2] + 1];
        ++id)
-    for (unsigned int a = di.cell_loop_pre_list[id].first;
-         a < di.cell_loop_pre_list[id].second;
+    for (unsigned int a = cell_loop_pre_list[id].first;
+         a < cell_loop_pre_list[id].second;
          a += chunk_size_zero_vector)
       distances[a / chunk_size_zero_vector] = 0;
-  for (unsigned int part = 0; part < ti.partition_row_index.size() - 2; ++part)
+  for (unsigned int part = 0; part < partition_row_index.size() - 2; ++part)
     {
-      for (unsigned int i = ti.partition_row_index[part];
-           i < ti.partition_row_index[part + 1];
+      for (unsigned int i = partition_row_index[part];
+           i < partition_row_index[part + 1];
            ++i)
         {
-          // std::cout << "pre ";
-          for (unsigned int id = di.cell_loop_pre_list_index[i];
-               id != di.cell_loop_pre_list_index[i + 1];
+          for (unsigned int id = cell_loop_pre_list_index[i];
+               id != cell_loop_pre_list_index[i + 1];
                ++id)
             {
-              for (unsigned int a = di.cell_loop_pre_list[id].first;
-                   a < di.cell_loop_pre_list[id].second;
+              for (unsigned int a = cell_loop_pre_list[id].first;
+                   a < cell_loop_pre_list[id].second;
                    a += chunk_size_zero_vector)
                 distances[a / chunk_size_zero_vector] = i;
-              // std::cout << id << "[" << di.cell_loop_pre_list[id].first <<
-              // ","
-              //          << di.cell_loop_pre_list[id].second << ") ";
             }
-          // std::cout << std::endl;
-          // std::cout << "post ";
-          for (unsigned int id = di.cell_loop_post_list_index[i];
-               id != di.cell_loop_post_list_index[i + 1];
+          for (unsigned int id = cell_loop_post_list_index[i];
+               id != cell_loop_post_list_index[i + 1];
                ++id)
             {
-              for (unsigned int a = di.cell_loop_post_list[id].first;
-                   a < di.cell_loop_post_list[id].second;
+              for (unsigned int a = cell_loop_post_list[id].first;
+                   a < cell_loop_post_list[id].second;
                    a += chunk_size_zero_vector)
                 distances[a / chunk_size_zero_vector] =
                   i - distances[a / chunk_size_zero_vector];
-              // std::cout << id << "[" << di.cell_loop_post_list[id].first <<
-              // ","
-              //          << di.cell_loop_post_list[id].second << ") ";
             }
-          // std::cout << std::endl;
         }
-      // std::cout << std::endl;
     }
-  for (unsigned int id =
-         di.cell_loop_post_list_index
-           [ti.partition_row_index[ti.partition_row_index.size() - 2]];
-       id < di.cell_loop_post_list_index
-              [ti.partition_row_index[ti.partition_row_index.size() - 2] + 1];
+  for (unsigned int id = cell_loop_post_list_index
+         [partition_row_index[partition_row_index.size() - 2]];
+       id < cell_loop_post_list_index
+              [partition_row_index[partition_row_index.size() - 2] + 1];
        ++id)
-    for (unsigned int a = di.cell_loop_post_list[id].first;
-         a < di.cell_loop_post_list[id].second;
+    for (unsigned int a = cell_loop_post_list[id].first;
+         a < cell_loop_post_list[id].second;
          a += chunk_size_zero_vector)
       distances[a / chunk_size_zero_vector] =
-        ti.partition_row_index[ti.partition_row_index.size() - 2] -
+        partition_row_index[partition_row_index.size() - 2] -
         distances[a / chunk_size_zero_vector];
   std::map<unsigned int, unsigned int> count;
   for (const auto a : distances)
