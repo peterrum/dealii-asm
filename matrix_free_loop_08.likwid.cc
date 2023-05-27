@@ -243,7 +243,7 @@ test(const Parameters params_in)
 
   const auto labels = split_string(params_in.preconditioner_types, ' ');
 
-  for (const auto label : labels)
+  for (const auto &label : labels)
     {
       // extract properties
       const auto   props     = split_string(label, '-', 10);

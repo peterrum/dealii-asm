@@ -3,6 +3,8 @@
 #include <deal.II/matrix_free/shape_info.h>
 #include <deal.II/matrix_free/vector_access_internal.h>
 
+#include <bit>
+
 unsigned int
 get_orientation_line(const std::vector<types::global_dof_index> &dofs,
                      const unsigned int                          degree,
@@ -553,10 +555,10 @@ adjust_for_orientation(const unsigned int               dim_non_template,
 
   using VectorizedArrayTrait = internal::VectorizedArrayTrait<Number>;
 
-  for (unsigned int v = 0; v < VectorizedArrayTrait::width; ++v)
+  for (unsigned int v = 0; v < VectorizedArrayTrait::width(); ++v)
     {
       unsigned int orientation =
-        orientation_in[cell * VectorizedArrayTrait::width + v];
+        orientation_in[cell * VectorizedArrayTrait::width() + v];
 
       if ((dim >= 2) && (orientation != 0)) // process lines
         {

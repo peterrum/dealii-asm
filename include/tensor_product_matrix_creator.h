@@ -1,5 +1,7 @@
 #pragma once
 
+#include <deal.II/numerics/tensor_product_matrix_creator.h>
+
 namespace dealii::TensorProductMatrixCreator
 {
   template <int dim, typename Number>

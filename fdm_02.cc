@@ -2,7 +2,7 @@
 
 #include <deal.II/fe/fe_q.h>
 
-#include <deal.II/numerics/tensor_product_matrix_creator.h>
+#include "tensor_product_matrix_creator.h"
 
 using namespace dealii;
 

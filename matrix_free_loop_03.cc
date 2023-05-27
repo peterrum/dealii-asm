@@ -125,6 +125,10 @@ test(const unsigned int fe_degree,
      const bool         use_renumbering,
      ConvergenceTable & table)
 {
+  (void)chebyshev_degree;
+  (void)do_vmult;
+  (void)use_renumbering;
+
   const unsigned int sub_mesh_approximation = dim; // TODO
 
   using Number              = float;
@@ -466,6 +470,8 @@ main(int argc, char *argv[])
   const bool         use_cartesian_mesh = (argc >= 7) ? std::atoi(argv[6]) : 1;
   const bool         use_renumbering    = (argc >= 8) ? std::atoi(argv[7]) : 1;
   const bool         verbose            = true;
+
+  (void)n_overlap;
 
   const bool is_root = Utilities::MPI::this_mpi_process(MPI_COMM_WORLD) == 0;
 

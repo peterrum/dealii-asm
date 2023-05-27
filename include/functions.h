@@ -12,7 +12,8 @@ public:
   {}
 
   double
-  value(dealii::Point<dim> const &p, unsigned int const /*component*/ = 0) const
+  value(dealii::Point<dim> const &p,
+        unsigned int const /*component*/ = 0) const override
   {
     double return_value = 0;
 
@@ -44,7 +45,8 @@ public:
   {}
 
   double
-  value(dealii::Point<dim> const &p, unsigned int const /*component*/ = 0) const
+  value(dealii::Point<dim> const &p,
+        unsigned int const /*component*/ = 0) const override
   {
     double const coef         = 1.0;
     double       return_value = 0;

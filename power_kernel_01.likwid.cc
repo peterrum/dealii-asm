@@ -102,7 +102,7 @@ class Fu : public Function<dim, Number>
 {
 public:
   virtual Number
-  value(const Point<dim> &p, const unsigned int component) const
+  value(const Point<dim> &p, const unsigned int component) const override
   {
     (void)component;
 

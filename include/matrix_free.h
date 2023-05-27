@@ -923,7 +923,7 @@ public:
    * General matrix-vector product.
    */
   void
-  vmult(VectorType &dst, const VectorType &src) const
+  vmult(VectorType &dst, const VectorType &src) const override
   {
     const auto pre_operation = [&](const auto start_range,
                                    const auto end_range) {

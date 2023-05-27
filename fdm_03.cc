@@ -23,13 +23,13 @@
 
 #include <deal.II/numerics/data_out.h>
 #include <deal.II/numerics/matrix_creator.h>
-#include <deal.II/numerics/tensor_product_matrix_creator.h>
 #include <deal.II/numerics/vector_tools.h>
 
 #include <fstream>
 
 #include "include/grid_tools.h"
 #include "include/restrictors.h"
+#include "tensor_product_matrix_creator.h"
 
 using namespace dealii;
 

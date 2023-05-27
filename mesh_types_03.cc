@@ -148,7 +148,7 @@ main()
 
     std::vector<types::global_dof_index> dof_indices(fe.n_dofs_per_cell());
 
-    for (const auto cell : tria.active_cell_iterators())
+    for (const auto &cell : tria.active_cell_iterators())
       {
         auto points = fe.get_unit_support_points();
 
