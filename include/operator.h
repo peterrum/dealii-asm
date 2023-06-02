@@ -133,7 +133,8 @@ public:
   }
 
   virtual void
-  rhs(VectorType &vec, const std::shared_ptr<Function<dim, Number>> &rhs_func)
+  rhs(VectorType &                                  vec,
+      const std::shared_ptr<Function<dim, Number>> &rhs_func) override
   {
     VectorTools::create_right_hand_side(
       mapping, dof_handler, quadrature, *rhs_func, vec, constraints);
@@ -165,7 +166,7 @@ public:
   }
 
   void
-  vmult(VectorType &dst, const VectorType &src) const
+  vmult(VectorType &dst, const VectorType &src) const override
   {
     sparse_matrix.vmult(dst, src);
   }
@@ -221,13 +222,13 @@ public:
   }
 
   void
-  initialize_dof_vector(VectorType &vec) const
+  initialize_dof_vector(VectorType &vec) const override
   {
     vec.reinit(partitioner);
   }
 
   const AffineConstraints<Number> &
-  get_constraints() const
+  get_constraints() const override
   {
     return constraints;
   }
@@ -243,7 +244,7 @@ public:
   {
     this->initialize_dof_vector(vec);
 
-    for (const auto entry : sparse_matrix)
+    for (const auto &entry : sparse_matrix)
       if (entry.row() == entry.column())
         vec[entry.row()] = 1.0 / entry.value();
   }
@@ -295,7 +296,7 @@ public:
 
   virtual void
   rhs(VectorType &                                  system_rhs,
-      const std::shared_ptr<Function<dim, Number>> &rhs_func)
+      const std::shared_ptr<Function<dim, Number>> &rhs_func) override
   {
     const int dummy = 0;
 
@@ -1350,7 +1351,7 @@ public:
   }
 
   void
-  vmult(VectorType &dst, const VectorType &src) const
+  vmult(VectorType &dst, const VectorType &src) const override
   {
     vmult(dst,
           src,
@@ -1488,7 +1489,7 @@ public:
   }
 
   void
-  initialize_dof_vector(VectorType &vec) const
+  initialize_dof_vector(VectorType &vec) const override
   {
     if (vector_partitioner)
       vec.reinit(vector_partitioner);
@@ -1497,7 +1498,7 @@ public:
   }
 
   const AffineConstraints<Number> &
-  get_constraints() const
+  get_constraints() const override
   {
     return get_matrix_free().get_affine_constraints();
   }

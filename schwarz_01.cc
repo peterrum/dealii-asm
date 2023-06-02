@@ -112,7 +112,7 @@ test(const unsigned int fe_degree, const unsigned int n_global_refinements)
     auto &vec = precondition.get_vector();
     vec.reinit(partitioner);
 
-    for (const auto entry : laplace_matrix)
+    for (const auto &entry : laplace_matrix)
       if (entry.row() == entry.column())
         vec[entry.row()] = 1.0 / entry.value();
 

@@ -237,7 +237,7 @@ public:
 
         std::cout << " - Times of multigrid (solver <-> mg): ";
 
-        for (const auto i : all_mg_precon_timers)
+        for (const auto &i : all_mg_precon_timers)
           pcout << i.first << " ";
         pcout << std::endl;
         pcout << std::endl;

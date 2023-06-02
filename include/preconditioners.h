@@ -385,7 +385,7 @@ public:
       }
   }
   virtual void
-  invert()
+  invert() override
   {
     for (auto &diagonal : diagonals)
       for (auto &entry : diagonal)
@@ -580,7 +580,7 @@ public:
   }
 
   virtual void
-  invert()
+  invert() override
   {
     for (auto &block : this->blocks)
       if (block.m() > 0 && block.n() > 0)
@@ -698,7 +698,7 @@ public:
   }
 
   virtual void
-  invert()
+  invert() override
   {
     for (auto &block : this->blocks)
       if (block.m() > 0 && block.n() > 0)
