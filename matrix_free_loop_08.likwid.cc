@@ -34,10 +34,11 @@ struct Parameters
 
   std::string preconditioner_types = "post-1-c";
 
-  bool        dof_renumbering    = true;
-  bool        compress_indices   = true;
-  bool        use_cartesian_mesh = true;
-  std::string mapping_type       = "default";
+  bool        dof_renumbering      = true;
+  std::string dof_renumbering_type = "a";
+  bool        compress_indices     = true;
+  bool        use_cartesian_mesh   = true;
+  std::string mapping_type         = "default";
 
   unsigned int n_repetitions = 10;
 
@@ -69,6 +70,11 @@ private:
 
     prm.add_parameter("n repetitions", n_repetitions);
     prm.add_parameter("dof renumbering", dof_renumbering);
+    prm.add_parameter("dof renumbering type",
+                      dof_renumbering_type,
+                      "",
+                      Patterns::Selection("a|b|c"));
+    prm.add_parameter("compress indices", compress_indices);
     prm.add_parameter("use cartesian mesh", use_cartesian_mesh);
     prm.add_parameter("mapping type", mapping_type);
 
@@ -349,8 +355,10 @@ test(const Parameters params_in)
       const auto collect_indices =
         [&](const TriaIterator<DoFCellAccessor<dim, dim, false>> &cell_iterator)
         -> std::vector<types::global_dof_index> {
-        const bool         element_centric = true;
-        const unsigned int n_overlap       = 1;
+        const std::string dof_renumbering_type = params_in.dof_renumbering_type;
+
+        const bool         element_centric = dof_renumbering_type != "c";
+        const unsigned int n_overlap = dof_renumbering_type == "b" ? 2 : 1;
 
         const auto cells =
           dealii::GridTools::extract_all_surrounding_cells_cartesian<dim>(
@@ -375,6 +383,7 @@ test(const Parameters params_in)
                                                        constraints,
                                                        additional_data,
                                                        collect_indices);
+
       setup_constraints(dof_handler, constraints);
     }
 

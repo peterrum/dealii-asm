@@ -4,6 +4,25 @@
 mkdir experiment-patch-sequence
 cd experiment-patch-sequence
 likwid-mpirun -np 40 -f -g CACHES -m -O ../matrix_free_loop_08 ../../experiments/matrix_free_loop_08_sequence.json | tee result_caches.out
+cd ..
+
+
+mkdir experiment-patch-stat
+cd experiment-patch-stat
+likwid-mpirun -np 40 -f -g CACHES -m -O ../matrix_free_loop_08 ../../experiments/matrix_free_loop_08_stat.json | tee result_caches.out
+cd ..
+
+
+mkdir experiment-patch-stat-b
+cd experiment-patch-stat-b
+likwid-mpirun -np 40 -f -g CACHES -m -O ../matrix_free_loop_08 ../../experiments/matrix_free_loop_08_stat_b.json | tee result_caches.out
+cd ..
+
+
+mkdir experiment-patch-stat-c
+cd experiment-patch-stat-c
+likwid-mpirun -np 40 -f -g CACHES -m -O ../matrix_free_loop_08 ../../experiments/matrix_free_loop_08_stat_c.json | tee result_caches.out
+cd ..
 
 ```
 
