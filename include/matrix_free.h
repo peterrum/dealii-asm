@@ -212,9 +212,6 @@ public:
           locally_owned_dofs, is_ghost_indices, dof_handler.get_communicator());
       }
 
-    pcout << "    - compress indices:       "
-          << ((this->compressed_rw != nullptr) ? "true" : "false") << std::endl;
-
     fdm.reserve(matrix_free.n_cell_batches());
 
     const auto harmonic_patch_extend =
@@ -388,6 +385,14 @@ public:
 
             fdm.insert(cell, Ms, Ks);
           }
+
+    pcout << "    - compress indices:       "
+          << (((this->compressed_rw != nullptr) ||
+               ((element_centric == false) && compress_indices &&
+                (fe_degree >= 2))) ?
+                "true" :
+                "false")
+          << std::endl;
 
     fdm.finalize();
 

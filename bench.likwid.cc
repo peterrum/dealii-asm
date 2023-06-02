@@ -1,0 +1,425 @@
+#include <deal.II/base/conditional_ostream.h>
+#include <deal.II/base/mpi.h>
+#include <deal.II/base/parameter_handler.h>
+
+#include <deal.II/distributed/tria.h>
+
+#include <deal.II/dofs/dof_handler.h>
+#include <deal.II/dofs/dof_renumbering.h>
+#include <deal.II/dofs/dof_tools.h>
+
+#include <deal.II/fe/fe_q.h>
+#include <deal.II/fe/mapping_q1.h>
+#include <deal.II/fe/mapping_q_cache.h>
+
+#include <deal.II/grid/grid_generator.h>
+#include <deal.II/grid/grid_tools.h>
+
+#include <deal.II/lac/diagonal_matrix.h>
+
+#include <memory>
+
+#ifdef LIKWID_PERFMON
+#  include <likwid.h>
+#endif
+
+#include "include/poisson_operator.h"
+
+using namespace dealii;
+
+static unsigned int likwid_counter = 1;
+
+struct Parameters
+{
+  unsigned int dim         = 3;
+  std::string  number_type = "double";
+
+  unsigned int fe_degree     = 3;
+  unsigned int n_subdivision = 1;
+
+  std::string preconditioner_types = "post-1-c";
+
+  bool        dof_renumbering      = true;
+  std::string dof_renumbering_type = "a";
+  bool        compress_indices     = true;
+  bool        use_cartesian_mesh   = true;
+  std::string mapping_type         = "default";
+
+  unsigned int n_repetitions = 10;
+
+  bool do_print_stat = false;
+
+  void
+  parse(const std::string file_name)
+  {
+    dealii::ParameterHandler prm;
+    add_parameters(prm);
+
+    prm.parse_input(file_name, "", true);
+  }
+
+private:
+  void
+  add_parameters(ParameterHandler &prm)
+  {
+    prm.add_parameter("dim", dim);
+    prm.add_parameter("number type",
+                      number_type,
+                      "",
+                      Patterns::Selection("double|float"));
+
+    prm.add_parameter("fe degree", fe_degree);
+    prm.add_parameter("n subdivisions", n_subdivision);
+
+    prm.add_parameter("preconditioner types", preconditioner_types);
+
+    prm.add_parameter("n repetitions", n_repetitions);
+    prm.add_parameter("dof renumbering", dof_renumbering);
+    prm.add_parameter("dof renumbering type",
+                      dof_renumbering_type,
+                      "",
+                      Patterns::Selection("a|b|c"));
+    prm.add_parameter("compress indices", compress_indices);
+    prm.add_parameter("use cartesian mesh", use_cartesian_mesh);
+    prm.add_parameter("mapping type", mapping_type);
+
+    prm.add_parameter("do print stat", do_print_stat);
+  }
+};
+
+namespace dealii
+{
+  namespace GridGenerator
+  {
+    namespace internal
+    {
+      std::pair<unsigned int, std::vector<unsigned int>>
+      decompose_for_subdivided_hyper_cube_balanced(unsigned int dim,
+                                                   unsigned int s)
+      {
+        unsigned int       n_refine  = s / 6;
+        const unsigned int remainder = s % 6;
+
+        std::vector<unsigned int> subdivisions(dim, 1);
+        if (remainder == 1 && s > 1)
+          {
+            subdivisions[0] = 3;
+            subdivisions[1] = 2;
+            subdivisions[2] = 2;
+            n_refine -= 1;
+          }
+        if (remainder == 2)
+          subdivisions[0] = 2;
+        else if (remainder == 3)
+          subdivisions[0] = 3;
+        else if (remainder == 4)
+          subdivisions[0] = subdivisions[1] = 2;
+        else if (remainder == 5)
+          {
+            subdivisions[0] = 3;
+            subdivisions[1] = 2;
+          }
+
+        return {n_refine, subdivisions};
+      }
+
+    } // namespace internal
+
+    template <int dim>
+    unsigned int
+    subdivided_hyper_cube_balanced(Triangulation<dim> &tria,
+                                   const unsigned int  s,
+                                   const bool          colorize = false)
+    {
+      const auto [n_refine, subdivisions] =
+        internal::decompose_for_subdivided_hyper_cube_balanced(dim, s);
+
+      Point<dim> p2;
+      for (unsigned int d = 0; d < dim; ++d)
+        p2[d] = subdivisions[d];
+
+      GridGenerator::subdivided_hyper_rectangle(
+        tria, subdivisions, Point<dim>(), p2, colorize);
+
+      return n_refine;
+    }
+
+  } // namespace GridGenerator
+} // namespace dealii
+
+template <int dim, typename Number>
+void
+setup_constraints(const DoFHandler<dim> &    dof_handler,
+                  AffineConstraints<Number> &constraints)
+{
+  constraints.clear();
+  for (unsigned int d = 0; d < dim; ++d)
+    DoFTools::make_periodicity_constraints(
+      dof_handler, 2 * d, 2 * d + 1, d, constraints);
+  constraints.close();
+}
+
+std::vector<std::string>
+split_string(const std::string  text,
+             const char         deliminator,
+             const unsigned int size = numbers::invalid_unsigned_int)
+{
+  std::stringstream stream;
+  stream << text;
+
+  std::string              substring;
+  std::vector<std::string> substring_list;
+
+  while (std::getline(stream, substring, deliminator))
+    substring_list.push_back(substring);
+
+  if (size != numbers::invalid_unsigned_int)
+    for (unsigned int i = substring_list.size(); i < size; ++i)
+      substring_list.push_back("-");
+
+  return substring_list;
+}
+
+void
+process_fdm_parameters(const unsigned int              offset,
+                       const std::vector<std::string> &props,
+                       boost::property_tree::ptree &   params,
+                       std::string &                   constness)
+{
+  const auto type               = props[offset + 0];
+  const auto n_overlap          = props[offset + 1];
+  const auto weighting_sequence = props[offset + 2];
+
+  const bool overlap_pre_post =
+    (weighting_sequence == "g") ? (props[offset + 3] == "p") : true;
+  constness =
+    (weighting_sequence == "g") ? (props[offset + 4]) : std::string("c");
+
+  // configure preconditioner
+  params.put("weighting type", (type == "add") ? "none" : type);
+
+  if (n_overlap == "v")
+    {
+      params.put("element centric", false);
+    }
+  else
+    {
+      params.put("n overlap", n_overlap);
+      params.put("element centric", true);
+    }
+
+  params.put("weight sequence",
+             weighting_sequence == "g" ?
+               "global" :
+               (weighting_sequence == "l" ?
+                  "local" :
+                  (weighting_sequence == "dg" ? "DG" : "compressed")));
+
+  params.put("overlap pre post", overlap_pre_post);
+}
+
+template <int dim, typename Number>
+void
+test(const Parameters params_in)
+{
+  using VectorizedArrayType = VectorizedArray<Number>;
+  using VectorType          = LinearAlgebra::distributed::Vector<Number>;
+
+  ConditionalOStream pcout(std::cout,
+                           Utilities::MPI::this_mpi_process(MPI_COMM_WORLD) ==
+                             0);
+
+  FE_Q<dim>   fe(params_in.fe_degree);
+  QGauss<dim> quadrature(params_in.fe_degree + 1);
+
+  parallel::distributed::Triangulation<dim> tria(MPI_COMM_WORLD);
+  const unsigned int                        n_global_refinements =
+    GridGenerator::subdivided_hyper_cube_balanced(tria,
+                                                  params_in.n_subdivision,
+                                                  true);
+
+  std::vector<
+    GridTools::PeriodicFacePair<typename Triangulation<dim>::cell_iterator>>
+    periodic_faces;
+  for (unsigned int d = 0; d < dim; ++d)
+    GridTools::collect_periodic_faces(
+      tria, 2 * d, 2 * d + 1, d, periodic_faces);
+  tria.add_periodicity(periodic_faces);
+
+  tria.refine_global(n_global_refinements);
+
+  MappingQ1<dim> mapping;
+
+  const bool use_cartesian_mesh = params_in.use_cartesian_mesh;
+
+  const unsigned int mapping_degree = 2;
+  MappingQCache<dim> mapping_q_cache(mapping_degree);
+  mapping_q_cache.initialize(
+    mapping,
+    tria,
+    [use_cartesian_mesh](const auto &, const auto &point) {
+      Point<dim> result;
+
+      if (use_cartesian_mesh)
+        return result;
+
+      for (unsigned int d = 0; d < dim; ++d)
+        result[d] = std::sin(2 * numbers::PI * point[(d + 1) % dim]) *
+                    std::sin(numbers::PI * point[d]) * 0.1;
+
+      std::cout << result << std::endl;
+
+      return result;
+    },
+    true);
+
+
+  DoFHandler<dim> dof_handler(tria);
+  dof_handler.distribute_dofs(fe);
+
+  pcout << "Info" << std::endl;
+  pcout << " - degree: " << params_in.fe_degree << std::endl;
+  pcout << " - n dofs: " << dof_handler.n_dofs() << std::endl;
+  pcout << std::endl << std::endl;
+
+  AffineConstraints<Number> constraints;
+  setup_constraints(dof_handler, constraints);
+
+  typename MatrixFree<dim, Number, VectorizedArrayType>::AdditionalData
+    additional_data;
+
+  if (params_in.dof_renumbering)
+    {
+      DoFRenumbering::matrix_free_data_locality<dim>(dof_handler,
+                                                     constraints,
+                                                     additional_data);
+      setup_constraints(dof_handler, constraints);
+    }
+
+  auto matrix_free =
+    std::make_shared<MatrixFree<dim, Number, VectorizedArrayType>>();
+  matrix_free->reinit(
+    mapping_q_cache, dof_handler, constraints, quadrature, additional_data);
+
+  // create linear operator
+
+  const auto labels = split_string(params_in.preconditioner_types, ' ');
+
+  for (const auto &label : labels)
+    {
+      // extract properties
+      const auto   props     = split_string(label, '-', 10);
+      const auto   type      = props[0];
+      std::string  constness = "c";
+      unsigned int factor    = 1;
+
+      // create preconditioner
+      Poisson::LaplaceOperator<dim,
+                               1,
+                               Number,
+                               LinearAlgebra::distributed::Vector<Number>,
+                               VectorizedArray<Number>>
+        op;
+      op.initialize(matrix_free);
+
+      // create vectors
+      VectorType src, dst;
+      op.initialize_dof_vector(src);
+      op.initialize_dof_vector(dst);
+      src = 1.0;
+
+      // function to be excuated
+      const auto fu = [&]() { op.vmult_basic(dst, src); };
+
+      // warm up
+      for (unsigned int i = 0; i < params_in.n_repetitions; ++i)
+        fu();
+
+      // time
+      const auto add_padding = [](const int value) -> std::string {
+        if (value < 10)
+          return "000" + std::to_string(value);
+        if (value < 100)
+          return "00" + std::to_string(value);
+        if (value < 1000)
+          return "0" + std::to_string(value);
+        if (value < 10000)
+          return "" + std::to_string(value);
+
+        AssertThrow(false, ExcInternalError());
+
+        return "";
+      };
+
+      const std::string likwid_label =
+        "likwid_" + add_padding(likwid_counter) + "_" + label; // TODO
+      likwid_counter++;
+
+      MPI_Barrier(MPI_COMM_WORLD);
+      LIKWID_MARKER_START(likwid_label.c_str());
+      const auto timer = std::chrono::system_clock::now();
+
+      for (unsigned int i = 0; i < params_in.n_repetitions; ++i)
+        fu();
+
+      MPI_Barrier(MPI_COMM_WORLD);
+      LIKWID_MARKER_STOP(likwid_label.c_str());
+
+      const double time = std::chrono::duration_cast<std::chrono::nanoseconds>(
+                            std::chrono::system_clock::now() - timer)
+                            .count() /
+                          1e9;
+
+      const auto n_ghost_indices = Utilities::MPI::sum<types::global_dof_index>(
+        src.get_partitioner()->n_ghost_indices(), MPI_COMM_WORLD);
+      const auto n_import_indices =
+        Utilities::MPI::sum<types::global_dof_index>(
+          src.get_partitioner()->n_import_indices(), MPI_COMM_WORLD);
+
+      pcout << ">> " << label << " " << std::to_string(dof_handler.n_dofs())
+            << " " << std::to_string(params_in.n_repetitions * factor) << " "
+            << time << " " << std::to_string(sizeof(Number)) << " "
+            << std::to_string(params_in.fe_degree) << " "
+            << std::to_string(n_ghost_indices) << " "
+            << std::to_string(n_import_indices) << std::endl;
+    }
+}
+
+
+
+/**
+ * see: ../experiments/matrix_free_loop_08.sh
+ */
+int
+main(int argc, char *argv[])
+{
+  Utilities::MPI::MPI_InitFinalize mpi_initialization(argc, argv, 1);
+
+#ifdef LIKWID_PERFMON
+  LIKWID_MARKER_INIT;
+  LIKWID_MARKER_THREADINIT;
+#endif
+
+  AssertThrow(argc >= 2, ExcNotImplemented());
+  for (int i = 1; i < argc; ++i)
+    {
+      Parameters params;
+      params.parse(argv[i]);
+
+      // if ((params.dim == 2) && (params.number_type == "float"))
+      //  test<2, float>(params);
+      // else
+      if ((params.dim == 3) && (params.number_type == "float"))
+        test<3, float>(params);
+      // else if ((params.dim == 2) && (params.number_type == "double"))
+      //  test<2, double>(params);
+      else if ((params.dim == 3) && (params.number_type == "double"))
+        test<3, double>(params);
+      else
+        AssertThrow(false, ExcNotImplemented());
+    }
+
+#ifdef LIKWID_PERFMON
+  LIKWID_MARKER_CLOSE;
+#endif
+}

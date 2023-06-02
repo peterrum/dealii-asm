@@ -848,8 +848,11 @@ public:
     this->embedded_partitioner = embedded_partitioner;
   }
 
+  template <int fe_degree, int n_q_points_1d>
   void
-  do_cell_integral_local(FECellIntegrator &integrator) const
+  do_cell_integral_local(
+    FEEvaluation<dim, fe_degree, n_q_points_1d, 1, Number, VectorizedArrayType>
+      &integrator) const
   {
     if (!cell_vertex_coefficients.empty())
       do_cell_integral_local_linear_geometry(integrator);
@@ -863,8 +866,11 @@ public:
       do_cell_integral_local_base(integrator);
   }
 
+  template <int fe_degree, int n_q_points_1d>
   void
-  do_cell_integral_local_base(FECellIntegrator &integrator) const
+  do_cell_integral_local_base(
+    FEEvaluation<dim, fe_degree, n_q_points_1d, 1, Number, VectorizedArrayType>
+      &integrator) const
   {
     integrator.evaluate(EvaluationFlags::gradients);
 
@@ -913,8 +919,11 @@ public:
     return det;
   }
 
+  template <int fe_degree, int n_q_points_1d_>
   void
-  do_cell_integral_local_linear_geometry(FECellIntegrator &phi) const
+  do_cell_integral_local_linear_geometry(
+    FEEvaluation<dim, fe_degree, n_q_points_1d_, 1, Number, VectorizedArrayType>
+      &phi) const
   {
     // adopted from:
     // https://github.com/kronbichler/ceed_benchmarks_dealii/blob/e3da3c50d9d49666b324282255cdcb7ab25c128c/common_code/poisson_operator.h#L712
@@ -929,7 +938,8 @@ public:
     const unsigned int n_q_points = quad.size();
 
     const auto &quad_1d = matrix_free.get_quadrature().get_tensor_basis()[0];
-    const unsigned int n_q_points_1d = quad_1d.size();
+    const unsigned int n_q_points_1d =
+      n_q_points_1d_ == 0 ? quad_1d.size() : n_q_points_1d_;
 
     VectorizedArrayType *phi_grads = phi.begin_gradients();
     if (dim == 2)
@@ -1032,8 +1042,11 @@ public:
     phi.integrate(EvaluationFlags::gradients);
   }
 
+  template <int fe_degree, int n_q_points_1d_>
   void
-  do_cell_integral_local_quadratic_geometry(FECellIntegrator &phi) const
+  do_cell_integral_local_quadratic_geometry(
+    FEEvaluation<dim, fe_degree, n_q_points_1d_, 1, Number, VectorizedArrayType>
+      &phi) const
   {
     // adopted from:
     // https://github.com/kronbichler/ceed_benchmarks_dealii/blob/e3da3c50d9d49666b324282255cdcb7ab25c128c/common_code/poisson_operator.h#L860
@@ -1046,8 +1059,9 @@ public:
 
     const auto &v = cell_quadratic_coefficients[phi.get_current_cell_index()];
 
-    const auto &       quad       = matrix_free.get_quadrature();
-    const unsigned int n_q_points = quad.size();
+    const auto &       quad = matrix_free.get_quadrature();
+    const unsigned int n_q_points =
+      n_q_points_1d_ == 0 ? quad.size() : n_q_points_1d_;
 
     const auto &quad_1d = matrix_free.get_quadrature().get_tensor_basis()[0];
     const unsigned int n_q_points_1d = quad_1d.size();
@@ -1158,8 +1172,11 @@ public:
     phi.integrate(EvaluationFlags::gradients);
   }
 
+  template <int fe_degree, int n_q_points_1d>
   void
-  do_cell_integral_local_merged(FECellIntegrator &phi) const
+  do_cell_integral_local_merged(
+    FEEvaluation<dim, fe_degree, n_q_points_1d, 1, Number, VectorizedArrayType>
+      &phi) const
   {
     // adopted from:
     // https://github.com/kronbichler/ceed_benchmarks_dealii/blob/e3da3c50d9d49666b324282255cdcb7ab25c128c/common_code/poisson_operator.h#L1003
@@ -1218,8 +1235,11 @@ public:
     phi.integrate(EvaluationFlags::gradients);
   }
 
+  template <int fe_degree, int n_q_points_1d_>
   void
-  do_cell_integral_local_construct_q(FECellIntegrator &phi) const
+  do_cell_integral_local_construct_q(
+    FEEvaluation<dim, fe_degree, n_q_points_1d_, 1, Number, VectorizedArrayType>
+      &phi) const
   {
     // adopted from:
     // https://github.com/kronbichler/ceed_benchmarks_dealii/blob/e3da3c50d9d49666b324282255cdcb7ab25c128c/common_code/poisson_operator.h#L1065
@@ -1228,8 +1248,9 @@ public:
 
     const auto cell = phi.get_current_cell_index();
 
-    const auto &       quad       = matrix_free.get_quadrature();
-    const unsigned int n_q_points = quad.size();
+    const auto &       quad = matrix_free.get_quadrature();
+    const unsigned int n_q_points =
+      n_q_points_1d_ == 0 ? quad.size() : n_q_points_1d_;
 
     const auto &quad_1d = matrix_free.get_quadrature().get_tensor_basis()[0];
     const unsigned int n_q_points_1d = quad_1d.size();
@@ -1332,10 +1353,13 @@ public:
     phi.integrate(EvaluationFlags::gradients);
   }
 
+  template <int fe_degree, int n_q_points_1d>
   void
-  do_cell_integral_global(FECellIntegrator &integrator,
-                          VectorType &      dst,
-                          const VectorType &src) const
+  do_cell_integral_global(
+    FEEvaluation<dim, fe_degree, n_q_points_1d, 1, Number, VectorizedArrayType>
+      &               integrator,
+    VectorType &      dst,
+    const VectorType &src) const
   {
     if (compressed_rw)
       compressed_rw->read_dof_values(src, integrator);
@@ -1353,15 +1377,19 @@ public:
   void
   vmult(VectorType &dst, const VectorType &src) const override
   {
-    vmult(dst,
-          src,
-          [&](const auto start_range, const auto end_range) {
-            if (end_range > start_range)
-              std::memset(dst.begin() + start_range,
-                          0,
-                          sizeof(Number) * (end_range - start_range));
-          },
-          {});
+    matrix_free.template cell_loop<VectorType, VectorType>(
+      [&](const auto &, auto &dst, const auto &src, const auto cells) {
+        FEEvaluation<dim, 7, 8, 1, Number, VectorizedArrayType> phi(
+          matrix_free);
+        for (unsigned int cell = cells.first; cell < cells.second; ++cell)
+          {
+            phi.reinit(cell);
+            do_cell_integral_global(phi, dst, src);
+          }
+      },
+      dst,
+      src,
+      true);
   }
 
   void
@@ -1516,7 +1544,7 @@ public:
     MatrixFreeTools::compute_diagonal(
       matrix_free,
       diagonal,
-      &LaplaceOperatorMatrixFree::do_cell_integral_local,
+      &LaplaceOperatorMatrixFree::do_cell_integral_local<-1, 0>,
       this);
 
     for (auto &i : diagonal)
@@ -1580,7 +1608,7 @@ private:
       matrix_free,
       get_constraints(),
       sparse_matrix,
-      &LaplaceOperatorMatrixFree::do_cell_integral_local,
+      &LaplaceOperatorMatrixFree::do_cell_integral_local<-1, 0>,
       this);
   }
 

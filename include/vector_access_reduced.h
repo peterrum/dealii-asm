@@ -142,8 +142,9 @@ public:
                       all_indices_uniform[Utilities::pow(3, dim) * c + i] = 0;
               }
 
-            orientation_table = internal::MatrixFreeFunctions::ShapeInfo<
-              double>::compute_orientation_table(fe_degree - 1);
+            orientation_table =
+              dealii::internal::MatrixFreeFunctions::ShapeInfo<
+                double>::compute_orientation_table(fe_degree - 1);
 
             if (std::all_of(orientations.begin(),
                             orientations.end(),
@@ -180,39 +181,17 @@ public:
             int n_components,
             typename Number,
             typename VectorizedArrayType>
-  void
+  inline DEAL_II_ALWAYS_INLINE void
   read_dof_values(const dealii::LinearAlgebra::distributed::Vector<Number> &vec,
                   FEEvaluation<dim,
                                fe_degree,
                                n_q_points,
                                n_components,
                                Number,
-                               VectorizedArrayType> &                       phi)
+                               VectorizedArrayType> &phi) const
   {
-    if (compressed_dof_indices.empty() && all_indices_uniform.empty())
-      {
-        phi.read_dof_values(vec);
-        return;
-      }
-
-    if constexpr (fe_degree != -1)
-      {
-        read_dof_values_compressed<dim, fe_degree, n_components>(
-          vec, phi.get_current_cell_index(), phi.begin_dof_values());
-      }
-    else
-      {
-        const auto degree = phi.get_shape_info().data.front().fe_degree;
-
-#define OPERATION(c, d)                             \
-  AssertThrow(c != -1, ExcNotImplemented());        \
-                                                    \
-  read_dof_values_compressed<dim, c, n_components>( \
-    vec, phi.get_current_cell_index(), phi.begin_dof_values());
-
-        EXPAND_OPERATIONS_RW(OPERATION);
-#undef OPERATION
-      }
+    read_dof_values_compressed<dim, fe_degree, n_components>(
+      vec, phi.get_current_cell_index(), phi.begin_dof_values());
   }
 
   template <int dim,
@@ -221,7 +200,7 @@ public:
             int n_components,
             typename Number,
             typename VectorizedArrayType>
-  void
+  inline DEAL_II_ALWAYS_INLINE void
   distribute_local_to_global(
     dealii::LinearAlgebra::distributed::Vector<Number> &vec,
     FEEvaluation<dim,
@@ -229,32 +208,10 @@ public:
                  n_q_points,
                  n_components,
                  Number,
-                 VectorizedArrayType> &                 phi)
+                 VectorizedArrayType> &                 phi) const
   {
-    if (compressed_dof_indices.empty() && all_indices_uniform.empty())
-      {
-        phi.distribute_local_to_global(vec);
-        return;
-      }
-
-    if constexpr (fe_degree != -1)
-      {
-        distribute_local_to_global_compressed<dim, fe_degree, n_components>(
-          vec, phi.get_current_cell_index(), phi.begin_dof_values());
-      }
-    else
-      {
-        const auto degree = phi.get_shape_info().data.front().fe_degree;
-
-#define OPERATION(c, d)                                        \
-  AssertThrow(c != -1, ExcNotImplemented());                   \
-                                                               \
-  distribute_local_to_global_compressed<dim, c, n_components>( \
-    vec, phi.get_current_cell_index(), phi.begin_dof_values());
-
-        EXPAND_OPERATIONS_RW(OPERATION);
-#undef OPERATION
-      }
+    distribute_local_to_global_compressed<dim, fe_degree, n_components>(
+      vec, phi.get_current_cell_index(), phi.begin_dof_values());
   }
 
   void
@@ -269,12 +226,14 @@ private:
             int n_components,
             typename Number,
             typename VectorizedArrayType>
-  void
+  inline DEAL_II_ALWAYS_INLINE void
   read_dof_values_compressed(
     const dealii::LinearAlgebra::distributed::Vector<Number> &vec,
     const unsigned int                                        cell_no,
-    VectorizedArrayType *                                     dof_values)
+    VectorizedArrayType *__restrict__ dof_values) const
   {
+    constexpr int n_q_points_1d = fe_degree + 1;
+
     AssertIndexRange(cell_no * dealii::Utilities::pow(3, dim) *
                        VectorizedArrayType::size(),
                      compressed_dof_indices.size());
@@ -285,13 +244,13 @@ private:
     const unsigned char *cell_unconstrained =
       all_indices_uniform.data() + cell_no * dealii::Utilities::pow(3, dim);
     constexpr unsigned int dofs_per_comp =
-      dealii::Utilities::pow(fe_degree + 1, dim);
+      dealii::Utilities::pow(n_q_points_1d, dim);
     dealii::internal::VectorReader<Number, VectorizedArrayType> reader;
-    for (int i2 = 0, i = 0, compressed_i2 = 0, offset_i2 = 0;
+    for (int i2 = 0, compressed_i2 = 0, offset_i2 = 0;
          i2 < (dim == 3 ? (fe_degree + 1) : 1);
          ++i2)
       {
-        for (int i1 = 0, compressed_i1 = 0, offset_i1 = 0;
+        for (int i1 = 0, i = 0, compressed_i1 = 0, offset_i1 = 0;
              i1 < (dim > 1 ? (fe_degree + 1) : 1);
              ++i1)
           {
@@ -390,18 +349,8 @@ private:
           }
         else
           ++offset_i2;
+        dof_values += n_q_points_1d * n_q_points_1d;
       }
-
-    if (do_adjust_for_orientation)
-      adjust_for_orientation<VectorizedArrayType, dim, fe_degree>(
-        dim,
-        fe_degree,
-        n_components,
-        false,
-        cell_no,
-        orientations,
-        orientation_table,
-        dof_values);
   }
 
   template <int dim,
@@ -409,12 +358,14 @@ private:
             int n_components,
             typename Number,
             typename VectorizedArrayType>
-  void
+  inline DEAL_II_ALWAYS_INLINE void
   distribute_local_to_global_compressed(
     dealii::LinearAlgebra::distributed::Vector<Number> &vec,
     const unsigned int                                  cell_no,
-    VectorizedArrayType *                               dof_values)
+    VectorizedArrayType *__restrict__ dof_values) const
   {
+    constexpr int n_q_points_1d = fe_degree + 1;
+
     AssertIndexRange(cell_no * dealii::Utilities::pow(3, dim) *
                        VectorizedArrayType::size(),
                      compressed_dof_indices.size());
@@ -425,27 +376,16 @@ private:
     const unsigned char *cell_unconstrained =
       all_indices_uniform.data() + cell_no * dealii::Utilities::pow(3, dim);
     constexpr unsigned int dofs_per_comp =
-      dealii::Utilities::pow(fe_degree + 1, dim);
+      dealii::Utilities::pow(n_q_points_1d, dim);
     dealii::internal::VectorDistributorLocalToGlobal<Number,
                                                      VectorizedArrayType>
       distributor;
 
-    if (do_adjust_for_orientation)
-      adjust_for_orientation<VectorizedArrayType, dim, fe_degree>(
-        dim,
-        fe_degree,
-        n_components,
-        true,
-        cell_no,
-        orientations,
-        orientation_table,
-        dof_values);
-
-    for (int i2 = 0, i = 0, compressed_i2 = 0, offset_i2 = 0;
+    for (int i2 = 0, compressed_i2 = 0, offset_i2 = 0;
          i2 < (dim == 3 ? (fe_degree + 1) : 1);
          ++i2)
       {
-        for (int i1 = 0, compressed_i1 = 0, offset_i1 = 0;
+        for (int i1 = 0, i = 0, compressed_i1 = 0, offset_i1 = 0;
              i1 < (dim > 1 ? (fe_degree + 1) : 1);
              ++i1)
           {
@@ -544,6 +484,7 @@ private:
           }
         else
           ++offset_i2;
+        dof_values += n_q_points_1d * n_q_points_1d;
       }
   }
 

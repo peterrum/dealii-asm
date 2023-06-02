@@ -1,9 +1,14 @@
 #pragma once
 
+#include <deal.II/base/types.h>
+#include <deal.II/base/vectorization.h>
+
 #include <deal.II/matrix_free/shape_info.h>
 #include <deal.II/matrix_free/vector_access_internal.h>
 
 #include <bit>
+
+using namespace dealii;
 
 unsigned int
 get_orientation_line(const std::vector<types::global_dof_index> &dofs,
@@ -159,8 +164,8 @@ compress_indices(const std::vector<types::global_dof_index> &dofs,
                  const bool                                  do_post = false)
 {
   const auto orientation_table =
-    internal::MatrixFreeFunctions::ShapeInfo<double>::compute_orientation_table(
-      degree - 1); // TODO
+    dealii::internal::MatrixFreeFunctions::ShapeInfo<
+      double>::compute_orientation_table(degree - 1); // TODO
 
   std::vector<std::pair<unsigned int, unsigned int>> dpo; // TODO
 
@@ -553,7 +558,7 @@ adjust_for_orientation(const unsigned int               dim_non_template,
 
   const unsigned int dofs_per_comp = Utilities::pow(np, dim);
 
-  using VectorizedArrayTrait = internal::VectorizedArrayTrait<Number>;
+  using VectorizedArrayTrait = dealii::internal::VectorizedArrayTrait<Number>;
 
   for (unsigned int v = 0; v < VectorizedArrayTrait::width(); ++v)
     {
