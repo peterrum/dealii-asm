@@ -3,7 +3,6 @@
 #include <deal.II/base/parameter_handler.h>
 
 #include <deal.II/dofs/dof_handler.h>
-#include <deal.II/dofs/dof_renumbering.h>
 
 #include <deal.II/fe/fe_q.h>
 #include <deal.II/fe/mapping_q_cache.h>
@@ -18,6 +17,7 @@
 
 using namespace dealii;
 
+#include "include/dof_renumbering.h"
 #include "include/json.h"
 #include "include/operator.h"
 #include "include/precondition.h"
@@ -34,12 +34,15 @@ struct Parameters
 
   std::string preconditioner_types = "post-1-c";
 
-  bool        dof_renumbering    = true;
-  bool        compress_indices   = true;
-  bool        use_cartesian_mesh = true;
-  std::string mapping_type       = "default";
+  bool        dof_renumbering      = true;
+  std::string dof_renumbering_type = "a";
+  bool        compress_indices     = true;
+  bool        use_cartesian_mesh   = true;
+  std::string mapping_type         = "default";
 
   unsigned int n_repetitions = 10;
+
+  bool do_print_stat = false;
 
   void
   parse(const std::string file_name)
@@ -67,8 +70,15 @@ private:
 
     prm.add_parameter("n repetitions", n_repetitions);
     prm.add_parameter("dof renumbering", dof_renumbering);
+    prm.add_parameter("dof renumbering type",
+                      dof_renumbering_type,
+                      "",
+                      Patterns::Selection("a|b|c"));
+    prm.add_parameter("compress indices", compress_indices);
     prm.add_parameter("use cartesian mesh", use_cartesian_mesh);
     prm.add_parameter("mapping type", mapping_type);
+
+    prm.add_parameter("do print stat", do_print_stat);
   }
 };
 
@@ -103,6 +113,25 @@ split_string(const std::string  text,
       substring_list.push_back("-");
 
   return substring_list;
+}
+
+template <int dim>
+std::array<typename Triangulation<dim>::cell_iterator, Utilities::pow(2, dim)>
+collect_cells_for_vertex_patch(
+  const std::array<typename Triangulation<dim>::cell_iterator,
+                   Utilities::pow(3, dim)> &cells_all)
+{
+  std::array<typename Triangulation<dim>::cell_iterator, Utilities::pow(2, dim)>
+    cells;
+
+  for (unsigned int k = 0; k < ((dim == 3) ? 2 : 1); ++k)
+    for (unsigned int j = 0; j < ((dim >= 2) ? 2 : 1); ++j)
+      for (unsigned int i = 0; i < 2; ++i)
+        cells[4 * k + 2 * j + i] =
+          cells_all[9 * ((dim == 3) ? (k + 1) : 0) +
+                    3 * ((dim >= 2) ? (j + 1) : 0) + (i + 1)];
+
+  return cells;
 }
 
 void
@@ -141,6 +170,114 @@ process_fdm_parameters(const unsigned int              offset,
                   (weighting_sequence == "dg" ? "DG" : "compressed")));
 
   params.put("overlap pre post", overlap_pre_post);
+}
+
+void
+print_stat(const TaskDoFInfo &tdi)
+{
+  const unsigned int chunk_size_zero_vector =
+    internal::MatrixFreeFunctions::DoFInfo::chunk_size_zero_vector;
+
+  const auto &partition_row_index       = tdi.partition_row_index;
+  const auto &vector_partitioner        = tdi.vector_partitioner;
+  const auto &cell_loop_pre_list_index  = tdi.cell_loop_pre_list_index;
+  const auto &cell_loop_pre_list        = tdi.cell_loop_pre_list;
+  const auto &cell_loop_post_list_index = tdi.cell_loop_post_list_index;
+  const auto &cell_loop_post_list       = tdi.cell_loop_post_list;
+
+  std::vector<unsigned int> distances(vector_partitioner->locally_owned_size() /
+                                          chunk_size_zero_vector +
+                                        1,
+                                      numbers::invalid_unsigned_int);
+  for (unsigned int id = cell_loop_pre_list_index
+         [partition_row_index[partition_row_index.size() - 2]];
+       id < cell_loop_pre_list_index
+              [partition_row_index[partition_row_index.size() - 2] + 1];
+       ++id)
+    for (unsigned int a = cell_loop_pre_list[id].first;
+         a < cell_loop_pre_list[id].second;
+         a += chunk_size_zero_vector)
+      distances[a / chunk_size_zero_vector] = 0;
+  for (unsigned int part = 0; part < partition_row_index.size() - 2; ++part)
+    {
+      for (unsigned int i = partition_row_index[part];
+           i < partition_row_index[part + 1];
+           ++i)
+        {
+          for (unsigned int id = cell_loop_pre_list_index[i];
+               id != cell_loop_pre_list_index[i + 1];
+               ++id)
+            {
+              for (unsigned int a = cell_loop_pre_list[id].first;
+                   a < cell_loop_pre_list[id].second;
+                   a += chunk_size_zero_vector)
+                distances[a / chunk_size_zero_vector] = i;
+            }
+          for (unsigned int id = cell_loop_post_list_index[i];
+               id != cell_loop_post_list_index[i + 1];
+               ++id)
+            {
+              for (unsigned int a = cell_loop_post_list[id].first;
+                   a < cell_loop_post_list[id].second;
+                   a += chunk_size_zero_vector)
+                distances[a / chunk_size_zero_vector] =
+                  i - distances[a / chunk_size_zero_vector];
+            }
+        }
+    }
+  for (unsigned int id = cell_loop_post_list_index
+         [partition_row_index[partition_row_index.size() - 2]];
+       id < cell_loop_post_list_index
+              [partition_row_index[partition_row_index.size() - 2] + 1];
+       ++id)
+    for (unsigned int a = cell_loop_post_list[id].first;
+         a < cell_loop_post_list[id].second;
+         a += chunk_size_zero_vector)
+      distances[a / chunk_size_zero_vector] =
+        partition_row_index[partition_row_index.size() - 2] -
+        distances[a / chunk_size_zero_vector];
+  std::map<unsigned int, unsigned int> count;
+  for (const auto a : distances)
+    if (a != numbers::invalid_unsigned_int)
+      count[a] = 0;
+
+  for (const auto a : distances)
+    if (a != numbers::invalid_unsigned_int)
+      count[a]++;
+
+  unsigned int max_liveliness = 0;
+
+  for (const auto a : count)
+    max_liveliness = std::max(a.first, max_liveliness);
+
+  max_liveliness = Utilities::MPI::max(max_liveliness, MPI_COMM_WORLD);
+
+  std::vector<double> temp_(max_liveliness + 1, 0);
+  std::vector<double> temp(max_liveliness + 1, 0);
+
+  for (const auto a : count)
+    temp_[a.first] = a.second;
+
+  Utilities::MPI::sum(temp_, MPI_COMM_WORLD, temp);
+
+  if (Utilities::MPI::this_mpi_process(MPI_COMM_WORLD) == 0)
+    {
+      for (unsigned int i = 1; i < temp.size(); ++i)
+        temp[i] += temp[i - 1];
+
+      for (unsigned int i = 0; i < temp.size(); ++i)
+        temp[i] /= temp.back();
+
+      static unsigned int counter = 0;
+
+      std::ofstream outfile("stat_" + std::to_string(counter));
+
+      for (unsigned int i = 0; i < temp.size(); ++i)
+        outfile << i << " " << temp[i] * 100 << std::endl;
+      outfile << std::endl;
+
+      counter++;
+    }
 }
 
 template <int dim, typename Number>
@@ -215,9 +352,38 @@ test(const Parameters params_in)
 
   if (params_in.dof_renumbering)
     {
-      DoFRenumbering::matrix_free_data_locality(dof_handler,
-                                                constraints,
-                                                additional_data);
+      const auto collect_indices =
+        [&](const TriaIterator<DoFCellAccessor<dim, dim, false>> &cell_iterator)
+        -> std::vector<types::global_dof_index> {
+        const std::string dof_renumbering_type = params_in.dof_renumbering_type;
+
+        const bool         element_centric = dof_renumbering_type != "c";
+        const unsigned int n_overlap = dof_renumbering_type == "b" ? 2 : 1;
+
+        const auto cells =
+          dealii::GridTools::extract_all_surrounding_cells_cartesian<dim>(
+            cell_iterator, element_centric ? (n_overlap <= 1 ? 0 : dim) : dim);
+
+        const auto cells_vertex_patch =
+          collect_cells_for_vertex_patch<dim>(cells);
+
+        auto local_dofs =
+          element_centric ?
+            dealii::DoFTools::get_dof_indices_cell_with_overlap(dof_handler,
+                                                                cells,
+                                                                n_overlap,
+                                                                true) :
+            dealii::DoFTools::get_dof_indices_vertex_patch(dof_handler,
+                                                           cells_vertex_patch);
+
+        return local_dofs;
+      };
+
+      MyDoFRenumbering::matrix_free_data_locality<dim>(dof_handler,
+                                                       constraints,
+                                                       additional_data,
+                                                       collect_indices);
+
       setup_constraints(dof_handler, constraints);
     }
 
@@ -294,6 +460,11 @@ test(const Parameters params_in)
               boost::property_tree::ptree params;
               process_fdm_parameters(0, props, params, constness);
               precondition_fdm = create_fdm_preconditioner(op, params);
+
+              if (params_in.do_print_stat)
+                {
+                  print_stat(precondition_fdm->get_task_dof_info());
+                }
             }
         }
 

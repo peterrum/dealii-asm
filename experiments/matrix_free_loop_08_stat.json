@@ -1,0 +1,8 @@
+{
+  "dim" : 3,
+  "number type" : "float",
+  "fe degree" : 4,
+  "n subdivisions" : 40,
+  "preconditioner types" : "post-1-g-p-n post-2-g-p-n post-v-g-p-n",
+  "do print stat" : true
+}
